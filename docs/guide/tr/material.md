@@ -11,7 +11,7 @@ Material bileşenleri renklerini, yazı tiplerini ve hareketlerini `MaterialThem
 `Scaffold` bir ekranı yerleştirir: içeriğin çevresinde bir üst çubuk, bir alt çubuk, bir yüzen eylem butonu ve bir snackbar host'u. İçerik, onu çubuklardan ve sistemin kenar boşluklarından uzak tutan iç boşluğu alır.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Inbox() {
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -42,7 +42,7 @@ fun Inbox() {
 `AppBarRow` bir çubuğun eylemlerinden sığanları yerleştirir, kalanları bir taşma menüsüne koyar (`AppBarColumn` aynısını bir ray boyunca yapar); öğeleri `AppBarScope`'un `clickableItem` ve `toggleableItem`'ıdır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DocumentBar() {
     TopAppBar(title = { Text("Belge") }, actions = {
         AppBarRow(maxItemCount = 3) {
@@ -71,7 +71,7 @@ fun DocumentBar() {
 Çoğu zaman istediğiniz `NavigationSuiteScaffold`'dur: Compose'un adaptive navigation suite'i gibi telefonda bir çubuk, tablet ya da masaüstü penceresinde bir ray gösterir. `navigationSuiteItems` bloğu her hedef için bir `item` ekler:
 
 ```kotlin
-@Composable
+@Kompozable
 fun App() {
     var tab by rememberSaveable { mutableStateOf(0) }
     NavigationSuiteScaffold(
@@ -89,7 +89,7 @@ fun App() {
 Compose 1.4'ün biçimi bunun yerine düz içerik, `NavigationSuiteItem` çağrıları alır ve varsayılan olarak pencereye göre M3 Expressive'in gezinmesini gösterir (telefonda kısa bir çubuk, yan yattığında etiketleri simgelerin yanında; daha geniş pencerede geniş bir ray); `navigationSuiteType` birini seçer:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ExpressiveApp() {
     var tab by rememberSaveable { mutableStateOf(0) }
     NavigationSuiteScaffold(
@@ -165,7 +165,7 @@ OutlinedCard(modifier = Modifier.fillMaxWidth()) {
 `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, `Slider` ve `RangeSlider`. Durumsuzdurlar: verdiğiniz değeri gösterir ve değişiklikleri bir geri çağrıyla bildirirler.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Volume() {
     var volume by remember { mutableStateOf(0.5f) }
     var muted by remember { mutableStateOf(false) }
@@ -203,7 +203,7 @@ Etiketli, yer tutuculu, ikonlu, önekli, sonekli, yardımcı metinli ve hatalı 
 Bunlar arayüzün geri kalanının üstünde görünür. Her biri çağırdığınız yerde kompoze edilir, böylece durumunu ve composition local'larını korur; Kompoz da onu en üste yerleştirir. Birini, bir durum öyle söylediği sürece onu çağırarak gösterin:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DeleteButton(onDelete: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     TextButton(onClick = { open = true }) { Text("Delete") }
@@ -233,7 +233,7 @@ fun DeleteButton(onDelete: () -> Unit) {
 `Popup`, diyalogların ve menülerin üzerine kurulduğu yapı taşıdır: her şeyin üstünde, bağlı olduğu düğüme (içinde kompoze edildiği) göre yerleştirilen içerik. Compose'daki gibi `alignment` ve `offset` ya da kendi `PopupPositionProvider`'ınızı, geri, Escape ve dışarı tıklamalar için `onDismissRequest`'i ve `PopupProperties`'i alır (`focusable = false` dışındaki girdiyi geçirir):
 
 ```kotlin
-@Composable
+@Kompozable
 fun Above(shown: Boolean, onClose: () -> Unit) {
     if (shown) {
         Popup(popupPositionProvider = object : PopupPositionProvider {

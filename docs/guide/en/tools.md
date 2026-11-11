@@ -4,13 +4,13 @@ Editors, previews, rebuilding on save, scripted screenshots, profiling and the e
 
 ## Editors
 
-A `.cpp` file with `@Composable` functions in Compose's syntax is both C++ and Kotlin, which a C++ editor alone reads as broken C++. `kompozc --lsp` is a language server for such files: editors start it where they would start clangd, and it starts clangd behind itself.
+A `.cpp` file with `@Kompozable` functions in Kotlin's syntax is both C++ and Kotlin, which a C++ editor alone reads as broken C++. `kompozc --lsp` is a language server for such files: editors start it where they would start clangd, and it starts clangd behind itself.
 
 - In the C++ around the Kotlin, everything is clangd's: completion, hover, going to definitions, diagnostics.
 - In the Kotlin, the diagnostics are kompozc's (a syntax error, a name it can't place) and the C++ compiler's on the translation, each on the Kotlin line it comes from. clangd's completion and hover aren't given there, and formatting leaves such a file alone.
 - Files without Kotlin go to clangd as they are.
 
-It finds the build by the `compile_commands.json` and `kompozc_commands.json` that a CMake build with `kompoz_compose` writes (Kompoz sets `CMAKE_EXPORT_COMPILE_COMMANDS`; set it in your project too), in the file's directory or one above it, or in a directory there such as `build/` or CLion's `cmake-build-debug/`. Arguments it doesn't know are clangd's; `--clangd PATH` names the clangd to start. Without a clangd it still gives kompozc's own diagnostics.
+It finds the build by the `compile_commands.json` and `kompozc_commands.json` that a CMake build with `kompozable` writes (Kompoz sets `CMAKE_EXPORT_COMPILE_COMMANDS`; set it in your project too), in the file's directory or one above it, or in a directory there such as `build/` or CLion's `cmake-build-debug/`. Arguments it doesn't know are clangd's; `--clangd PATH` names the clangd to start. Without a clangd it still gives kompozc's own diagnostics.
 
 **VS Code** (with the clangd extension), in the workspace's `.vscode/settings.json`:
 
@@ -31,7 +31,7 @@ It finds the build by the `compile_commands.json` and `kompozc_commands.json` th
 }
 ```
 
-**CLion**: Kompoz's plugin, in `editors/clion`, starts the language server for the C++ files with Compose code and turns CLion's own highlighting off in them (its C++ engine would mark the Kotlin; the server's diagnostics take its place). Build it against your CLion and install the archive in `build/distributions/` from disk (Settings, Plugins, Install Plugin from Disk). Gradle needs a JDK; CLion's own, in its `jbr/`, will do:
+**CLion**: Kompoz's plugin, in `editors/clion`, starts the language server for the C++ files with Kotlin code and turns CLion's own highlighting off in them (its C++ engine would mark the Kotlin; the server's diagnostics take its place). Build it against your CLion and install the archive in `build/distributions/` from disk (Settings, Plugins, Install Plugin from Disk). Gradle needs a JDK; CLion's own, in its `jbr/`, will do:
 
 ```bash
 cd editors/clion && JAVA_HOME=/path/to/clion/jbr ./gradlew buildPlugin -PclionPath=/path/to/clion
@@ -44,15 +44,15 @@ It finds kompozc in Settings, Tools, Kompoz, or else in `KOMPOZC`, or else built
 As Compose's `@Preview`, a preview shows one composable on its own, without the rest of the app, in a frame of the size you choose. Write it next to the composable, in your app's sources:
 
 ```kotlin
-#! @Composable fun CounterCard() {}
+#! @Kompozable fun CounterCard() {}
 @Preview(widthDp = 400, heightDp = 220)
-@Composable
+@Kompozable
 fun CounterCardPreview() {
     MaterialTheme(colorScheme = lightColorScheme()) { CounterCard() }
 }
 
 @Preview(widthDp = 400, heightDp = 220, uiMode = Configuration.UI_MODE_NIGHT_YES)
-@Composable
+@Kompozable
 fun CounterCardDarkPreview() {
     MaterialTheme(colorScheme = darkColorScheme()) { CounterCard() }
 }
@@ -136,12 +136,12 @@ For tests that check the UI without any window at all, see [Testing](testing.md)
 
 ## Seeing recomposition
 
-`Modifier.recomposeHighlighter()` draws a border around a node showing how many times the composable that made it has run, as the Compose snippets' highlighter does: use it to find what recomposes more often than it should.
+`Modifier.rekompozHighlighter()` draws a border around a node showing how many times the composable that made it has run, as the Compose snippets' highlighter does: use it to find what recomposes more often than it should.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Row1(title: String) {
-    Text(title, modifier = Modifier.recomposeHighlighter())
+    Text(title, modifier = Modifier.rekompozHighlighter())
 }
 ```
 

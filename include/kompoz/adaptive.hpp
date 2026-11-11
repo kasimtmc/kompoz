@@ -429,7 +429,7 @@ template <class T>
 void ListDetailPaneScaffold(const ListDetailPaneScaffoldNavigator<T>& navigator, const Content& listPane,
                             const std::function<void(const std::optional<T>&)>& detailPane, const Modifier& modifier = {},
                             const ListDetailPaneScaffoldOptions& options = {}, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     if (options.handleBack) BackHandler(navigator.canNavigateBack(), [navigator] { navigator.navigateBack(); });
     detail::paneScaffold<T>(detail::defaultPanes(options.maxHorizontalPartitions),
                             navigator.currentDestination().pane == ListDetailPaneScaffoldRole::Detail, navigator.detailKey(), listPane,
@@ -475,7 +475,7 @@ template <class T>
 void SupportingPaneScaffold(const SupportingPaneScaffoldNavigator<T>& navigator, const Content& mainPane,
                             const std::function<void(const std::optional<T>&)>& supportingPane, const Modifier& modifier = {},
                             const SupportingPaneScaffoldOptions& options = {}, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     if (options.handleBack) BackHandler(navigator.canNavigateBack(), [navigator] { navigator.navigateBack(); });
     detail::paneScaffold<T>(detail::defaultPanes(options.maxHorizontalPartitions),
                             navigator.currentDestination().pane == SupportingPaneScaffoldRole::Supporting, navigator.supportingKey(),

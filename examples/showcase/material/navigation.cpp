@@ -5,7 +5,7 @@
 // A place to go: its label and icon (the navigation bar's and rail's items, the FAB menu's actions).
 data class Destination(val label: String, val icon: ImageVector)
 
-@Composable
+@Kompozable
 fun TabsSection() {
     val cs = MaterialTheme.colorScheme
     var tab by remember { mutableStateOf(0) }
@@ -49,7 +49,7 @@ fun TabsSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun FabMenuSection() {
     val cs = MaterialTheme.colorScheme
     // M3 Expressive's FAB menu: its actions open above the button, which turns into a round close button.
@@ -78,7 +78,7 @@ fun FabMenuSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun ShortNavigationBarSection() {
     val cs = MaterialTheme.colorScheme
     // M3 Expressive's short navigation bar: items sharing the width (compact) or together in the middle (wider).
@@ -96,7 +96,7 @@ fun ShortNavigationBarSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun WideNavigationRailSection() {
     val cs = MaterialTheme.colorScheme
     // M3 Expressive's wide navigation rail: ☰ widens it, the labels going after the icons.
@@ -115,7 +115,7 @@ fun WideNavigationRailSection() {
             Text("  Modal (ModalWideNavigationRail)", style = MaterialTheme.typography.bodyMedium)
         }
         Row(modifier = Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp)).background(cs.surfaceContainerHigh)) {
-            val items: @Composable () -> Unit = {
+            val items: @Kompozable () -> Unit = {
                 for (i in 0 until 3) {
                     WideNavigationRailItem(selected = box == i, onClick = {
                                                box = i
@@ -124,7 +124,7 @@ fun WideNavigationRailSection() {
                                            icon = { Icon(boxes[i].icon, contentDescription = null) }, label = { Text(boxes[i].label) })
                 }
             }
-            val header: @Composable () -> Unit = {
+            val header: @Kompozable () -> Unit = {
                 IconButton(onClick = { scope.launch { rail.toggle() } }) {
                     Icon(if (rail.isExpanded) Icons.AutoMirrored.Filled.ArrowBack else Icons.Filled.Menu, contentDescription = "Rayı aç/kapat")
                 }
@@ -139,7 +139,7 @@ fun WideNavigationRailSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun FloatingToolbarsSection() {
     val cs = MaterialTheme.colorScheme
     // M3 Expressive's floating toolbars over a list: they leave as it scrolls on and come back as it scrolls back.

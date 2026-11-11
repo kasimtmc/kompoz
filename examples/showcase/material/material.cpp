@@ -2,7 +2,7 @@
 
 #include "showcase.hpp"
 
-@Composable
+@Kompozable
 fun MaterialScreen(modifier: Modifier, colorSource: MutableState<ColorSource>, nav: NavController) {
     val scroll = rememberScrollState()
     Column(modifier = modifier.verticalScroll(scroll).padding(20.dp, 8.dp, 20.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {

@@ -2,7 +2,7 @@
 
 #include "showcase.hpp"
 
-@Composable
+@Kompozable
 fun ButtonsSection() {
     val cs = MaterialTheme.colorScheme
     Section("Butonlar") {
@@ -23,7 +23,7 @@ fun ButtonsSection() {
             Switch(checked = expressiveMotion, onCheckedChange = { expressiveMotion = it })
             Text(if (expressiveMotion) "MotionScheme.expressive()" else "MotionScheme.standard()", style = MaterialTheme.typography.bodyMedium)
         }
-        CompositionLocalProvider(LocalMotionScheme provides if (expressiveMotion) MotionScheme.expressive() else MotionScheme.standard()) {
+        KompozitionLocalProvider(LocalMotionScheme provides if (expressiveMotion) MotionScheme.expressive() else MotionScheme.standard()) {
             // M3 Expressive: the corners morph, squarer while held; toggle buttons turn square when checked.
             Button(onClick = { }, shapes = ButtonDefaults.shapes()) { Text("Basılı tut: köşeler") }
             // ButtonGroup: the button held grows and squeezes its neighbours.
@@ -83,7 +83,7 @@ fun ButtonsSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun ChipsSection() {
     val cs = MaterialTheme.colorScheme
     val drinks = remember { mutableStateListOf("Kahve") }
@@ -120,7 +120,7 @@ fun ChipsSection() {
 }
 
 // One end of the price range: bold while that thumb is held.
-@Composable
+@Kompozable
 private fun RangeEnd(value: Float, source: MutableInteractionSource) {
     val pressed by source.collectIsPressedAsState()
     val dragged by source.collectIsDraggedAsState()
@@ -129,7 +129,7 @@ private fun RangeEnd(value: Float, source: MutableInteractionSource) {
          color = if (held) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
 }
 
-@Composable
+@Kompozable
 fun SelectionControlsSection() {
     val cs = MaterialTheme.colorScheme
     var size by remember { mutableStateOf("Orta") }
@@ -150,7 +150,7 @@ fun SelectionControlsSection() {
             Switch(checked = touchRoom, onCheckedChange = { touchRoom = it })
             Text("48 dp dokunma alanı", modifier = Modifier.padding(start = 12.dp))
         }
-        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides if (touchRoom) 48.dp else 0.dp) {
+        KompozitionLocalProvider(LocalMinimumInteractiveComponentSize provides if (touchRoom) 48.dp else 0.dp) {
             // TriStateCheckbox: all, none or some of the toppings (Indeterminate: a dash).
             val all = if (toppings.all { it }) ToggleableState.On else if (toppings.any { it }) ToggleableState.Indeterminate else ToggleableState.Off
             Row(verticalAlignment = Alignment.CenterVertically) {

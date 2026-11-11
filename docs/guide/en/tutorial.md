@@ -2,14 +2,14 @@
 
 Build a small app step by step: text, layout, state, a scrolling list and Material 3 styling. Each step adds a little to the one before.
 
-This tutorial assumes you have built Kompoz once and added it to your CMake project with `kompoz_compose` (see [Setup](setup.md)). Every snippet is complete: copy it into your `main.cpp`, after `#include <kompoz/kompoz.hpp>` and `using namespace kompoz;`.
+This tutorial assumes you have built Kompoz once and added it to your CMake project with `kompozable` (see [Setup](setup.md)). Every snippet is complete: copy it into your `main.cpp`, after `#include <kompoz/kompoz.hpp>` and `using namespace kompoz;`.
 
 ## Step 1: a composable function
 
-A Kompoz app is made of *composable functions*: functions marked `@Composable` that describe part of the UI by calling other composables. They are written as in Kotlin, in your `.cpp` file. `Text` is the simplest one.
+A Kompoz app is made of *composable functions*: functions marked `@Kompozable` that describe part of the UI by calling other composables. They are written as in Kotlin, in your `.cpp` file. `Text` is the simplest one.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Greeting(name: String) {
     Text("Hello, $name!")
 }
@@ -30,7 +30,7 @@ Composables placed one after another are drawn on top of each other unless you s
 ```kotlin
 data class Message(val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun MessageCard(msg: Message) {
     Row(modifier = Modifier.padding(8.dp)) {
         Icon(Icons.Filled.AccountCircle, contentDescription = "Profile picture", modifier = Modifier.size(40.dp))
@@ -53,7 +53,7 @@ The children go in the trailing lambda, as in Compose. A lambda can run again la
 A UI that never changes is not much of an app. Kompoz redraws a composable when a *state* it read changes. `mutableStateOf` makes one; `remember` keeps it across recompositions, so it isn't created anew each time the function runs.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
 
@@ -77,12 +77,12 @@ A `Column` composes and lays out every child, even those out of view. For long l
 ```kotlin
 data class Message(val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun MessageCard(msg: Message) {
     Text("${msg.author}: ${msg.body}")
 }
 
-@Composable
+@Kompozable
 fun Conversation(messages: List<Message>) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(messages) { message ->
@@ -99,7 +99,7 @@ When items can be added, removed or moved, give each a stable key so its state f
 ```kotlin
 data class Message(val id: Int, val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun Conversation(messages: List<Message>) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(messages, key = { it.id }) { message ->
@@ -118,19 +118,19 @@ Kompoz implements Material 3, as Compose Material 3 does. `MaterialTheme` gives 
 ```kotlin
 data class Message(val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun Conversation(messages: List<Message>) {
     LazyColumn { items(messages) { Text("${it.author}: ${it.body}") } }
 }
 
-@Composable
+@Kompozable
 fun ConversationScreen(messages: List<Message>) {
     Scaffold(topBar = { TopAppBar(title = { Text("Messages") }) }) { padding ->
         Box(modifier = Modifier.padding(padding)) { Conversation(messages) }
     }
 }
 
-@Composable
+@Kompozable
 fun TutorialApp() {
     val messages = remember { listOf(Message("Ada", "Hello!"), Message("Linus", "Hi Ada.")) }
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
@@ -152,7 +152,7 @@ Let's make each message a card that shows its whole text when clicked. The expan
 ```kotlin
 data class Message(val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun MessageCard(msg: Message) {
     var expanded by remember { mutableStateOf(false) }
 

@@ -7,8 +7,8 @@
 Uygulamanızın içeriğini `MaterialTheme` ile sarın, genellikle bir kez, en üstte:
 
 ```kotlin
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun ThemedApp() {
     val dark = isSystemInDarkTheme()
     MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
@@ -24,7 +24,7 @@ kompoz::Application kompoz::createApplication(int, char**) {
 Bileşenler temayı composition local'ler üzerinden okur. Siz de `MaterialTheme.colorScheme`, `MaterialTheme.typography` ve `MaterialTheme.motionScheme` ile okuyabilirsiniz:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Tag(text: String) {
     Text(
         text,
@@ -60,8 +60,8 @@ fun brandColors(dark: Boolean): ColorScheme =
 ```kotlin
 val BrandPalette = TonalPalette.fromSeed(Color(0xFF00796B))
 
-@Composable
-fun BrandTheme(content: @Composable () -> Unit) {
+@Kompozable
+fun BrandTheme(content: @Kompozable () -> Unit) {
     val dark = isSystemInDarkTheme()
     MaterialTheme(colorScheme = if (dark) dynamicDarkColorScheme(BrandPalette) else dynamicLightColorScheme(BrandPalette), content = content)
 }
@@ -76,8 +76,8 @@ Bir marka renginden eksiksiz ve tutarlı bir şemaya ulaşmanın en kolay yolu b
 Android'de sistem çubuklarının açık mı koyu mu simge çizeceğini `SystemBarsAppearance` ile söyleyin: açık temanın üzerinde koyu simgeler.
 
 ```kotlin
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun Root() {
     val dark = isSystemInDarkTheme()
     SystemBarsAppearance(!dark)
@@ -88,10 +88,10 @@ fun Root() {
 Seçimi kullanıcıya bırakmak için seçimi durumda tutun ve sistemin tercihine geri dönün:
 
 ```kotlin
-#! @Composable fun App() {}
+#! @Kompozable fun App() {}
 enum class ThemeChoice { System, Light, Dark }
 
-@Composable
+@Kompozable
 fun Root(choice: ThemeChoice) {
     val dark = when (choice) {
         ThemeChoice.System -> isSystemInDarkTheme()
@@ -120,10 +120,10 @@ Sistemin paleti, kullanıcının sistem ayarlarında seçtiğini izler; bu yüzd
 Seçimi kullanıcıya bırakın ve saklayın:
 
 ```kotlin
-#! @Composable fun App() {}
+#! @Kompozable fun App() {}
 enum class ColorSource { App, System, Wallpaper }
 
-@Composable
+@Kompozable
 fun Root(source: ColorSource) {
     val dark = isSystemInDarkTheme()
     val scheme = when {
@@ -142,8 +142,8 @@ Vitrin uygulaması bunu View menüsünde ve Material ekranında böyle soruyor.
 `TonalPalette.fromImage(bitmap)`, Material You'nun paletlerini duvar kâğıdınınkiler gibi herhangi bir resimden üretir: bir albüm kapağı, bir profil fotoğrafı. Android'in bir duvar kâğıdıyla yaptığını yapar: resim, `WallpaperColors`'ın küçülttüğü gibi filtrelemeden en fazla 112 × 112'lik alana küçültülür; `quantizeColors(bitmap)` resmin hangi renklerden ve her birinden ne kadar oluştuğunu bulur (Android'in ve Material Color Utilities'in kullandığı Celebi niceleyicisi); `seedColors(colors)` bunlardan iyi tema tohumu olacakları, Android'in System UI'ının bir duvar kâğıdınınkileri sıraladığı gibi, en fazla dört tane olmak üzere sıralar. Böylece kullanıcıya, Android'in duvar kâğıdı seçicisi gibi bir tohum seçeneği sunabilirsiniz:
 
 ```kotlin
-@Composable
-fun CoverTheme(cover: ImageBitmap, content: @Composable () -> Unit) {
+@Kompozable
+fun CoverTheme(cover: ImageBitmap, content: @Kompozable () -> Unit) {
     val palette = remember(cover) { TonalPalette.fromImage(cover) }   // resim başına bir kez
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) dynamicDarkColorScheme(palette) else dynamicLightColorScheme(palette), content = content)
 }
@@ -153,14 +153,14 @@ fun CoverTheme(cover: ImageBitmap, content: @Composable () -> Unit) {
 
 ## Tema değişikliğini canlandırmak
 
-`ColorScheme.map` her renge bir fonksiyon uygular. `animateColorAsState` ile birlikte, şema değiştiğinde her renk yeni değerine doğru canlanır (değer döndüren bir `@Composable fun`, Compose'daki gibi kendi grubudur; böylece animasyonları kimliklerini korur):
+`ColorScheme.map` her renge bir fonksiyon uygular. `animateColorAsState` ile birlikte, şema değiştiğinde her renk yeni değerine doğru canlanır (değer döndüren bir `@Kompozable fun`, Compose'daki gibi kendi grubudur; böylece animasyonları kimliklerini korur):
 
 ```kotlin
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun animateColorScheme(target: ColorScheme): ColorScheme = target.map { animateColorAsState(it, 400) }
 
-@Composable
+@Kompozable
 fun Root(dark: Boolean) {
     MaterialTheme(colorScheme = animateColorScheme(if (dark) darkColorScheme() else lightColorScheme())) { App() }
 }
@@ -182,8 +182,8 @@ Yazı ölçeğini değiştirmek için kendi `Typography`'nizi `LocalTypography` 
 ```kotlin
 val Lora = FontFamily.fromFiles(listOf(FontFile("fonts/Lora-Regular.ttf"), FontFile("fonts/Lora-Bold.ttf", FontWeight.Bold)))
 
-@Composable
-fun BrandTypography(content: @Composable () -> Unit) {
+@Kompozable
+fun BrandTypography(content: @Kompozable () -> Unit) {
     val base = MaterialTheme.typography
     val type = base.copy(
         displayLarge = base.displayLarge.copy(fontFamily = Lora),
@@ -202,19 +202,19 @@ Bileşenlerin Material şekilleri yerleşiktir: bir butonun tam yuvarlaklığı,
 
 ## Kendi tasarım sisteminiz
 
-Uygulamanız Material'ı izlemiyorsa kendi temanızı `MaterialTheme`'in kurulduğu gibi kurun: değerleri bir data class'a koyun, bir `CompositionLocal` üzerinden sağlayın ve gereken yerde okuyun:
+Uygulamanız Material'ı izlemiyorsa kendi temanızı `MaterialTheme`'in kurulduğu gibi kurun: değerleri bir data class'a koyun, bir `KompozitionLocal` üzerinden sağlayın ve gereken yerde okuyun:
 
 ```kotlin
 data class BrandColors(val accent: Color, val background: Color, val text: Color)
 
-val LocalBrandColors = staticCompositionLocalOf { BrandColors(Color(0xFFFF5722), Color.White, Color(0xFF212121)) }
+val LocalBrandColors = staticKompozitionLocalOf { BrandColors(Color(0xFFFF5722), Color.White, Color(0xFF212121)) }
 
-@Composable
-fun BrandTheme(colors: BrandColors, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalBrandColors provides colors, LocalContentColor provides colors.text, content = content)
+@Kompozable
+fun BrandTheme(colors: BrandColors, content: @Kompozable () -> Unit) {
+    KompozitionLocalProvider(LocalBrandColors provides colors, LocalContentColor provides colors.text, content = content)
 }
 
-@Composable
+@Kompozable
 fun BrandButton(label: String, onClick: () -> Unit) {
     val brand = LocalBrandColors.current
     Box(modifier = Modifier.clickable { onClick() }.background(brand.accent, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -227,6 +227,6 @@ fun BrandButton(label: String, onClick: () -> Unit) {
 
 ## Ayrıca bakın
 
-- [CompositionLocal](composition-local.md): temalar bileşenlere nasıl ulaşır.
+- [KompozitionLocal](kompozition-local.md): temalar bileşenlere nasıl ulaşır.
 - [Material bileşenleri](material.md): temanın stillendirdikleri.
 - [Metin](text.md): fontlar ve metin stilleri.

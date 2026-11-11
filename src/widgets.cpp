@@ -30,7 +30,7 @@ namespace {
 
 void layoutNode(const CallSite& site, const Modifier& modifier, MeasurePolicy policy, const Content& content,
                 DrawContent draw = {}, std::string semantics = {}) {
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(site),
         [&](LayoutNode& node) {
             node.modifier = modifier;
@@ -187,7 +187,7 @@ Modifier buttonPadding(const Modifier& m, float horizontal, float vertical) { re
 
 void buttonImpl(ButtonKind kind, std::function<void()> onClick, const Modifier& modifier, const ButtonStyle& style,
                 const Content& content, const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     Shape shape = RoundedCornerShape(20);
     std::optional<MutableInteractionSource> source = style.interactionSource;
@@ -224,7 +224,7 @@ void buttonImpl(ButtonKind kind, std::function<void()> onClick, const Modifier& 
     m = m.background(container, shape);
     if (kind == ButtonKind::Outlined) m = m.border(1, cs.outlineVariant.copy(style.enabled ? 1.f : 0.1f), shape);
 
-    CompositionLocalProvider(
+    KompozitionLocalProvider(
         {LocalContentColor.provides(contentColor), LocalTextStyle.provides(typography().labelLarge)}, [&] {
             detail::Row(buttonPadding(m.semantics({.role = SemanticsRole::Button})
                                   .clickable(std::move(onClick), {.enabled = style.enabled, .interactionSource = source}),
@@ -239,7 +239,7 @@ enum class ToggleKind { Standard, Elevated, Tonal, Outlined };
 
 void toggleButtonImpl(ToggleKind kind, bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
                       const ToggleButtonStyle& style, const Content& content, const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     Color container = kind == ToggleKind::Standard   ? cs.surfaceContainer
                       : kind == ToggleKind::Elevated ? cs.surfaceContainerLow
@@ -266,7 +266,7 @@ void toggleButtonImpl(ToggleKind kind, bool checked, std::function<void(bool)> o
     m = detail::animatedBackground(m, containerState, shape);
     if (kind == ToggleKind::Outlined && !checked) m = m.border(1, style.enabled ? cs.outlineVariant : cs.onSurface.copy(0.12f), shape);
 
-    CompositionLocalProvider(
+    KompozitionLocalProvider(
         {LocalContentColor.provides(contentState), LocalTextStyle.provides(typography().labelLarge)}, [&] {
             detail::Row(buttonPadding(m.toggleable(checked, std::move(onCheckedChange), SemanticsRole::Checkbox,
                                            {.enabled = style.enabled, .interactionSource = source}),
@@ -289,7 +289,7 @@ void detail::MaterialTheme(const ColorScheme& scheme, const MotionScheme& motion
     ScrollbarStyle scrollbars = LocalScrollbarStyle.current();
     scrollbars.unhoverColor = scheme.onSurface.copy(0.12f);
     scrollbars.hoverColor = scheme.onSurface.copy(0.5f);
-    CompositionLocalProvider({LocalColorScheme.provides(scheme), LocalContentColor.provides(scheme.onBackground),
+    KompozitionLocalProvider({LocalColorScheme.provides(scheme), LocalContentColor.provides(scheme.onBackground),
                               LocalTextStyle.provides(LocalTypography.current().bodyLarge),
                               LocalTextSelectionColors.provides(TextSelectionColors{scheme.primary, scheme.primary.copy(0.4f)}),
                               LocalMotionScheme.provides(motion), LocalScrollbarStyle.provides(scrollbars)},
@@ -305,7 +305,7 @@ void MaterialExpressiveTheme(std::optional<ColorScheme> scheme, const MotionSche
 }
 
 Shape detail::morphingShape(const Shape& target, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Shape shape = lerp(target, RoundedCornerShape(0, 0, 0, 0), 0);  // corner by corner
     AnimationSpec spec = motionScheme().fastSpatialSpec;
     // Each corner's size and share animated, read where the outline is made (as Compose's
@@ -322,7 +322,7 @@ Shape detail::morphingShape(const Shape& target, CallSite site) {
 
 void detail::Box(const Content& content, CallSite site) { detail::Box(Modifier{}, Alignment::TopStart, content, site); }
 void detail::LookaheadScope(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::Box(modifier.then(std::make_shared<LookaheadScopeElement>()), content);
 }
 
@@ -365,7 +365,7 @@ LayoutMeasurePolicy detail::menuRows(float maxWidth) {
 }
 
 void detail::Layout(const Modifier& modifier, const Content& content, LayoutMeasurePolicy measurePolicy, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     layoutNode(
         CallSite::current(), modifier,
         [measurePolicy](LayoutNode& node, const Constraints& c) {
@@ -377,7 +377,7 @@ void detail::Layout(const Modifier& modifier, const Content& content, LayoutMeas
         content);
 }
 
-struct SubcomposeMeasureScope::Data {
+struct SubkompozMeasureScope::Data {
     struct Slot {
         size_t id;
         Content content;
@@ -386,7 +386,7 @@ struct SubcomposeMeasureScope::Data {
     std::vector<Slot> slots;  // composed, as the children (one container node each)
     std::vector<Slot> asked;  // by the measure under way
     MutableState<int> version{0};
-    detail::Composer* composer = nullptr;
+    detail::Kompozer* kompozer = nullptr;
     detail::Scope* scope = nullptr;  // the slots' own: composed again on its own for a slot asked for
     Constraints constraints;         // the measure's under way (a slot composed in it is measured so)
     bool composed = false;           // a slot was composed during it
@@ -404,7 +404,7 @@ void placeContainer(LayoutNode& container, const Constraints& c) {
 }
 } // namespace
 
-std::vector<Measurable> SubcomposeMeasureScope::slot(size_t id, Content content, size_t dependency) {
+std::vector<Measurable> SubkompozMeasureScope::slot(size_t id, Content content, size_t dependency) {
     Data& d = *data_;
     d.asked.push_back({id, std::move(content), dependency});
     auto find = [&]() -> int {
@@ -416,10 +416,10 @@ std::vector<Measurable> SubcomposeMeasureScope::slot(size_t id, Content content,
     // New, or its dependency changed: composed now, as Compose's subcompose does, with the slots
     // there are (those not asked for again go after the measure); else as it was composed. Not for
     // a probe measure (an intrinsic size's, unbounded): what it would pick isn't composed for it.
-    if ((i < 0 || d.slots[size_t(i)].dependency != dependency) && d.composer && d.scope && !detail::isProbeMeasure()) {
+    if ((i < 0 || d.slots[size_t(i)].dependency != dependency) && d.kompozer && d.scope && !detail::isProbeMeasure()) {
         if (i < 0) d.slots.push_back(d.asked.back());
         else d.slots[size_t(i)] = d.asked.back();
-        if (d.composer->composeNow(*d.scope)) {
+        if (d.kompozer->composeNow(*d.scope)) {
             for (auto* container : node_->children) placeContainer(*container, d.constraints);  // (all of them composed again)
             d.composed = true;
             i = find();
@@ -434,10 +434,10 @@ std::vector<Measurable> SubcomposeMeasureScope::slot(size_t id, Content content,
     return out;
 }
 
-void detail::SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy measurePolicy, CallSite site) {
-    ComposableScope scope(site);
-    auto d = remember([] { return std::make_shared<SubcomposeMeasureScope::Data>(); });
-    d->composer = &Composer::require();
+void detail::SubkompozLayout(const Modifier& modifier, SubkompozMeasurePolicy measurePolicy, CallSite site) {
+    KompozableScope scope(site);
+    auto d = remember([] { return std::make_shared<SubkompozMeasureScope::Data>(); });
+    d->kompozer = &Kompozer::require();
     auto policy = [d, measurePolicy](LayoutNode& node, const Constraints& c) {
         Size size;
         // A slot composed during the policy: run once more, all of them composed by then, so that
@@ -447,7 +447,7 @@ void detail::SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy 
             d->asked.clear();
             d->constraints = c;
             d->composed = false;
-            SubcomposeMeasureScope scope(*d, node);
+            SubkompozMeasureScope scope(*d, node);
             size = c.constrain(measurePolicy(scope, c));
             if (!d->composed) break;
         }
@@ -464,9 +464,9 @@ void detail::SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy 
     auto container = [](LayoutNode&, const Constraints& c) { return Size{c.maxWidth, c.maxHeight}; };  // its children are the policy's to measure
     layoutNode(CallSite::current(), modifier, policy, [d, container] {
         // The slots in a scope of their own, run alone when a measure asks for one.
-        auto& composer = Composer::require();
-        composer.restartable(keyOf(CallSite::current()), std::tuple<>{}, [d, container] {
-            d->scope = Composer::require().currentScope();
+        auto& kompozer = Kompozer::require();
+        kompozer.restartable(keyOf(CallSite::current()), std::tuple<>{}, [d, container] {
+            d->scope = Kompozer::require().currentScope();
             d->version.get();  // composed again when the slots asked for change
             for (const auto& slot : d->slots)
                 key(slot.id, [&] { layoutNode(CallSite::current(), Modifier(), container, slot.content); });
@@ -520,22 +520,22 @@ void detail::FlowColumn(const Modifier& modifier, const FlowStyle& style, const 
 
 void detail::BoxWithConstraints(const Modifier& modifier, const std::function<void(const Constraints&)>& content,
                         Alignment contentAlignment, CallSite site) {
-    // A SubcomposeLayout, as Compose's: the content composed while it is measured, with the
+    // A SubkompozLayout, as Compose's: the content composed while it is measured, with the
     // constraints it gets (the first time too), and again when they change or when this is composed
     // again (its content may have changed: the composition's count tells the slot). The content
     // goes in a Box, laid out with those constraints.
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto latest = remember([] { return std::make_shared<std::function<void(const Constraints&)>>(); });
     *latest = content;
     auto compositions = remember([] { return std::make_shared<size_t>(0); });
     size_t composition = ++*compositions;
-    detail::SubcomposeLayout(
+    detail::SubkompozLayout(
         modifier,
-        [latest, composition, contentAlignment](SubcomposeMeasureScope& s, const Constraints& c) {
+        [latest, composition, contentAlignment](SubkompozMeasureScope& s, const Constraints& c) {
             uint64_t dependency = composition;
             for (float v : {c.minWidth, c.maxWidth, c.minHeight, c.maxHeight}) dependency = mixKey(dependency, std::bit_cast<uint32_t>(v));
             Size size{c.minWidth, c.minHeight};
-            for (const Measurable& m : s.subcompose(0, size_t(dependency), [latest, c, contentAlignment] {
+            for (const Measurable& m : s.subkompoz(0, size_t(dependency), [latest, c, contentAlignment] {
                      detail::Box(Modifier(), contentAlignment, [latest, c] { (*latest)(c); }, CallSite::current());
                  })) {
                 Placeable p = m.measure(c);
@@ -549,13 +549,13 @@ void detail::BoxWithConstraints(const Modifier& modifier, const std::function<vo
 
 namespace {
 // The back scope of the focusable popup being composed (LayoutNode::backScope): back handlers in it carry it.
-const CompositionLocal<std::shared_ptr<const void>> LocalBackScope{std::shared_ptr<const void>{}};
+const KompozitionLocal<std::shared_ptr<const void>> LocalBackScope{std::shared_ptr<const void>{}};
 } // namespace
 
 void detail::Popup(OverlaySpec spec, const Content& content, CallSite site) {
     auto shared = std::make_shared<const OverlaySpec>(std::move(spec));
     std::shared_ptr<const void> backScope = LocalBackScope.current();
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(site),
         [&](LayoutNode& node) {
             if (shared->focusable && !node.backScope) node.backScope = std::make_shared<char>();
@@ -565,13 +565,13 @@ void detail::Popup(OverlaySpec spec, const Content& content, CallSite site) {
             node.drawContent = {};
             node.overlay = shared;
         },
-        [&] { CompositionLocalProvider({LocalBackScope.provides(backScope)}, content); });
+        [&] { KompozitionLocalProvider({LocalBackScope.provides(backScope)}, content); });
 }
 
-void detail::backHandler(ComposeHost::BackCallback callbacks, CallSite site) {
-    ComposableScope scope(site);
-    ComposeHost* host = &detail::Composer::require().host();
-    auto& callback = remember([] { return std::make_shared<ComposeHost::BackCallback>(); });
+void detail::backHandler(KompozHost::BackCallback callbacks, CallSite site) {
+    KompozableScope scope(site);
+    KompozHost* host = &detail::Kompozer::require().host();
+    auto& callback = remember([] { return std::make_shared<KompozHost::BackCallback>(); });
     std::shared_ptr<const void> owner = LocalBackScope.current();
     callbacks.owner = owner;
     callbacks.owned = owner != nullptr;
@@ -587,7 +587,7 @@ void detail::BackHandler(bool enabled, std::function<void()> onBack, CallSite si
 }
 
 void PredictiveBackHandler(bool enabled, std::function<Task(Flow<BackEventCompat>)> onBack, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::Dispatcher* dispatcher = &detail::currentDispatcher();
     // One run of onBack, with the flow of a channel the gesture's steps go to (as androidx's
     // OnBackInstance): started by the gesture, or by a press.
@@ -632,27 +632,27 @@ void detail::Spacer(const Modifier& modifier, CallSite site) {
 }
 
 void ProvideTextStyle(const TextStyle& value, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Font font = detail::styledFont(value, LocalTextStyle.current());
     if (value.color)
-        CompositionLocalProvider({LocalTextStyle.provides(font), LocalContentColor.provides(*value.color)}, content);
+        KompozitionLocalProvider({LocalTextStyle.provides(font), LocalContentColor.provides(*value.color)}, content);
     else
-        CompositionLocalProvider({LocalTextStyle.provides(font)}, content);
+        KompozitionLocalProvider({LocalTextStyle.provides(font)}, content);
 }
 
 namespace {
 // Compose's TextStyle.Default for BasicText: 14 sp, black, nothing from around it.
 void withDefaultTextStyle(const Content& content) {
-    CompositionLocalProvider({LocalTextStyle.provides(Font{.size = 14}), LocalContentColor.provides(colors::Black)}, content);
+    KompozitionLocalProvider({LocalTextStyle.provides(Font{.size = 14}), LocalContentColor.provides(colors::Black)}, content);
 }
 } // namespace
 
 void BasicText(std::string text, const Modifier& modifier, const TextStyle& style, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     withDefaultTextStyle([&] { detail::Text(std::move(text), modifier, style); });
 }
 void BasicText(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     withDefaultTextStyle([&] { detail::Text(text, modifier, style); });
 }
 
@@ -661,25 +661,25 @@ void detail::Text(std::string text, const TextStyle& style, CallSite site) { det
 // Text is a restartable, skippable scope: called again with the same text, modifier and style
 // it doesn't run (unless the theme values it read changed).
 void detail::Text(std::string text, const Modifier& modifier, const TextStyle& style, CallSite site) {
-    composable(site, text, modifier, style, [text, modifier, style] { emitText(text, modifier, style); });
+    kompozable(site, text, modifier, style, [text, modifier, style] { emitText(text, modifier, style); });
 }
 void detail::Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, CallSite site) {
-    composable(site, text, modifier, style, [text, modifier, style] { emitStyledText(text, modifier, style); });
+    kompozable(site, text, modifier, style, [text, modifier, style] { emitStyledText(text, modifier, style); });
 }
 void detail::Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, const InlineContents& inlineContent, OnTextLayout onTextLayout, CallSite site) {
     if (inlineContent.empty()) return detail::Text(text, modifier, style, std::move(onTextLayout), site);
-    ComposableScope scope(site);  // (the contents' callbacks can't be compared: run each time)
+    KompozableScope scope(site);  // (the contents' callbacks can't be compared: run each time)
     emitStyledText(text, modifier, style, std::move(onTextLayout), &inlineContent);
 }
 // (onTextLayout isn't compared: told with the latest one when it runs.)
 void detail::Text(std::string text, const Modifier& modifier, const TextStyle& style, OnTextLayout onTextLayout, CallSite site) {
     if (!onTextLayout) return detail::Text(std::move(text), modifier, style, site);
-    composable(site, text, modifier, style,
+    kompozable(site, text, modifier, style,
                [text, modifier, style, onTextLayout] { emitStyledText(AnnotatedString(text), modifier, style, onTextLayout); });
 }
 void detail::Text(const AnnotatedString& text, const Modifier& modifier, const TextStyle& style, OnTextLayout onTextLayout, CallSite site) {
     if (!onTextLayout) return detail::Text(text, modifier, style, site);
-    composable(site, text, modifier, style, [text, modifier, style, onTextLayout] { emitStyledText(text, modifier, style, onTextLayout); });
+    kompozable(site, text, modifier, style, [text, modifier, style, onTextLayout] { emitStyledText(text, modifier, style, onTextLayout); });
 }
 
 namespace {
@@ -727,7 +727,7 @@ struct SelectionRegistry {
     std::vector<std::weak_ptr<SelectableText>> texts;
     int64_t nextId = 0;
     std::weak_ptr<LayoutNode*> container;
-    ComposeHost* host = nullptr;
+    KompozHost* host = nullptr;
 
     std::shared_ptr<SelectableText> add() {
         auto text = std::make_shared<SelectableText>();
@@ -854,14 +854,14 @@ struct SelectionRegistry {
         return {b.x + local.x, b.y + local.y};
     }
 };
-const CompositionLocal<std::shared_ptr<SelectionRegistry>> LocalSelectionRegistry{nullptr};
+const KompozitionLocal<std::shared_ptr<SelectionRegistry>> LocalSelectionRegistry{nullptr};
 
 // Shows the text magnifier while a handle is dragged; gone when the drag ends, however it ends
 // (the handle may go first).
 struct TextMagnifierShown {
-    ComposeHost* host;
+    KompozHost* host;
     MutableState<bool> dragging;  // the selection toolbar is hidden meanwhile, as Android's
-    TextMagnifierShown(ComposeHost* host, MutableState<bool> dragging) : host(host), dragging(dragging) { dragging.set(true); }
+    TextMagnifierShown(KompozHost* host, MutableState<bool> dragging) : host(host), dragging(dragging) { dragging.set(true); }
     TextMagnifierShown(const TextMagnifierShown&) = delete;
     ~TextMagnifierShown() {
         host->hideTextMagnifier();
@@ -881,7 +881,7 @@ struct SelectionHandleDrag {
     std::function<Offset(Offset pressed)> grab;
     std::function<void(Offset at)> drag;
 };
-void selectionHandle(bool start, Color color, ComposeHost* host, MutableState<bool> dragging, const SelectionHandleDrag& handle) {
+void selectionHandle(bool start, Color color, KompozHost* host, MutableState<bool> dragging, const SelectionHandleDrag& handle) {
     Popup({.position = [position = handle.position](const Rect& anchor, Size, Size) { return position(anchor); },
            .focusable = false,
            .touchable = true},
@@ -915,7 +915,7 @@ void textSelectionPopups(std::shared_ptr<SelectionRegistry> registry) {
     if (s.empty() || !s.handles) return;
     const ColorScheme& cs = colorScheme();
     Color handleColor = LocalTextSelectionColors.current().handleColor;
-    ComposeHost* host = &detail::Composer::require().host();
+    KompozHost* host = &detail::Kompozer::require().host();
     auto dragging = remember([] { return mutableStateOf(false); });  // a handle: no toolbar meanwhile
     auto origin = remember([] { return std::make_shared<std::array<Offset, 2>>(); });  // where the handles were put
     // The caret at one end of the selection, in the window, and its text.
@@ -1138,7 +1138,7 @@ void emitStyledText(const AnnotatedString& text, const Modifier& modifier, const
         shared->layout = layout;
         shared->text = text.text();
         shared->align = style.textAlign;
-        shared->measurer = &detail::Composer::require().host().textMeasurer();
+        shared->measurer = &detail::Kompozer::require().host().textMeasurer();
         range = registry->rangeOf(*shared, registry->selection.get());
     }
     Color highlight = LocalTextSelectionColors.current().backgroundColor;
@@ -1158,7 +1158,7 @@ void emitStyledText(const AnnotatedString& text, const Modifier& modifier, const
         // A finger's long press selects the word under it (the mouse drags or double clicks).
         auto trigger = std::make_shared<TooltipTriggerElement>();
         trigger->onLongPressAt = [shared, registry](Offset p) {
-            if (registry->host->pointerType() != ComposeHost::PointerType::Touch || !shared->placed()) return;
+            if (registry->host->pointerType() != KompozHost::PointerType::Touch || !shared->placed()) return;
             Rect b = shared->bounds();
             registry->selectWordAt({b.x + p.x, b.y + p.y}, true);
             registry->host->performHapticFeedback(HapticFeedbackType::LongPress);
@@ -1172,7 +1172,7 @@ void emitStyledText(const AnnotatedString& text, const Modifier& modifier, const
         // latest ones: the input coroutine keeps running). The mouse over one shows a hand.
         auto& latest = remember([] { return std::make_shared<std::vector<AnnotatedString::Link>>(); });
         *latest = text.links();
-        ComposeHost* host = &detail::Composer::require().host();
+        KompozHost* host = &detail::Kompozer::require().host();
         auto linkAt = [layout, align = style.textAlign](Offset p, float width) {
             int run = detail::runAt(*layout, p, width, align);
             return run < 0 ? -1 : layout->runs[size_t(run)].link;
@@ -1250,7 +1250,7 @@ void emitText(const std::string& text, const Modifier& modifier, const TextStyle
 void detail::customTextToolbar(const std::shared_ptr<TextToolbar>& toolbar, std::function<Rect(const Rect& anchor)> selection,
                                std::function<void()> onCopy, std::function<void()> onPaste, std::function<void()> onCut,
                                std::function<void()> onSelectAll, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // What it was told last: the rect and which actions it had.
     struct Told {
         std::optional<Rect> rect;
@@ -1282,9 +1282,9 @@ void detail::customTextToolbar(const std::shared_ptr<TextToolbar>& toolbar, std:
 }
 
 void detail::SelectionContainer(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto registry = remember([] { return std::make_shared<SelectionRegistry>(mutableStateOf(TextSelection{})); });
-    registry->host = &detail::Composer::require().host();
+    registry->host = &detail::Kompozer::require().host();
     auto focus = remember([] { return FocusRequester(); });
     // A press anywhere in it clears the selection (the handles and the toolbar take their own);
     // the mouse drags a new one, or double clicks a word, and Ctrl+C copies it.
@@ -1316,7 +1316,7 @@ void detail::SelectionContainer(const Modifier& modifier, const Content& content
                          while (true) {
                              PointerEvent down = co_await s.awaitPointerEvent();
                              if (down.type != PointerEventType::Press) continue;
-                             bool mouse = registry->host->pointerType() == ComposeHost::PointerType::Mouse;
+                             bool mouse = registry->host->pointerType() == KompozHost::PointerType::Mouse;
                              Anchor extendFrom = !mouse || !down.keyboardModifiers.shift ? Anchor{}
                                                  : registry->selectionStart().order >= 0 ? registry->selectionStart()
                                                                                          : caret;
@@ -1360,16 +1360,16 @@ void detail::SelectionContainer(const Modifier& modifier, const Content& content
                    return box(node, c);
                },
                [&] {
-                   CompositionLocalProvider({LocalSelectionRegistry.provides(registry)}, content);
+                   KompozitionLocalProvider({LocalSelectionRegistry.provides(registry)}, content);
                    // Their own labels aren't selectable.
-                   CompositionLocalProvider({LocalSelectionRegistry.provides(nullptr)},
-                                            [&] { composable(CallSite::current(), registry, [registry] { textSelectionPopups(registry); }); });
+                   KompozitionLocalProvider({LocalSelectionRegistry.provides(nullptr)},
+                                            [&] { kompozable(CallSite::current(), registry, [registry] { textSelectionPopups(registry); }); });
                });
 }
 
 void DisableSelection(const Content& content, CallSite site) {
-    ComposableScope scope(site);
-    CompositionLocalProvider({LocalSelectionRegistry.provides(nullptr)}, content);
+    KompozableScope scope(site);
+    KompozitionLocalProvider({LocalSelectionRegistry.provides(nullptr)}, content);
 }
 
 void detail::Button(std::function<void()> onClick, const Content& content, CallSite site) {
@@ -1441,7 +1441,7 @@ void detail::OutlinedToggleButton(bool checked, std::function<void(bool)> onChec
 }
 
 void detail::SplitButtonLayout(const Content& leadingButton, const Content& trailingButton, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::Row(modifier, {.horizontalArrangement = Arrangement::spacedBy(SplitButtonDefaults::Spacing), .verticalAlignment = Alignment::CenterVertically},
         [&] {
             leadingButton();
@@ -1483,7 +1483,7 @@ void detail::TrailingButton(bool checked, std::function<void(bool)> onCheckedCha
                {.enabled = style.enabled, .interactionSource = style.interactionSource, .shapes = now}, content, site);
 }
 void TrailingButtonIcon(bool checked, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto turn = animateFloatAsState(checked ? 180.f : 0.f, motionScheme().fastSpatialSpec);  // (read as it is drawn)
     ::kompoz::detail::Icon(Icons::Filled::KeyboardArrowDown, checked ? LocalStrings.current().closeMenu : LocalStrings.current().openMenu,
          Modifier().size(18).graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn.value(); }));
@@ -1493,12 +1493,12 @@ void TrailingButtonIcon(bool checked, CallSite site) {
 
 void detail::Icon(const ImageVector& icon, std::string contentDescription, const Modifier& modifier, std::optional<Color> tint,
           CallSite site) {
-    composable(site, icon, contentDescription, modifier, tint, [=] { detail::Icon(rememberVectorPainter(icon), contentDescription, modifier, tint); });
+    kompozable(site, icon, contentDescription, modifier, tint, [=] { detail::Icon(rememberVectorPainter(icon), contentDescription, modifier, tint); });
 }
 
 void detail::Icon(const Painter& painter, std::string contentDescription, const Modifier& modifier, std::optional<Color> tint,
           CallSite site) {
-    composable(site, painter, contentDescription, modifier, tint, [=] {
+    kompozable(site, painter, contentDescription, modifier, tint, [=] {
         Color color = tint.value_or(LocalContentColor.current());
         Modifier sized = painter.hasIntrinsicSize() ? modifier : modifier.size(24);  // its own size, or an icon's
         // (its description is its semantics' contentDescription, as Compose's: what a screen reader
@@ -1631,7 +1631,7 @@ void requestImage(const ImageLoader& load, const std::string& model, ImageReques
 // The loading state of `model`, loaded at `size` once it is known (until then only from the
 // cache): AsyncImage asks for the size its layout first gets.
 AsyncImageState asyncImageState(const std::string& model, std::optional<ImageRequestSize> size) {
-    ComposeHost& host = detail::Composer::require().host();
+    KompozHost& host = detail::Kompozer::require().host();
     using Status = AsyncImageState::Status;
     auto state = remember(model, [&] {
         auto hit = imageCache().find(model, std::nullopt);  // any size at once; a bigger one may follow
@@ -1661,7 +1661,7 @@ AsyncImageState asyncImageState(const std::string& model, std::optional<ImageReq
 
 void detail::Image(const ImageBitmap& bitmap, std::string contentDescription, const Modifier& modifier,
            ContentScale contentScale, float alpha, std::optional<ColorFilter> colorFilter, CallSite site) {
-    composable(site, bitmap, contentDescription, modifier, contentScale, alpha, colorFilter, [=] {
+    kompozable(site, bitmap, contentDescription, modifier, contentScale, alpha, colorFilter, [=] {
         float iw = float(bitmap.width()), ih = float(bitmap.height());
         auto measure = [iw, ih](LayoutNode&, const Constraints& c) -> Size { return imageSize(iw, ih, c); };
         auto draw = [bitmap, contentScale, alpha, colorFilter, iw, ih](GraphicsContext& canvas, const Rect& b, const LayoutNode&) {
@@ -1675,14 +1675,14 @@ void detail::Image(const ImageBitmap& bitmap, std::string contentDescription, co
 }
 
 ImageBitmap imageResource(const std::string& path, CallSite site) {
-    auto& host = detail::Composer::require().host();
+    auto& host = detail::Kompozer::require().host();
     return remember(path, [&] { return host.loadImage(path); }, site);
 }
 
 Painter painterResource(const std::string& path, CallSite site) { return BitmapPainter(imageResource(path, site)); }
 
 ImageVector vectorResource(const std::string& path, CallSite site) {
-    ComposeHost& host = detail::Composer::require().host();
+    KompozHost& host = detail::Kompozer::require().host();
     return remember(
         path,
         [&] {
@@ -1698,7 +1698,7 @@ Painter rememberVectorPainter(const ImageVector& image, CallSite site) {
 }
 
 AnimatedImageVector animatedVectorResource(const std::string& path, CallSite site) {
-    ComposeHost& host = detail::Composer::require().host();
+    KompozHost& host = detail::Kompozer::require().host();
     return remember(
         path,
         [&] {
@@ -1709,7 +1709,7 @@ AnimatedImageVector animatedVectorResource(const std::string& path, CallSite sit
 }
 
 Painter rememberAnimatedVectorPainter(const AnimatedImageVector& vector, bool atEnd, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     float total = float(vector.totalDurationMillis());
     auto millis = animateFloatAsState(atEnd ? total : 0.f, tween(total, 0, LinearEasing));
     // The vector at the time, made as it is drawn (only that is drawn again as it plays).
@@ -1723,7 +1723,7 @@ thread_local ImageVector::Builder* gVectorContent = nullptr;  // what vector::Gr
 Painter rememberVectorPainter(float defaultWidth, float defaultHeight, float viewportWidth, float viewportHeight, std::string name,
                               std::optional<Color> tintColor, BlendMode tintBlendMode, bool autoMirror,
                               const std::function<void(float, float)>& content, CallSite site) {
-    ComposableScope scope(site);  // what the content remembers stays in here
+    KompozableScope scope(site);  // what the content remembers stays in here
     float density = LocalDensity.current().density;
     if (std::isnan(viewportWidth)) viewportWidth = defaultWidth * density;  // (Compose's: its default size in px)
     if (std::isnan(viewportHeight)) viewportHeight = defaultHeight * density;
@@ -1755,7 +1755,7 @@ Painter rememberVectorPainter(float defaultWidth, float defaultHeight, const std
 }
 
 void vector::Group(const VectorGroup& group, const std::function<void()>& content, CallSite site) {
-    ComposableScope scope(site);  // (a group of its own for what its content remembers; what it reads recomposes the painter's composable)
+    KompozableScope scope(site);  // (a group of its own for what its content remembers; what it reads recomposes the painter's composable)
     ImageVector::Builder* builder = gVectorContent;
     if (!builder) return;  // (outside a vector's content)
     VectorGroup own = group;
@@ -1778,7 +1778,7 @@ std::optional<Brush> vector::VectorConfig::getOrDefault(VectorPropertyOf<std::op
 }
 
 void vector::RenderVectorGroup(const VectorGroup& group, const std::map<std::string, std::shared_ptr<const VectorConfig>>& configs, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     static const VectorConfig none;
     for (const VectorNode& node : group) {
         const std::string& name = node.path() ? node.path()->name : node.group()->name;
@@ -1818,7 +1818,7 @@ void vector::RenderVectorGroup(const VectorGroup& group, const std::map<std::str
 
 void detail::Image(const Painter& painter, std::string contentDescription, const Modifier& modifier, Alignment alignment,
            ContentScale contentScale, float alpha, std::optional<ColorFilter> colorFilter, CallSite site) {
-    composable(site, painter, contentDescription, modifier, alignment, contentScale, alpha, colorFilter, [=] {
+    kompozable(site, painter, contentDescription, modifier, alignment, contentScale, alpha, colorFilter, [=] {
         Modifier described = contentDescription.empty() ? modifier : modifier.semantics(contentDescription);  // (as Icon's)
         layoutNode(CallSite::current(), described.clipToBounds().paint(painter, true, alignment, contentScale, alpha, colorFilter),
                    [](LayoutNode&, const Constraints& c) { return Size{c.minWidth, c.minHeight}; }, {}, {}, {});
@@ -1826,12 +1826,12 @@ void detail::Image(const Painter& painter, std::string contentDescription, const
 }
 
 AsyncImageState rememberAsyncImage(const std::string& model, ImageRequestSize size, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     return asyncImageState(model, size);
 }
 
 Painter rememberAsyncImagePainter(const std::string& model, ImageRequestSize size, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     AsyncImageState state = asyncImageState(model, size);
     return state.status == AsyncImageState::Status::Success ? BitmapPainter(state.image) : Painter();
 }
@@ -1844,7 +1844,7 @@ void clearImageCache() {
 
 void detail::AsyncImage(std::string model, std::string contentDescription, const Modifier& modifier, const AsyncImageOptions& options,
                 CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     using Status = AsyncImageState::Status;
     // The size it is loaded at: what its layout first gets, in pixels, as Coil resolves it from
     // the constraints (a big photo shown small is decoded small).
@@ -1910,13 +1910,13 @@ void iconButtonBox(const Modifier& modifier, Color container, Color contentColor
                    const std::function<Modifier(const Modifier&)>& click, const Content& content) {
     Modifier m = modifier.minimumInteractiveComponentSize().size(40).background(container, 20);
     if (border) m = m.border(1, *border, 20);
-    CompositionLocalProvider({LocalContentColor.provides(contentColor)},
+    KompozitionLocalProvider({LocalContentColor.provides(contentColor)},
                              [&] { detail::Box(click(m), Alignment::Center, content); });
 }
 
 void iconButtonImpl(IconButtonKind kind, std::function<void()> onClick, const Modifier& modifier,
                     const IconButtonStyle& style, const Content& content, const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // Compose 1.4's: filled primary, tonal secondaryContainer (disabled: the surface's text at 10%).
     Color container = style.containerColor.value_or(kind == IconButtonKind::Filled  ? cs.primary
@@ -1945,7 +1945,7 @@ void iconButtonImpl(IconButtonKind kind, std::function<void()> onClick, const Mo
 void iconToggleButtonImpl(IconButtonKind kind, bool checked, std::function<void(bool)> onCheckedChange,
                           const Modifier& modifier, const IconToggleButtonStyle& style, const Content& content,
                           const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // Compose 1.4's: filled ones surfaceContainer/onSurfaceVariant off, primary/onPrimary on;
     // tonal ones secondaryContainer off, secondary on; outlined ones the content color around
@@ -2070,7 +2070,7 @@ float circularGapSweep(float diameter, float strokeWidth) { return (4 + strokeWi
 } // namespace
 
 void detail::CircularProgressIndicator(const Modifier& modifier, std::optional<Color> color, float strokeWidth, CallSite site) {
-    composable(site, modifier, color, strokeWidth, [=] {
+    kompozable(site, modifier, color, strokeWidth, [=] {
         Color c = color.value_or(colorScheme().primary);
         auto clock = detail::rememberDrawClock();  // read as it draws: nothing composed or laid out as it turns
         progressNode(
@@ -2091,7 +2091,7 @@ void detail::CircularProgressIndicator(const Modifier& modifier, std::optional<C
 
 void detail::CircularProgressIndicator(float progress, const Modifier& modifier, std::optional<Color> color, float strokeWidth,
                                        CallSite site) {
-    composable(site, progress, modifier, color, strokeWidth, [=] {
+    kompozable(site, progress, modifier, color, strokeWidth, [=] {
         Color c = color.value_or(colorScheme().primary), track = colorScheme().secondaryContainer;
         float p = std::clamp(progress, 0.f, 1.f);
         progressNode(
@@ -2108,7 +2108,7 @@ void detail::CircularProgressIndicator(float progress, const Modifier& modifier,
 }
 
 void detail::LinearProgressIndicator(const Modifier& modifier, std::optional<Color> color, CallSite site) {
-    composable(site, modifier, color, [=] {
+    kompozable(site, modifier, color, [=] {
         Color c = color.value_or(colorScheme().primary), track = colorScheme().secondaryContainer;
         auto clock = detail::rememberDrawClock();  // read as it draws
         progressNode(
@@ -2131,7 +2131,7 @@ void detail::LinearProgressIndicator(const Modifier& modifier, std::optional<Col
 }
 
 void detail::LinearProgressIndicator(float progress, const Modifier& modifier, std::optional<Color> color, CallSite site) {
-    composable(site, progress, modifier, color, [=] {
+    kompozable(site, progress, modifier, color, [=] {
         Color c = color.value_or(colorScheme().primary), track = colorScheme().secondaryContainer;
         float p = std::clamp(progress, 0.f, 1.f);
         progressNode(
@@ -2192,32 +2192,32 @@ void card(CardKind kind, std::function<void()> onClick, const Modifier& modifier
                                               : modifier.background(container, shape);
     m = m.clip(shape);
     if (onClick) m = m.clickable(std::move(onClick), enabled);
-    CompositionLocalProvider({LocalContentColor.provides(content_)}, [&] { detail::Column(m, content); });
+    KompozitionLocalProvider({LocalContentColor.provides(content_)}, [&] { detail::Column(m, content); });
 }
 } // namespace
 
 void detail::Card(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     card(CardKind::Filled, {}, modifier, style, content);
 }
 void detail::ElevatedCard(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     card(CardKind::Elevated, {}, modifier, style, content);
 }
 void detail::OutlinedCard(const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     card(CardKind::Outlined, {}, modifier, style, content);
 }
 void detail::Card(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     card(CardKind::Filled, std::move(onClick), modifier, style, content);
 }
 void detail::ElevatedCard(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     card(CardKind::Elevated, std::move(onClick), modifier, style, content);
 }
 void detail::OutlinedCard(std::function<void()> onClick, const Modifier& modifier, const CardStyle& style, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     card(CardKind::Outlined, std::move(onClick), modifier, style, content);
 }
 
@@ -2226,15 +2226,15 @@ void detail::Surface(const Modifier& modifier, const Content& content, CallSite 
     detail::Surface(modifier, cs.background, cs.onBackground, content, site);
 }
 void detail::Surface(const Modifier& modifier, Color color, Color contentColor, const Content& content, CallSite site) {
-    ComposableScope scope(site);
-    CompositionLocalProvider({LocalContentColor.provides(contentColor)},
+    KompozableScope scope(site);
+    KompozitionLocalProvider({LocalContentColor.provides(contentColor)},
                              [&] { detail::Box(modifier.background(color), content); });
 }
 
 void detail::Surface(const Modifier& modifier, Color color, Color contentColor, const Shape& shape, const Content& content,
                      CallSite site) {
-    ComposableScope scope(site);
-    CompositionLocalProvider({LocalContentColor.provides(contentColor)},
+    KompozableScope scope(site);
+    KompozitionLocalProvider({LocalContentColor.provides(contentColor)},
                              [&] { detail::Box(modifier.background(color, shape).clip(shape), content); });
 }
 
@@ -2247,8 +2247,8 @@ void detail::VerticalDivider(const Modifier& modifier, float thickness, std::opt
 }
 
 void SystemBarsAppearance(bool lightStatusBars, bool lightNavigationBars, CallSite site) {
-    ComposableScope scope(site);
-    ComposeHost* host = &detail::Composer::require().host();
+    KompozableScope scope(site);
+    KompozHost* host = &detail::Kompozer::require().host();
     SideEffect([host, lightStatusBars, lightNavigationBars] { host->setSystemBarsAppearance(lightStatusBars, lightNavigationBars); });
 }
 
@@ -2312,7 +2312,7 @@ void checkbox(ToggleableState state, std::function<void()> onClick, const Modifi
 
 void detail::Checkbox(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, bool enabled,
               std::optional<MutableInteractionSource> interactionSource, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     std::function<void()> toggle;  // none: not clickable (the row around it takes the tap)
     if (onCheckedChange) toggle = [checked, onCheckedChange = std::move(onCheckedChange)] { onCheckedChange(!checked); };
     checkbox(checked ? ToggleableState::On : ToggleableState::Off, toggle, modifier, enabled, std::move(interactionSource));
@@ -2320,7 +2320,7 @@ void detail::Checkbox(bool checked, std::function<void(bool)> onCheckedChange, c
 
 void detail::TriStateCheckbox(ToggleableState state, std::function<void()> onClick, const Modifier& modifier, bool enabled,
                       std::optional<MutableInteractionSource> interactionSource, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     checkbox(state, std::move(onClick), modifier, enabled, std::move(interactionSource));
 }
 
@@ -2330,7 +2330,7 @@ void detail::Switch(bool checked, std::function<void(bool)> onCheckedChange, con
 }
 
 void detail::Switch(bool checked, std::function<void(bool)> onCheckedChange, const Modifier& modifier, const SwitchOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     bool enabled = options.enabled;
     // Compose 1.4's colors (SwitchDefaults.colors): disabled ones faded over the surface.
@@ -2377,7 +2377,7 @@ void detail::Switch(bool checked, std::function<void(bool)> onCheckedChange, con
     layoutNode(CallSite::current(), m,
                policy,
                [&] {
-                   if (options.thumbContent) CompositionLocalProvider({LocalContentColor.provides(icon)}, options.thumbContent);
+                   if (options.thumbContent) KompozitionLocalProvider({LocalContentColor.provides(icon)}, options.thumbContent);
                },
                draw, checked ? "on" : "off");
 }
@@ -2592,7 +2592,7 @@ int nearestOffset(TextMeasurer& tm, std::string_view text, const Font& font, con
 
 // A selection handle dragged: the selection follows, with a tick when it reaches another
 // character (`ime` is the field's state, updated as the host applies it).
-void moveSelection(ComposeHost* host, const TextEditState& ime, int start, int end) {
+void moveSelection(KompozHost* host, const TextEditState& ime, int start, int end) {
     int was[2] = {ime.selectionStart, ime.selectionEnd};
     host->setTextSelection(start, end);
     if (ime.selectionStart != was[0] || ime.selectionEnd != was[1]) host->performHapticFeedback(HapticFeedbackType::TextHandleMove);
@@ -2617,7 +2617,7 @@ void undoStep(detail::TextHistory& history, bool redo);
 void textField(FieldKind kind, const std::string& value, std::function<void(std::string)> onValueChange,
                const Modifier& modifier, TextFieldOptions o, const CallSite& site, std::optional<TextFieldState> state = {},
                std::optional<Obfuscation> secure = {}) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     if (o.lineLimits) {
         o.singleLine = o.lineLimits->singleLine;
         o.minLines = o.lineLimits->minHeightInLines;
@@ -2627,7 +2627,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     const Typography& type = typography();
     Font font = detail::styledFont(o.textStyle, type.bodyLarge);
     TextAlign align = o.textStyle.textAlign;
-    TextMeasurer* measurer = &detail::Composer::require().host().textMeasurer();
+    TextMeasurer* measurer = &detail::Kompozer::require().host().textMeasurer();
     FocusManager focus = focusManager();
 
     // The input method's last report: where the caret is and which word it is still composing.
@@ -2648,7 +2648,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     };
     auto handles = remember([] { return std::make_shared<HandleState>(); });
     auto menuAt = remember([] { return mutableStateOf(std::optional<Offset>()); });  // its context menu, open there
-    ComposeHost* host = &detail::Composer::require().host();
+    KompozHost* host = &detail::Kompozer::require().host();
     // The text the app has: onValueChange only reports a different one (not a caret moving),
     // as in Compose.
     auto known = remember([] { return std::make_shared<std::string>(); });
@@ -3107,7 +3107,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         if (auto custom = LocalTextToolbar.current()) {  // the app's own: told what it may offer, and where
             bool selected = ime->selectionStart != ime->selectionEnd;
             bool canCopy = selected && focusable->allowCopy, canEdit = !o.readOnly;
-            auto act = [host](ComposeHost::TextAction a) { return std::function<void()>([host, a] { host->textAction(a); }); };
+            auto act = [host](KompozHost::TextAction a) { return std::function<void()>([host, a] { host->textAction(a); }); };
             detail::customTextToolbar(
                 custom,
                 [ime, caretPoint, lineHeight](const Rect& field) {
@@ -3116,8 +3116,8 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                     float left = std::min(from.x, to.x), right = std::max(from.x, to.x);
                     return Rect{field.x + left, field.y + from.y - lineHeight, right - left, to.y - from.y + lineHeight};
                 },
-                canCopy ? act(ComposeHost::TextAction::Copy) : nullptr, canEdit ? act(ComposeHost::TextAction::Paste) : nullptr,
-                canCopy && canEdit ? act(ComposeHost::TextAction::Cut) : nullptr, act(ComposeHost::TextAction::SelectAll));
+                canCopy ? act(KompozHost::TextAction::Copy) : nullptr, canEdit ? act(KompozHost::TextAction::Paste) : nullptr,
+                canCopy && canEdit ? act(KompozHost::TextAction::Cut) : nullptr, act(KompozHost::TextAction::SelectAll));
             return;
         }
         Popup({.position = [ime, caretPoint, lineHeight](const Rect& field, Size size, Size viewport) {
@@ -3135,13 +3135,13 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                   bool canCopy = selected && focusable->allowCopy, canEdit = !o.readOnly;
                   const Strings& strings = LocalStrings.current();
                   detail::Row(Modifier().shadow(3, 8).background(cs.surfaceContainer, 8), [&] {
-                      auto action = [&](const std::string& label, ComposeHost::TextAction a) {
+                      auto action = [&](const std::string& label, KompozHost::TextAction a) {
                           detail::TextButton([host, a] { host->textAction(a); }, [label] { detail::Text(label); });
                       };
-                      if (canCopy && canEdit) action(strings.cut, ComposeHost::TextAction::Cut);
-                      if (canCopy) action(strings.copy, ComposeHost::TextAction::Copy);
-                      if (canEdit) action(strings.paste, ComposeHost::TextAction::Paste);
-                      action(strings.selectAll, ComposeHost::TextAction::SelectAll);
+                      if (canCopy && canEdit) action(strings.cut, KompozHost::TextAction::Cut);
+                      if (canCopy) action(strings.copy, KompozHost::TextAction::Copy);
+                      if (canEdit) action(strings.paste, KompozHost::TextAction::Paste);
+                      action(strings.selectAll, KompozHost::TextAction::SelectAll);
                   });
               });
     };
@@ -3213,7 +3213,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
             float bias = o.labelPosition.alignment.bias;
             if (o.labelContent)
                 detail::Box(Modifier().fillMaxWidth().padding(4, 0, 4, 4), bias < 0 ? Alignment::TopStart : bias > 0 ? Alignment::TopEnd : Alignment::TopCenter, [&] {
-                    CompositionLocalProvider({LocalTextStyle.provides(type.bodySmall), LocalContentColor.provides(labelColor)}, o.labelContent);
+                    KompozitionLocalProvider({LocalTextStyle.provides(type.bodySmall), LocalContentColor.provides(labelColor)}, o.labelContent);
                 });
             else
                 detail::Text(o.label, Modifier().fillMaxWidth().padding(4, 0, 4, 4),
@@ -3241,13 +3241,13 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                            if (auto at = menuAt.get()) {  // a right click's menu: what the selection allows
                                bool selected = ime->selectionStart != ime->selectionEnd;
                                bool canCopy = selected && focusable->allowCopy, canEdit = !o.readOnly;
-                               auto act = [host](ComposeHost::TextAction a) { return [host, a] { host->textAction(a); }; };
+                               auto act = [host](KompozHost::TextAction a) { return [host, a] { host->textAction(a); }; };
                                const Strings& strings = LocalStrings.current();
                                contextMenuPopup(*at,
-                                                {{strings.cut, act(ComposeHost::TextAction::Cut), canCopy && canEdit},
-                                                 {strings.copy, act(ComposeHost::TextAction::Copy), canCopy},
-                                                 {strings.paste, act(ComposeHost::TextAction::Paste), canEdit},
-                                                 {strings.selectAll, act(ComposeHost::TextAction::SelectAll)}},
+                                                {{strings.cut, act(KompozHost::TextAction::Cut), canCopy && canEdit},
+                                                 {strings.copy, act(KompozHost::TextAction::Copy), canCopy},
+                                                 {strings.paste, act(KompozHost::TextAction::Paste), canEdit},
+                                                 {strings.selectAll, act(KompozHost::TextAction::SelectAll)}},
                                                 [menuAt] { menuAt.set(std::nullopt); });
                            }
                            if (!showSelection) return;
@@ -3274,12 +3274,12 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                 detail::Row(m, {.verticalAlignment = Alignment::CenterVertically}, [&] {
                     if (o.leadingIcon)
                         detail::Box(Modifier().padding(12, 0, 16, 0), [&] {
-                            CompositionLocalProvider({LocalContentColor.provides(leadingIconColor)}, o.leadingIcon);
+                            KompozitionLocalProvider({LocalContentColor.provides(leadingIconColor)}, o.leadingIcon);
                         });
                     innerTextField();
                     if (o.trailingIcon)
                         detail::Box(Modifier().padding(16, 0, 12, 0), [&] {
-                            CompositionLocalProvider({LocalContentColor.provides(trailingIconColor)}, o.trailingIcon);
+                            KompozitionLocalProvider({LocalContentColor.provides(trailingIconColor)}, o.trailingIcon);
                         });
                 });
             };
@@ -3293,7 +3293,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                     row(Modifier().fillMaxWidth().heightIn(56));
                     if (composedPlaceholder && value.empty() && (!hasLabel || isFocused || alwaysUp))
                         detail::Box(Modifier().padding(textStart, 16, 0, 0), [&] {
-                            CompositionLocalProvider({LocalTextStyle.provides(font), LocalContentColor.provides(placeholderColor)}, o.placeholderContent);
+                            KompozitionLocalProvider({LocalTextStyle.provides(font), LocalContentColor.provides(placeholderColor)}, o.placeholderContent);
                         });
                     if (composedLabel) {
                         float p = floated.value();  // (read here: the style follows it each frame)
@@ -3309,7 +3309,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                                         return s;
                                     }),
                                     [&] {
-                                        CompositionLocalProvider({LocalTextStyle.provides(Font{lerp(16, 12, p)}), LocalContentColor.provides(labelColor)},
+                                        KompozitionLocalProvider({LocalTextStyle.provides(Font{lerp(16, 12, p)}), LocalContentColor.provides(labelColor)},
                                                                  o.labelContent);
                                     });
                     }
@@ -3321,7 +3321,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                  {.font = type.bodySmall, .color = supportingColor});
         else if (o.supportingTextContent)
             detail::Box(Modifier().padding(16, 4, 16, 0), [&] {
-                CompositionLocalProvider({LocalTextStyle.provides(type.bodySmall), LocalContentColor.provides(supportingColor)}, o.supportingTextContent);
+                KompozitionLocalProvider({LocalTextStyle.provides(type.bodySmall), LocalContentColor.provides(supportingColor)}, o.supportingTextContent);
             });
     });
 }
@@ -3636,7 +3636,7 @@ int typedCharacter(const TextFieldBuffer& b) {
 }
 
 void secureTextField(FieldKind kind, const TextFieldState& state, const Modifier& modifier, SecureTextFieldOptions o, const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // The character just typed (where it starts, and the text it made): shown until anything
     // else changes the text, the field loses its focus or 1.5 s pass.
     auto revealAt = remember([] { return mutableStateOf(-1); });
@@ -3705,7 +3705,7 @@ void detail::BasicSecureTextField(const TextFieldState& state, const Modifier& m
 
 void detail::ContextMenuArea(std::function<std::vector<ContextMenuItem>()> items, const Content& content, const Modifier& modifier, bool enabled,
                              CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto at = remember([] { return mutableStateOf(std::optional<Offset>()); });
     auto element = std::make_shared<ContextMenuElement>();
     if (enabled) element->onOpen = [at](Offset p) { at.set(p); };

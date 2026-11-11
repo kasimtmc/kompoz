@@ -54,16 +54,16 @@ Some components show or announce texts of their own: a text field's Cut, Copy an
 
 - Kompoz has them in English (`Strings.english()`, the default) and Turkish (`Strings.turkish()`).
 - The host picks them by the system's preferred language: Turkish on a Turkish system, English otherwise. `KOMPOZ_LANGUAGE=tr` or `en` decides instead.
-- An app provides its own, whole or changed, with `CompositionLocalProvider`:
+- An app provides its own, whole or changed, with `KompozitionLocalProvider`:
 
 ```kotlin
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun Localized() {
     val mine = Strings.english()
     mine.copy = "Duplicate"
     mine.moreOptions = "More"
-    CompositionLocalProvider(LocalStrings provides mine) { App() }
+    KompozitionLocalProvider(LocalStrings provides mine) { App() }
 }
 ```
 
@@ -73,7 +73,7 @@ For another language, fill in a `Strings` of your own, including its `datePicker
 
 ### Your app's own texts
 
-Kompoz doesn't translate your app's texts. A simple approach that fits the same model is a struct of your texts per language, provided through a `CompositionLocal` of your own and picked by `LocalStrings.current().language`:
+Kompoz doesn't translate your app's texts. A simple approach that fits the same model is a struct of your texts per language, provided through a `KompozitionLocal` of your own and picked by `LocalStrings.current().language`:
 
 ```kotlin
 data class AppTexts(val greeting: String = "", val signIn: String = "")
@@ -81,12 +81,12 @@ data class AppTexts(val greeting: String = "", val signIn: String = "")
 fun textsFor(language: String): AppTexts =
     if (language == "tr") AppTexts("Hoş geldiniz", "Giriş yap") else AppTexts("Welcome", "Sign in")
 
-val LocalAppTexts = compositionLocalOf { AppTexts() }
+val LocalAppTexts = kompozitionLocalOf { AppTexts() }
 
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun Root() {
-    CompositionLocalProvider(LocalAppTexts provides textsFor(LocalStrings.current.language)) { App() }
+    KompozitionLocalProvider(LocalAppTexts provides textsFor(LocalStrings.current.language)) { App() }
 }
 ```
 
@@ -95,7 +95,7 @@ fun Root() {
 Services that composables get inside a composition and keep for callbacks, as Compose's `LocalUriHandler` and friends:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ShareRow(link: String) {
     val links = LocalUriHandler.current
     val clip = LocalClipboardManager.current

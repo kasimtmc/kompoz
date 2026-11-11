@@ -95,15 +95,15 @@ void Lifecycle::setCurrentState(LifecycleState state) {
     d.flow.setValue(d.state);
 }
 
-const CompositionLocal<std::shared_ptr<LifecycleOwner>> LocalLifecycleOwner{nullptr};
+const KompozitionLocal<std::shared_ptr<LifecycleOwner>> LocalLifecycleOwner{nullptr};
 
 std::shared_ptr<LifecycleOwner> currentLifecycleOwner() {
     if (auto owner = LocalLifecycleOwner.current()) return owner;
-    return detail::Composer::require().host().lifecycleOwner();
+    return detail::Kompozer::require().host().lifecycleOwner();
 }
 
 void LifecycleEventEffect(LifecycleEvent event, std::function<void()> onEvent, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto owner = currentLifecycleOwner();
     auto latest = rememberUpdatedState(std::move(onEvent));
     DisposableEffect(owner, [owner, latest, event]() -> std::function<void()> {
@@ -135,7 +135,7 @@ std::function<void()> detail::whileAtLeast(Lifecycle& lifecycle, LifecycleState 
 }
 
 void detail::lifecycleEffect(size_t key, LifecycleState from, std::function<std::function<void()>()> effect, const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto owner = currentLifecycleOwner();
     auto latest = rememberUpdatedState(std::move(effect));
     struct Key {

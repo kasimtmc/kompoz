@@ -13,18 +13,18 @@
 
 namespace kompoz {
 
-class ComposeHost;
+class KompozHost;
 
 // Opens a link: one of the app's own (a deep link a NavHost in the composition answers, like
 // kompoz://item/7) in the app itself; http(s) in the browser, others (mailto:, tel:) in the
 // app that takes them.
 class UriHandler {
 public:
-    explicit UriHandler(ComposeHost* host) : host_(host) {}
+    explicit UriHandler(KompozHost* host) : host_(host) {}
     void openUri(const std::string& uri) const;
 
 private:
-    ComposeHost* host_;
+    KompozHost* host_;
 };
 UriHandler uriHandler();
 
@@ -33,12 +33,12 @@ UriHandler uriHandler();
 // to hide where there is a hardware keyboard only.
 class SoftwareKeyboardController {
 public:
-    explicit SoftwareKeyboardController(ComposeHost* host) : host_(host) {}
+    explicit SoftwareKeyboardController(KompozHost* host) : host_(host) {}
     void show() const;
     void hide() const;
 
 private:
-    ComposeHost* host_;
+    KompozHost* host_;
 };
 SoftwareKeyboardController softwareKeyboardController();
 
@@ -63,24 +63,24 @@ enum class HapticFeedbackType {
 };
 class HapticFeedback {
 public:
-    explicit HapticFeedback(ComposeHost* host) : host_(host) {}
+    explicit HapticFeedback(KompozHost* host) : host_(host) {}
     void performHapticFeedback(HapticFeedbackType type) const;
 
 private:
-    ComposeHost* host_;
+    KompozHost* host_;
 };
 HapticFeedback hapticFeedback();
 
 // The system clipboard's text.
 class ClipboardManager {
 public:
-    explicit ClipboardManager(ComposeHost* host) : host_(host) {}
+    explicit ClipboardManager(KompozHost* host) : host_(host) {}
     void setText(const std::string& text) const;
     std::string getText() const;
     bool hasText() const { return !getText().empty(); }
 
 private:
-    ComposeHost* host_;
+    KompozHost* host_;
 };
 ClipboardManager clipboardManager();
 
@@ -100,7 +100,7 @@ struct ClipEntry {
 //   });
 class Clipboard {
 public:
-    explicit Clipboard(ComposeHost* host) : host_(host) {}
+    explicit Clipboard(KompozHost* host) : host_(host) {}
     // co_await-ed: what it gives back, at once.
     template <class T>
     struct Ready {
@@ -118,7 +118,7 @@ public:
     Done setClipEntry(std::optional<ClipEntry> entry) const;  // nothing: empties it
 
 private:
-    ComposeHost* host_;
+    KompozHost* host_;
 };
 Clipboard clipboard();
 
@@ -128,12 +128,12 @@ Clipboard clipboard();
 //   Button([autofill = autofillManager()] { autofill.commit(); signIn(); }, [] { Text("Giriş"); });
 class AutofillManager {
 public:
-    explicit AutofillManager(ComposeHost* host) : host_(host) {}
+    explicit AutofillManager(KompozHost* host) : host_(host) {}
     void commit() const;
     void cancel() const;
 
 private:
-    ComposeHost* host_;
+    KompozHost* host_;
 };
 AutofillManager autofillManager();
 

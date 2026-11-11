@@ -174,7 +174,7 @@ T animateValueFrom(const T& initial, const T& target, const AnimationSpec& spec,
         int64_t start = 0;
         bool running = false;
     };
-    auto& c = detail::Composer::require();
+    auto& c = detail::Kompozer::require();
     auto& a = remember([&] { return Anim{initial, initial, initial}; }, site);
     int64_t now = c.frameTimeNanos();
     if (!(a.to == target)) {
@@ -200,10 +200,10 @@ T animateValueFrom(const T& initial, const T& target, const AnimationSpec& spec,
 namespace detail {
 // The time an animation read now goes by: the frame being composed, laid out or drawn (the last
 // one between frames).
-int64_t animationReadTime(ComposeHost* host);
+int64_t animationReadTime(KompozHost* host);
 // Asks for the next frame of what is reading an animation that still moves (until `end`, frame
 // time): a composition is composed again, a layout laid out again, a drawing drawn again.
-void animationNextFrame(ComposeHost* host, int64_t end);
+void animationNextFrame(KompozHost* host, int64_t end);
 // When an animation along `spec` from `start` (frame time) comes to rest; INT64_MAX: never.
 int64_t animationEnd(const AnimationSpec& spec, int64_t start);
 } // namespace detail
@@ -248,7 +248,7 @@ private:
         AnimationSpec spec;
         int64_t start = 0, end = 0;
         bool running = false;
-        ComposeHost* host = nullptr;
+        KompozHost* host = nullptr;
         // Where it is at `now`; still moving and `ask`: the reader's next frame is asked for.
         const T& at(int64_t now, bool ask) {
             if (!running) return value;
@@ -277,7 +277,7 @@ detail::Live<T> detail::liveOf(const AnimatedState<T>& state) {
 template <class T>
 AnimatedState<T> animateValueAsState(const T& target, const AnimationSpec& spec, CallSite site) {
     using Data = typename AnimatedState<T>::Data;
-    auto& c = detail::Composer::require();
+    auto& c = detail::Kompozer::require();
     auto& d = remember([&] { return std::make_shared<Data>(Data{.from = target, .to = target, .value = target, .spec = spec, .host = &c.host()}); }, site);
     if (!(d->to == target)) {
         int64_t now = c.frameTimeNanos();
@@ -515,7 +515,7 @@ namespace detail {
 // An infinite transition's progress now along `spec`, from its start (set by the first read),
 // asking for the next frame of what reads it: a composition (composed again), a layout (laid out
 // again) or drawing (drawn again).
-float infiniteProgress(const std::shared_ptr<int64_t>& start, const AnimationSpec& spec, ComposeHost* host);
+float infiniteProgress(const std::shared_ptr<int64_t>& start, const AnimationSpec& spec, KompozHost* host);
 } // namespace detail
 
 // An InfiniteTransition's value, a state as Compose's animateFloat gives: read in a composition, the
@@ -536,7 +536,7 @@ private:
     std::shared_ptr<int64_t> start_;
     T from_, to_;
     AnimationSpec spec_;
-    ComposeHost* host_ = nullptr;
+    KompozHost* host_ = nullptr;
 };
 
 // Values that animate for as long as they are in the composition (loading spinners, pulses).
@@ -586,7 +586,7 @@ private:
     int64_t start_;
 };
 inline DrawClock rememberDrawClock(CallSite site = CallSite::current()) {
-    return remember([] { return DrawClock(Composer::require().frameTimeNanos()); }, site);
+    return remember([] { return DrawClock(Kompozer::require().frameTimeNanos()); }, site);
 }
 } // namespace detail
 

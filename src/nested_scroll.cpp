@@ -94,7 +94,7 @@ namespace {
 // makes a new one of these).
 class ImeNestedScrollConnection final : public NestedScrollConnection {
 public:
-    explicit ImeNestedScrollConnection(ComposeHost& host) : host_(&host) {}
+    explicit ImeNestedScrollConnection(KompozHost& host) : host_(&host) {}
     Offset onPreScroll(Offset available, NestedScrollSource source) override {
         // Pushed down while the keyboard is under the finger: it goes down first.
         if (source != NestedScrollSource::UserInput || !host_->imeControlling() || available.y <= 0) return {};
@@ -112,12 +112,12 @@ public:
     }
 
 private:
-    ComposeHost* host_;
+    KompozHost* host_;
 };
 } // namespace
 
 Modifier Modifier::imeNestedScroll() const {
-    return nestedScroll(std::make_shared<ImeNestedScrollConnection>(detail::Composer::require().host()));
+    return nestedScroll(std::make_shared<ImeNestedScrollConnection>(detail::Kompozer::require().host()));
 }
 
 Modifier Modifier::nestedScroll(std::shared_ptr<NestedScrollConnection> connection) const {

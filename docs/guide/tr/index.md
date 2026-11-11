@@ -2,12 +2,12 @@
 
 Kompoz, C++20 için Jetpack Compose tarzında deklaratif bir arayüz kütüphanesidir; Material 3 bileşenleriyle gelir ve tek kod tabanından Linux, Windows, Android ve web'de çalışır.
 
-Compose'u biliyorsanız Kompoz'u da biliyorsunuz: aynı düşünme biçimi (composable fonksiyonlar, durum, recomposition, modifier'lar), aynı isimler ve aynı yazım. Bir composable, Compose'un kendi yazımıyla bir `.cpp` dosyasına yazılan bir `@Composable fun`'dır; Kompoz'un derleyicisi kompozc onu derleme sırasında C++'a çevirir, Compose'un derleyici eklentisinin Kotlin'i yeniden yazdığı gibi; çevresindeki her şey C++'tır. Sürüm 0.1.1, Apache Lisansı 2.0 ile lisanslıdır.
+Compose'u biliyorsanız Kompoz'u da biliyorsunuz: aynı düşünme biçimi (composable fonksiyonlar, durum, recomposition, modifier'lar), aynı isimler ve aynı yazım. Bir composable, Kotlin yazımıyla bir `.cpp` dosyasına yazılan bir `@Kompozable fun`'dır; Kompoz'un derleyicisi kompozc onu derleme sırasında C++'a çevirir, Compose'un derleyici eklentisinin Kotlin'i yeniden yazdığı gibi; çevresindeki her şey C++'tır. Sürüm 0.1.1, Apache Lisansı 2.0 ile lisanslıdır.
 
 ![Vitrinin ana ekranı](../../screenshots/home.png)
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
 
@@ -24,9 +24,9 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 ## Başlarken
 
-- [Kurulum](setup.md): Kompoz'u derleyin, `kompoz_compose` ile kendi CMake projenize ekleyin ve her platformda çalıştırın.
+- [Kurulum](setup.md): Kompoz'u derleyin, `kompozable` ile kendi CMake projenize ekleyin ve her platformda çalıştırın.
 - [Eğitim](tutorial.md): tek satır metinden bir Material listesine, ilk uygulamayı adım adım kurun.
-- [Compose'dan geliyorsanız](coming-from-compose.md): `.cpp` dosyalarında Compose kodu, kompozc'nin okudukları ve çevresindeki C++.
+- [Compose'dan geliyorsanız](coming-from-compose.md): `.cpp` dosyalarında Kotlin kodu, kompozc'nin okudukları ve çevresindeki C++.
 - [C++ ile yazmak](cpp.md): kompozc olmadan, Kompoz'un composable'larını doğrudan C++ ile yazmak.
 
 ## Temeller
@@ -36,13 +36,13 @@ kompoz::Application kompoz::createApplication(int, char**) {
 - [Yaşam döngüsü ve kimlik](lifecycle.md): çağrıların nasıl tanındığı ve neyin onları atlattığı.
 - [Yan etkiler](side-effects.md): coroutine'ler, `LaunchedEffect`, `DisposableEffect` ve diğer efekt API'leri.
 - [Aşamalar](phases.md): kompozisyon, yerleşim ve çizim; her birini nasıl ucuz tutacağınız.
-- [CompositionLocal](composition-local.md): değerleri ağaçta aşağı aktarmak ve yerleşik local'ler.
+- [KompozitionLocal](kompozition-local.md): değerleri ağaçta aşağı aktarmak ve yerleşik local'ler.
 
 ## Tasarım
 
 - [Modifier'lar](modifiers.md): composable'ları süslemek, sıranın neden önemli olduğu ve kendi modifier'ınızı yazmak.
 - [Yerleşimler](layouts.md): `Column`, `Row`, `Box`, akan yerleşimler, `FlexBox`, `Grid` ve uyarlanabilir yerleşimler.
-- [Özel yerleşimler](custom-layouts.md): `Layout`, kısıtlar, intrinsic'ler ve `SubcomposeLayout`.
+- [Özel yerleşimler](custom-layouts.md): `Layout`, kısıtlar, intrinsic'ler ve `SubkompozLayout`.
 - [Listeler ve ızgaralar](lists.md): tembel listeler ve ızgaralar, pager'lar, carousel'ler ve iç içe kaydırma.
 - [Material bileşenleri](material.md): Material 3 bileşenlerinde bir tur.
 - [Tema](theming.md): renk şemaları, koyu tema, dinamik renk, tipografi ve tasarım sistemleri.

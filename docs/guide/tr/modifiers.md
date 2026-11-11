@@ -7,7 +7,7 @@ Bir `Modifier` bir composable'ı süsler ya da ona yeni bir şey katar: boyutunu
 Çoğu composable bir `modifier` parametresi alır. Zincir `Modifier` ile başlar ve her çağrı bir öğe ekler:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ArtistCard(name: String) {
     Row(
         modifier = Modifier
@@ -153,7 +153,7 @@ fun Modifier.cardSurface(color: Color) =
         .background(color, RoundedCornerShape(16.dp))
         .padding(16.dp)
 
-@Composable
+@Kompozable
 fun Note(text: String) {
     Box(modifier = Modifier.fillMaxWidth().cardSurface(MaterialTheme.colorScheme.surfaceContainerLow)) { Text(text) }
 }

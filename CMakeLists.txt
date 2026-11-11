@@ -132,18 +132,18 @@ else()
     target_compile_options(kompoz_core PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 endif()
 
-# kompozc: the compiler for @Composable functions written in Compose's own syntax in C++ sources,
-# run on a target's sources by kompoz_compose(target). A tool of the machine that builds: not built
+# kompozc: the compiler for @Kompozable functions written in Kotlin's syntax in C++ sources,
+# run on a target's sources by kompozable(target). A tool of the machine that builds: not built
 # for one that is built for (Android, the web).
 if(CMAKE_CROSSCOMPILING)
-    option(KOMPOZ_BUILD_COMPILER "Build kompozc, the compiler for @Composable functions in Compose syntax" OFF)
+    option(KOMPOZ_BUILD_COMPILER "Build kompozc, the compiler for @Kompozable functions in Kotlin syntax" OFF)
 else()
-    option(KOMPOZ_BUILD_COMPILER "Build kompozc, the compiler for @Composable functions in Compose syntax" ON)
+    option(KOMPOZ_BUILD_COMPILER "Build kompozc, the compiler for @Kompozable functions in Kotlin syntax" ON)
 endif()
 if(KOMPOZ_BUILD_COMPILER)
     add_subdirectory(compiler)
 endif()
-include(cmake/KompozCompose.cmake)
+include(cmake/Kompozable.cmake)
 
 if(KOMPOZ_BUILD_TESTS)
     enable_testing()
@@ -151,10 +151,10 @@ if(KOMPOZ_BUILD_TESTS)
     target_link_libraries(kompoz_tests PRIVATE kompoz_core)
     add_test(NAME kompoz_tests COMMAND kompoz_tests)
     if(TARGET kompozc)
-        add_executable(kompoz_compose_tests tests/compose_tests.cpp tests/compose_tests_other.cpp)
-        target_link_libraries(kompoz_compose_tests PRIVATE kompoz_core)
-        kompoz_compose(kompoz_compose_tests)
-        add_test(NAME kompoz_compose_tests COMMAND kompoz_compose_tests)
+        add_executable(kompozable_tests tests/kompozable_tests.cpp tests/kompozable_tests_other.cpp)
+        target_link_libraries(kompozable_tests PRIVATE kompoz_core)
+        kompozable(kompozable_tests)
+        add_test(NAME kompozable_tests COMMAND kompozable_tests)
     endif()
 endif()
 
@@ -497,12 +497,12 @@ if(KOMPOZ_INSTALL)
         set(KOMPOZ_PACKAGE_${lib}_HOW "${KOMPOZ_${lib}_HOW}")
     endforeach()
     install(FILES cmake/KompozImageLibraries.cmake DESTINATION ${kompoz_cmake_dir})
-    # kompozc and kompoz_compose: the compiler itself where it was built here, and its sources, for
+    # kompozc and kompozable: the compiler itself where it was built here, and its sources, for
     # an app built for another machine (Android, the web) to build it for the one that builds.
     if(TARGET kompozc)
         install(TARGETS kompozc EXPORT kompozTargets RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()
-    install(FILES cmake/KompozCompose.cmake DESTINATION ${kompoz_cmake_dir})
+    install(FILES cmake/Kompozable.cmake DESTINATION ${kompoz_cmake_dir})
     install(DIRECTORY compiler/ DESTINATION ${kompoz_cmake_dir}/compiler)
     configure_package_config_file(cmake/kompozConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/kompozConfig.cmake
                                   INSTALL_DESTINATION ${kompoz_cmake_dir} PATH_VARS CMAKE_INSTALL_DATADIR CMAKE_INSTALL_INCLUDEDIR)

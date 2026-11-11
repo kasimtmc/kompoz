@@ -4,7 +4,7 @@
 namespace kompoz {
 
 namespace {
-ComposeHost* currentHost() { return &detail::Composer::require().host(); }
+KompozHost* currentHost() { return &detail::Kompozer::require().host(); }
 } // namespace
 
 void UriHandler::openUri(const std::string& uri) const { host_->openUri(uri); }

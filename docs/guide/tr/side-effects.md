@@ -37,7 +37,7 @@ suspend fun loadName(id: Int): String {
     return "Kullanıcı $id"
 }
 
-@Composable
+@Kompozable
 fun UserName(id: Int) {
     var name by remember { mutableStateOf("…") }
     LaunchedEffect(id) { name = loadName(id) }
@@ -58,7 +58,7 @@ Bir coroutine bloğu, buradaki her lambda gibi kullandığını değerle yakalar
 #! data class Posts(val count: Int)
 #! suspend fun loadUser(id: Int) = User("Ada")
 #! suspend fun loadPosts(id: Int) = Posts(3)
-@Composable
+@Kompozable
 fun Profile(id: Int) {
     var line by remember { mutableStateOf("…") }
     val scope = rememberCoroutineScope()
@@ -81,7 +81,7 @@ Coroutine'ler arayüz iş parçacığında çalışır: birinin içindeki uzun b
 
 ```kotlin
 #! std::string readFile(const std::string& path) { return path; }
-@Composable
+@Kompozable
 fun FileView(path: String) {
     var text by remember { mutableStateOf("") }
     LaunchedEffect(path) {
@@ -98,7 +98,7 @@ fun FileView(path: String) {
 `LaunchedEffect(key) { … }`, composable kompozisyona girdiğinde ve `key` her değiştiğinde bloğunu, bir coroutine'i, çalıştırır; önce bir önceki çalıştırmayı iptal eder. Composable çıkınca iptal edilir.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Greeting(user: String, snackbar: SnackbarHostState) {
     LaunchedEffect(user) {
         snackbar.showSnackbar("Tekrar hoş geldin, $user")
@@ -114,7 +114,7 @@ fun Greeting(user: String, snackbar: SnackbarHostState) {
 `LaunchedEffect` işi kompozisyondan başlatır. İşi bir tıklama gibi bir olaydan başlatmak için `rememberCoroutineScope`'tan bir `CoroutineScope` kullanın. Onu yapan composable çıkınca coroutine'leri iptal edilir.
 
 ```kotlin
-@Composable
+@Kompozable
 fun ScrollUpButton(list: LazyListState) {
     val scope = rememberCoroutineScope()
     Button(onClick = { scope.launch { list.animateScrollToItem(0) } }) { Text("Başa") }
@@ -128,7 +128,7 @@ Bir dinleyiciyi kaydedip kaydını silmek gibi temizlik gerektiren etkiler için
 ```kotlin
 #! struct Sensor { void subscribe(std::function<void(float)>) {} void unsubscribe() {} };
 #! Sensor& sensor();
-@Composable
+@Kompozable
 fun Compass() {
     var heading by remember { mutableStateOf(0f) }
     DisposableEffect(Unit) {
@@ -146,7 +146,7 @@ fun Compass() {
 ```kotlin
 #! struct Analytics { void setUserType(const std::string&) {} };
 #! Analytics& analytics();
-@Composable
+@Kompozable
 fun Shop(userType: String) {
     SideEffect { analytics().setUserType(userType) }
     Text("Shop")
@@ -158,7 +158,7 @@ fun Shop(userType: String) {
 Bir sabite bağlanmış uzun süreli bir efekt, composable'ın parametreleri değişince yeniden başlamaz; bu yüzden ilk yakaladığı değerleri kullanmaya devam ederdi. `rememberUpdatedState` onun okuması için en son değeri tutar:
 
 ```kotlin
-@Composable
+@Kompozable
 fun SplashScreen(onTimeout: () -> Unit) {
     val currentOnTimeout by rememberUpdatedState(onTimeout)
     LaunchedEffect(Unit) {  // onTimeout değişince yeniden başlamaz
@@ -175,7 +175,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
 
 ```kotlin
 #! suspend fun fetchCount(url: String) = 3
-@Composable
+@Kompozable
 fun Downloads(url: String) {
     val count by produceState(0, url) {
         value = fetchCount(url)
@@ -189,7 +189,7 @@ fun Downloads(url: String) {
 `snapshotFlow { … }.collect { … }` bir coroutine'in içinden durumları izler: sizi bloğun şu anki değeriyle çağırır, sonra bloğun okuduğu bir durum o değeri farklı bir değere her değiştirdiğinde yeniden. Coroutine iptal edilene kadar sürer.
 
 ```kotlin
-@Composable
+@Kompozable
 fun ScrollLogger(list: LazyListState) {
     LaunchedEffect(Unit) {
         snapshotFlow { list.firstVisibleItemIndex }.collect { first ->

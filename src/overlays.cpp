@@ -21,7 +21,7 @@ namespace {
 constexpr float kScrimAlpha = 0.32f;
 
 void provide(Color color, const Font& font, const Content& content) {
-    if (content) CompositionLocalProvider({LocalContentColor.provides(color), LocalTextStyle.provides(font)}, content);
+    if (content) KompozitionLocalProvider({LocalContentColor.provides(color), LocalTextStyle.provides(font)}, content);
 }
 
 // Presses on a dialog or sheet must not reach the scrim behind it (which would close it).
@@ -63,7 +63,7 @@ Size menuPolicy(LayoutNode& node, const Constraints& c) {
 } // namespace
 
 void detail::Dialog(std::function<void()> onDismissRequest, const Content& content, DialogProperties properties, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto dismiss = rememberUpdatedState(std::move(onDismissRequest));
     auto outside = rememberUpdatedState(std::function<void()>([dismiss, properties] {
         if (properties.dismissOnClickOutside && dismiss.get()) dismiss.get()();
@@ -144,7 +144,7 @@ void dialogButtons(const Content& buttons) {
 
 void detail::AlertDialog(std::function<void()> onDismissRequest, const AlertDialogSlots& slots, const Modifier& modifier,
                  DialogProperties properties, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::Dialog(
         std::move(onDismissRequest),
         [&] {
@@ -179,7 +179,7 @@ void detail::AlertDialog(std::function<void()> onDismissRequest, const AlertDial
 
 void detail::BasicAlertDialog(std::function<void()> onDismissRequest, const Modifier& modifier, const Content& content,
                       DialogProperties properties, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::Dialog(
         std::move(onDismissRequest),
         [&] {
@@ -205,19 +205,19 @@ namespace {
 // A menu's popup under its anchor, on a card or (expressive, with groups for cards) bare.
 void menuPopup(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier, bool card) {
     // Its progress worked out here as it turns and gets there, read on the way as it is drawn.
-    auto& composer = detail::Composer::require();
-    int64_t now = composer.frameTimeNanos();
+    auto& kompozer = detail::Kompozer::require();
+    int64_t now = kompozer.frameTimeNanos();
     auto clock = remember([&] {
         auto made = std::make_shared<detail::TransitionProgress>();
         made->from = made->to = expanded ? 1.f : 0.f;
-        made->host = &composer.host();
+        made->host = &kompozer.host();
         return made;
     });
     if (clock->to != (expanded ? 1.f : 0.f)) clock->turn(expanded ? 1.f : 0.f, tween(expanded ? 120 : 75), now);
     bool done = false;
     float p = clock->at(now, &done);
     if (!expanded && done) return;  // closed: not composed at all
-    if (!done) composer.requestFrameAt(clock->end);
+    if (!done) kompozer.requestFrameAt(clock->end);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = WindowInsets::safeDrawing().asPaddingValues();
     auto dismiss = rememberUpdatedState(std::move(onDismissRequest));
@@ -236,10 +236,10 @@ void menuPopup(bool expanded, std::function<void()> onDismissRequest, const Cont
         };
     spec.focusable = expanded;  // while closing, input goes to what is below
     Popup(std::move(spec), [&] {
-        CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+        KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
             float s = 0.8f + 0.2f * p;
             detail::Live<float> progress = detail::live(clock);
-            detail::Composer::require().emit(
+            detail::Kompozer::require().emit(
                 detail::keyOf(CallSite::current()),
                 [&](LayoutNode& node) {
                     Modifier m = done ? Modifier().graphicsLayer({.scaleX = s, .scaleY = s, .alpha = p, .transformOrigin = {0, 0}})
@@ -291,18 +291,18 @@ void markedItem(bool marked, const std::function<Modifier(const Modifier&)>& int
 
 void detail::DropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content,
                   const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     menuPopup(expanded, std::move(onDismissRequest), content, modifier, true);
 }
 
 void detail::DropdownMenuPopup(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier,
                        CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     menuPopup(expanded, std::move(onDismissRequest), content, modifier, false);
 }
 
 void detail::DropdownMenuGroup(const Shape& shape, const Content& content, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     detail::Column(modifier.fillMaxWidth().shadow(3, shape).background(cs.surfaceContainerLow, shape).padding(0, 4), content);
 }
@@ -323,21 +323,21 @@ Shape itemShape(int index, int count) {
 
 void detail::DropdownMenuItem(bool checked, std::function<void(bool)> onCheckedChange, const Content& text, const MenuItemOptions& options,
                       CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     markedItem(checked, [&](const Modifier& m) {
         return m.toggleable(checked, std::move(onCheckedChange), SemanticsRole::Checkbox, {.enabled = options.enabled});
     }, text, options);
 }
 
 void detail::DropdownMenuItem(bool selected, std::function<void()> onClick, const Content& text, const MenuItemOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     markedItem(selected, [&](const Modifier& m) {
         return m.selectable(selected, std::move(onClick), SemanticsRole::RadioButton, {.enabled = options.enabled});
     }, text, options);
 }
 
 void detail::DropdownMenuItem(const Content& text, std::function<void()> onClick, const MenuItemOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     Color textColor = options.enabled ? cs.onSurface : cs.onSurface.copy(0.38f);
     Color iconColor = options.enabled ? cs.onSurfaceVariant : cs.onSurface.copy(0.38f);
@@ -428,13 +428,13 @@ ModalBottomSheetState rememberModalBottomSheetState(bool skipPartiallyExpanded, 
 }
 
 void detail::ModalBottomSheet(std::function<void()> onDismissRequest, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::ModalBottomSheet(std::move(onDismissRequest), rememberModalBottomSheetState(), content);
 }
 
 void detail::ModalBottomSheet(std::function<void()> onDismissRequest, const ModalBottomSheetState& sheetState, const Content& content,
                       CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = WindowInsets::safeDrawing().asPaddingValues();
     auto dismiss = rememberUpdatedState(std::move(onDismissRequest));
@@ -537,7 +537,7 @@ void detail::ModalBottomSheet(std::function<void()> onDismissRequest, const Moda
                                      })
                                      .background(cs.surfaceContainerLow, 28);
                 sheet = swallowPresses(sheet).anchoredDraggable(anchored, Orientation::Vertical).nestedScroll(connection);
-                CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+                KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
                     detail::Column(sheet.padding(0, 0, 0, insets.bottom + kHiddenCorner), [&] {
                         detail::Column(Modifier().fillMaxWidth().graphicsLayer([shrink](GraphicsLayerScope& layer) {
                                    auto [sx, sy] = shrink();

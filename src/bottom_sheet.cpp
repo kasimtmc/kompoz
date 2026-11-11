@@ -120,24 +120,24 @@ SheetState rememberStandardBottomSheetState(SheetValue initialValue, bool skipHi
 }
 
 BottomSheetScaffoldState rememberBottomSheetScaffoldState(CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     return {rememberStandardBottomSheetState()};
 }
 BottomSheetScaffoldState rememberBottomSheetScaffoldState(SheetState bottomSheetState, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     (void)scope;
     return {std::move(bottomSheetState)};
 }
 
 void BottomSheetDefaults::DragHandle(CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // Compose 1.4's: onSurfaceVariant (no longer faded), 32 × 4 with 22 dp above and below.
     detail::Box(Modifier().padding(0, 22).semantics(LocalStrings.current().dragHandle).size(32, 4).background(colorScheme().onSurfaceVariant, 2));
 }
 
 void detail::BottomSheetScaffold(const Content& sheetContent, const Modifier& modifier, const BottomSheetScaffoldOptions& options,
                          const std::function<void(PaddingValues)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     BottomSheetScaffoldState state = options.scaffoldState ? *options.scaffoldState : rememberBottomSheetScaffoldState();
     std::shared_ptr<SheetState::Data> d = state.bottomSheetState.data_;
@@ -229,8 +229,8 @@ void detail::BottomSheetScaffold(const Content& sheetContent, const Modifier& mo
 
     Color container = options.containerColor.value_or(cs.surface);
     Color sheetColor = options.sheetContainerColor.value_or(cs.surfaceContainerLow);
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
-        detail::Composer::require().emit(
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+        detail::Kompozer::require().emit(
             detail::keyOf(CallSite::current()),
             [&](LayoutNode& node) {
                 node.modifier = modifier.background(container).clip(RectangleShape);
@@ -265,7 +265,7 @@ void detail::BottomSheetScaffold(const Content& sheetContent, const Modifier& mo
                                 .onDragCancel = [settle] { settle(0); }});
                     });
                 sheet = sheet.nestedScroll(connection);
-                CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+                KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
                     detail::Column(sheet.padding(0, 0, 0, sheetBottom.get() + kCorner), {.horizontalAlignment = Alignment::CenterHorizontally}, [&] {
                         if (!options.sheetDragHandle) BottomSheetDefaults::DragHandle();
                         else if (*options.sheetDragHandle) (*options.sheetDragHandle)();

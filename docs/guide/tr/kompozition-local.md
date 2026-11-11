@@ -1,13 +1,13 @@
-# CompositionLocal
+# KompozitionLocal
 
-Bir `CompositionLocal`, bir değeri aradaki her fonksiyondan geçirmeden kompozisyon ağacında aşağı iletir. Temanın renkleri, metin stili ve yerleşim yönü her bileşene bu yolla ulaşır.
+Bir `KompozitionLocal`, bir değeri aradaki her fonksiyondan geçirmeden kompozisyon ağacında aşağı iletir. Temanın renkleri, metin stili ve yerleşim yönü her bileşene bu yolla ulaşır.
 
 ## Bir local'i okumak
 
 Her local'in ağacın her noktasında bir değeri vardır: yukarıdaki en yakın sağlayıcının verdiği, yoksa varsayılanı. `current` onu okur:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Caption(text: String) {
     val tint = LocalContentColor.current   // burada metin ve ikonların kullandığı renk
     Text(text, color = tint, style = MaterialTheme.typography.labelSmall)
@@ -20,12 +20,12 @@ Tema da Compose'daki gibi local'ler üzerinden okunur: `MaterialTheme.colorSchem
 
 ## Bir değer sağlamak
 
-`CompositionLocalProvider`, bir ya da daha fazla local'e içeriğinin içindeki her şey için bir değer verir:
+`KompozitionLocalProvider`, bir ya da daha fazla local'e içeriğinin içindeki her şey için bir değer verir:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Warning(message: String) {
-    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
+    KompozitionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
         Row {
             Icon(Icons.Filled.Info, contentDescription = null)   // hata rengiyle boyanır
             Text(message)                                        // metin de öyle
@@ -34,7 +34,7 @@ fun Warning(message: String) {
 }
 ```
 
-Değer yalnız içerik lambdasının içinde geçerlidir; onun dışında local'in önceki değeri vardır. Bir kerede üç local'e kadar değer verilebilir: `CompositionLocalProvider(LocalA provides a, LocalB provides b) { … }`. Sağlayıcılar iç içe geçer: içteki, kendi içeriği için dıştakini geçersiz kılar.
+Değer yalnız içerik lambdasının içinde geçerlidir; onun dışında local'in önceki değeri vardır. Bir kerede üç local'e kadar değer verilebilir: `KompozitionLocalProvider(LocalA provides a, LocalB provides b) { … }`. Sağlayıcılar iç içe geçer: içteki, kendi içeriği için dıştakini geçersiz kılar.
 
 `LocalX providesDefault value` yalnız yukarıda hiçbir sağlayıcının değer vermediği yerde bir değer verir: bir kütüphanenin, uygulamanın yine de geçersiz kılabileceği bir varsayılan koyma yolu.
 
@@ -45,16 +45,16 @@ Bir local hangisi olduğuyla tanınır, bu yüzden onu varsayılanıyla birlikte
 ```kotlin
 data class Spacing(val small: Dp = 4.dp, val medium: Dp = 8.dp, val large: Dp = 16.dp)
 
-val LocalSpacing = staticCompositionLocalOf { Spacing() }
+val LocalSpacing = staticKompozitionLocalOf { Spacing() }
 
-@Composable
+@Kompozable
 fun Titled(title: String) {
     Column(modifier = Modifier.padding(LocalSpacing.current.large)) { Text(title) }
 }
 
-@Composable
-fun Compact(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalSpacing provides Spacing(2.dp, 4.dp, 8.dp), content = content)
+@Kompozable
+fun Compact(content: @Kompozable () -> Unit) {
+    KompozitionLocalProvider(LocalSpacing provides Spacing(2.dp, 4.dp, 8.dp), content = content)
 }
 ```
 
@@ -63,10 +63,10 @@ Varsayılan yalnız local bir sağlayıcı olmadan okunduğunda yapılır. Mant�
 ```kotlin
 data class User(val name: String)
 
-val LocalUser = compositionLocalOf<User> { error("LocalUser was not provided") }
+val LocalUser = kompozitionLocalOf<User> { error("LocalUser was not provided") }
 ```
 
-Compose'daki gibi hem `compositionLocalOf` hem `staticCompositionLocalOf` vardır; Kompoz'da iki tür de yalnız local'i okuyan scope'ları yeniden kompoze eder.
+Compose'daki gibi hem `kompozitionLocalOf` hem `staticKompozitionLocalOf` vardır; Kompoz'da iki tür de yalnız local'i okuyan scope'ları yeniden kompoze eder.
 
 Bir data class (ya da `operator==`'ı olan bir C++ türü) değerle karşılaştırılır: bir sağlayıcı eşit bir değer verdiğinde hiçbir şey yeniden kompoze edilmez.
 
@@ -101,7 +101,7 @@ Bir local, durumu yukarı taşımanın yerini tutmaz: değerleri aşağı iletir
 
 ## Local'leri başka bir kompozisyona geçirmek
 
-Başka bir yerde kompoze edilen içerik, örneğin bir popup'taki, çağrıldığı yerin local'lerini zaten alır. Onları elle taşımanız gerekirse, `currentCompositionLocalContext` bir noktadaki local'leri yakalar, `CompositionLocalProvider(context) { … }` da onları yeniden sağlar.
+Başka bir yerde kompoze edilen içerik, örneğin bir popup'taki, çağrıldığı yerin local'lerini zaten alır. Onları elle taşımanız gerekirse, `currentKompozitionLocalContext` bir noktadaki local'leri yakalar, `KompozitionLocalProvider(context) { … }` da onları yeniden sağlar.
 
 ## Ayrıca bakın
 

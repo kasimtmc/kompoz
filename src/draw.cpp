@@ -1175,7 +1175,7 @@ Modifier Modifier::graphicsLayer(std::function<void(GraphicsLayerScope&)> block)
 // ---- GraphicsLayer -------------------------------------------------------------------------
 
 struct GraphicsLayer::Data {
-    ComposeHost* host = nullptr;
+    KompozHost* host = nullptr;
     std::unique_ptr<DisplayList> list;  // the recording, from its top left
     Size size;
     Properties properties;
@@ -1194,7 +1194,7 @@ ImageBitmap GraphicsLayer::toImageBitmap() const {
 }
 
 GraphicsLayer rememberGraphicsLayer(CallSite site) {
-    ComposeHost& host = detail::Composer::require().host();
+    KompozHost& host = detail::Kompozer::require().host();
     return remember(
         [&] {
             GraphicsLayer layer;

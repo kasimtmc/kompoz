@@ -7,7 +7,7 @@ val placeNames = listOf("Kadıköy İskelesi", "Moda Sahili", "Yeldeğirmeni", "
 
 // BottomSheetScaffold: a pretend map, and a sheet of nearby places peeking over it. Dragged up
 // the sheet opens, and then its list scrolls; its buttons move it from code.
-@Composable
+@Kompozable
 fun PlacesScreen(modifier: Modifier) {
     val cs = MaterialTheme.colorScheme
     val state = rememberBottomSheetScaffoldState()

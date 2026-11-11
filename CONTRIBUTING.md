@@ -31,7 +31,7 @@ request, so you don't need all the toolchains yourself.
 ## Making a change
 
 - **Tests with the change.** A fix comes with a test that fails without it; a feature with tests of what it does.
-  `kompoz::testing::ComposeTestRule` runs compositions without a window (see [Testing](docs/guide/en/testing.md)).
+  `kompoz::testing::KompozTestRule` runs compositions without a window (see [Testing](docs/guide/en/testing.md)).
 - **Match the code around it**: its naming, its comments, its formatting. Don't reformat code you aren't changing.
 - **One change per commit**, with a message that says what changed and why: a short first line, then the details.
 - **Documentation in both languages.** The guide (`docs/guide/en`, `docs/guide/tr`), the READMEs and the changelogs
@@ -49,7 +49,7 @@ it by hand on a Mac yet, and it hasn't been built for iOS. What is needed:
 
 - Using the showcase on a Mac and fixing what doesn't work (input, text input, fonts, the Retina scale, dark mode).
 - An iOS build: an Xcode project or CMake setup, like the Android one in `examples/showcase/android`.
-- Screen readers: a bridge from the semantics tree (`ComposeHost::semanticsTree`) to NSAccessibility (macOS) and
+- Screen readers: a bridge from the semantics tree (`KompozHost::semanticsTree`) to NSAccessibility (macOS) and
   UIAccessibility (iOS), as `platform/linux/atspi_bridge.cpp` and `platform/windows/uia_bridge.cpp` do, with tests
   like theirs in `tests/platform_tests*.cpp`.
 

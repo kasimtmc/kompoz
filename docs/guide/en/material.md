@@ -11,7 +11,7 @@ Material components read their colors, type and motion from `MaterialTheme`, so 
 `Scaffold` lays out a screen: a top bar, a bottom bar, a floating action button and a snackbar host around the content. The content gets the padding that keeps it clear of the bars and the system's insets.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Inbox() {
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -42,7 +42,7 @@ Top app bars come in the sizes Material defines: `TopAppBar`, `CenterAlignedTopA
 `AppBarRow` puts a bar's actions in the room there is and the rest behind an overflow menu (`AppBarColumn` does the same down a rail), with the `AppBarScope`'s `clickableItem` and `toggleableItem`:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DocumentBar() {
     TopAppBar(title = { Text("Document") }, actions = {
         AppBarRow(maxItemCount = 3) {
@@ -71,7 +71,7 @@ The content's padding follows the bars as they change size, a top bar collapsing
 `NavigationSuiteScaffold` is usually the one you want: it shows a bar on a phone and a rail on a tablet or desktop window, as Compose's adaptive navigation suite does. Its `navigationSuiteItems` block adds an `item` per destination:
 
 ```kotlin
-@Composable
+@Kompozable
 fun App() {
     var tab by rememberSaveable { mutableStateOf(0) }
     NavigationSuiteScaffold(
@@ -89,7 +89,7 @@ fun App() {
 Compose 1.4's form takes plain content instead, `NavigationSuiteItem` calls, and by default M3 Expressive's navigation for the window (a short bar on a phone, its labels beside the icons when it lies on its side, a wide rail on a wider window); `navigationSuiteType` picks one:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ExpressiveApp() {
     var tab by rememberSaveable { mutableStateOf(0) }
     NavigationSuiteScaffold(
@@ -165,7 +165,7 @@ OutlinedCard(modifier = Modifier.fillMaxWidth()) {
 `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, `Slider` and `RangeSlider`. They are stateless: they show the value you pass and report changes through a callback.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Volume() {
     var volume by remember { mutableStateOf(0.5f) }
     var muted by remember { mutableStateOf(false) }
@@ -203,7 +203,7 @@ AssistChip(onClick = { }, label = { Text("Help") }, leadingIcon = { Icon(Icons.F
 These show above the rest of the UI. Each is composed where you call it, so it keeps its state and composition locals, and Kompoz places it on top. Show one by calling it while a state says so:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DeleteButton(onDelete: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     TextButton(onClick = { open = true }) { Text("Delete") }
@@ -233,7 +233,7 @@ fun DeleteButton(onDelete: () -> Unit) {
 `Popup` is what dialogs and menus are built on: content above everything else, placed by its anchor (the node it is composed in). As Compose's it takes `alignment` and `offset`, or a `PopupPositionProvider` of your own, `onDismissRequest` for back, Escape and clicks outside, and `PopupProperties` (`focusable = false` lets input outside it through):
 
 ```kotlin
-@Composable
+@Kompozable
 fun Above(shown: Boolean, onClose: () -> Unit) {
     if (shown) {
         Popup(popupPositionProvider = object : PopupPositionProvider {

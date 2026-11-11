@@ -1143,6 +1143,20 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Kompoz's names for what carried Compose's** (no old spelling kept): `@Composable` is `@Kompozable` (kompozc tells
+  one still written so); `CompositionLocal`, `compositionLocalOf`, `staticCompositionLocalOf`,
+  `CompositionLocalProvider`, `CompositionLocalContext` and
+  `currentCompositionLocalContext` are `KompozitionLocal`, `kompozitionLocalOf` and so on; `SubcomposeLayout`,
+  `SubcomposeMeasureScope`, `SubcomposeMeasurePolicy` and `subcompose(…)` are `SubkompozLayout`, `SubkompozMeasureScope`,
+  `SubkompozMeasurePolicy` and `subkompoz(…)`; `ComposeTestRule` is `KompozTestRule`; `recomposeHighlighter`,
+  `showRecompositions` / `LocalShowRecompositions` and `RecompositionStats` are `rekompozHighlighter`, `showRekompozitions`
+  / `LocalShowRekompozitions` and `RekompozitionStats`. In C++, `composable(site, …)` and `ComposableScope` are
+  `kompozable(site, …)` and `KompozableScope`, `ComposeHost` is `KompozHost`, `detail::Composer` is `detail::Kompozer`,
+  `composeMovable` is `kompozMovable`. CMake's `kompoz_compose(target)` is `kompozable(target)` (cmake/Kompozable.cmake),
+  the tests `kompozable_tests` (tests/kompozable_tests.cpp), the guide's CompositionLocal page kompozition-local.md. The CLion
+  plugin is `dev.kompoz.kompozable` 0.2.0: a new plugin to CLion, the old one (`dev.kompoz.compose`) removed by hand. Names
+  that are Compose's (Jetpack's, as the guide and comments compare with them) are as they were, and so are navigation's
+  `composable(route) { }` and the words composable, composition and recomposition.
 - **Kotlin interfaces**: kompozc reads `interface Name : A, B { … }`: properties and functions, abstract or with a
   body (`fun describe() = "$name: ${count()}"`, `val title get() = …`), implemented by classes (`override val` in the
   constructor too), `ViewModel`s, data classes (their fields are the properties), objects (`Name.describe()` reaches the

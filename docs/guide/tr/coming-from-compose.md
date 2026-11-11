@@ -1,32 +1,34 @@
 # Compose'dan geliyorsanız
 
-Jetpack Compose'u biliyorsanız Kompoz'u zaten biliyorsunuz: aynı model, aynı adlar ve aynı yazım. Bir composable, Compose'un kendi yazımıyla bir `.cpp` dosyasına yazılan bir `@Composable fun`'dır:
+Jetpack Compose'u biliyorsanız Kompoz'u zaten biliyorsunuz: aynı model, aynı adlar ve aynı yazım. Bir composable, Kotlin yazımıyla bir `.cpp` dosyasına yazılan bir `@Kompozable fun`'dır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text("Merhaba, $name!", modifier = modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
 }
 ```
 
+Compose'un kendi adını taşıyan adları Kompoz'da Kompoz'un adını taşır: `@Kompozable`, Compose'un `@Composable`'ıdır; `KompozitionLocal`, `kompozitionLocalOf`, `staticKompozitionLocalOf` ve `KompozitionLocalProvider`, onun `CompositionLocal` ailesidir; `SubkompozLayout` (`subkompoz(…)` ile) onun `SubcomposeLayout`'udur; `KompozTestRule` onun test kuralıdır. Öteki bütün adlar Compose'unkilerdir.
+
 Kompoz, Material 3'ün ölçülerine ve Android'in fling eğrisine kadar Compose'un davranışını yakından izler. Yeni olan yalnızca kodun durduğu yerdir: C++ kaynaklarında, C++'ın yanında.
 
 ## Nasıl çalışır
 
-Compose'un derleyici eklentisi Kotlin'i Kotlin derleyicisi görmeden önce yeniden yazar; Kompoz'un derleyicisi kompozc da aynısını C++ için yapar. `kompoz_compose`'a verilen bir hedefin kaynakları, C++ derleyicisi görmeden önce yeniden yazılır:
+Compose'un derleyici eklentisi Kotlin'i Kotlin derleyicisi görmeden önce yeniden yazar; Kompoz'un derleyicisi kompozc da aynısını C++ için yapar. `kompozable`'a verilen bir hedefin kaynakları, C++ derleyicisi görmeden önce yeniden yazılır:
 
 ```cmake
 add_executable(app main.cpp screens.cpp)
 target_link_libraries(app PRIVATE kompoz::app)
-kompoz_compose(app)
+kompozable(app)
 ```
 
-Her kaynakta bir `@Composable fun` (ve bir `data class`) Kotlin'dir; dosyadaki geri kalan her şey C++'tır ve olduğu gibi geçer. C++ derleyicisinin iletileri sizin kendi satırlarınızı gösterir. Bir hedefin kaynakları, Kotlin'deki gibi tek bir modüldür: bir dosyanın composable'ı başka bir dosyadan adlı argümanlarla çağrılır, başlık gerekmez.
+Her kaynakta bir `@Kompozable fun` (ve bir `data class`) Kotlin'dir; dosyadaki geri kalan her şey C++'tır ve olduğu gibi geçer. C++ derleyicisinin iletileri sizin kendi satırlarınızı gösterir. Bir hedefin kaynakları, Kotlin'deki gibi tek bir modüldür: bir dosyanın composable'ı başka bir dosyadan adlı argümanlarla çağrılır, başlık gerekmez.
 
 Uygulamanın giriş noktası C++'tır; composable'larınızın çevresine yazdığınız her şey de öyle:
 
 ```kotlin continued
-@Composable
+@Kompozable
 fun App() {
     MaterialTheme(colorScheme = lightColorScheme()) {
         Greeting("Kompoz")
@@ -43,7 +45,7 @@ kompoz::Application kompoz::createApplication(int, char**) {
 Argümanlar adla, istenen sırayla, varsayılanlar yazılmadan, sonuncusu için sondaki lambda; Kompoz'un composable'ları için de sizinkiler için de:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Labeled(label: String, value: Int = 0, onClick: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("$label: $value", modifier = Modifier.weight(1f))
@@ -51,7 +53,7 @@ fun Labeled(label: String, value: Int = 0, onClick: () -> Unit) {
     }
 }
 
-@Composable
+@Kompozable
 fun Screen() {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Labeled(label = "İletiler", value = 3) { println("daha fazla") }
@@ -63,7 +65,7 @@ fun Screen() {
 Durum Kotlin'deki gibi devredilir; bir lambdanın parametresi `it` ya da adlıdır; `if` ve `when` değer verir:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
     var name by remember { mutableStateOf("") }
@@ -85,7 +87,7 @@ Listeler ve tembel yerleşimler, Kotlin'in standart işlevleriyle (`listOf`, `fi
 ```kotlin
 data class Mail(val from: String, val subject: String, val unread: Boolean = false)
 
-@Composable
+@Kompozable
 fun Inbox(mails: List<Mail>) {
     val unread = mails.filter { it.unread }
     LazyColumn(contentPadding = PaddingValues(16.dp)) {
@@ -111,7 +113,7 @@ sealed interface UiState {
     data class Failed(val message: String) : UiState
 }
 
-@Composable
+@Kompozable
 fun Screen(state: UiState) {
     when (state) {
         is UiState.Loading -> CircularProgressIndicator()
@@ -134,7 +136,7 @@ class FakeRepository(override val name: String = "sahte") : Repository {
     override fun items() = listOf("a", "b")
 }
 
-@Composable
+@Kompozable
 fun Items(repo: Repository) {
     Text(repo.describe())
 }
@@ -155,7 +157,7 @@ class CounterViewModel : ViewModel() {
 Eşyordamlar: bir `LaunchedEffect` ya da `launch` bloğu bir eşyordamdır; içindeki `delay`, `animateScrollToItem`, sizin `suspend fun`'larınız ve öteki bekleyen çağrılar beklenir:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Clock() {
     var seconds by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
@@ -173,11 +175,11 @@ fun Clock() {
 }
 ```
 
-Gerisi bildiğiniz gibi: `16.dp`, `14.sp`, `Modifier`'dan başlayan değiştirici zincirleri, `Color.Red`, `MaterialTheme.colorScheme.primary`, `LocalContentColor.current`, `CompositionLocalProvider(LocalContentColor provides Color.Red) { … }`, `DisposableEffect(key) { …; onDispose { … } }`, `null`, `?.`, `?:` ve `!!`, aralıklar (`0 until n`, `1..10`, `10 downTo 0 step 2`) ve listeler üzerinde `for`, metin şablonları (sayılar Kotlin'in yazdığı gibi), `CardDefaults.cardColors(containerColor = …)`, `TextFieldDefaults.colors(…)` ve öteki renk nesneleri.
+Gerisi bildiğiniz gibi: `16.dp`, `14.sp`, `Modifier`'dan başlayan değiştirici zincirleri, `Color.Red`, `MaterialTheme.colorScheme.primary`, `LocalContentColor.current`, `KompozitionLocalProvider(LocalContentColor provides Color.Red) { … }`, `DisposableEffect(key) { …; onDispose { … } }`, `null`, `?.`, `?:` ve `!!`, aralıklar (`0 until n`, `1..10`, `10 downTo 0 step 2`) ve listeler üzerinde `for`, metin şablonları (sayılar Kotlin'in yazdığı gibi), `CardDefaults.cardColors(containerColor = …)`, `TextFieldDefaults.colors(…)` ve öteki renk nesneleri.
 
 ## Composable'larınızın çevresindeki C++
 
-Kotlin'in türleri çevrilen kodda C++ türleridir: `String` `std::string`, `Int` `int`, `Float` `float`, `Boolean` `bool`, `List<T>` `std::vector<T>`, `T?` `std::optional<T>`, bir işlev türü `std::function` (`@Composable () -> Unit`: `Content`). Kendi C++ türleriniz adlarıyla kullanılır; sizin bir yapınız adlı argümanlarla istenen sırayla yapılır, alanları bildirildikleri sırayla atanır:
+Kotlin'in türleri çevrilen kodda C++ türleridir: `String` `std::string`, `Int` `int`, `Float` `float`, `Boolean` `bool`, `List<T>` `std::vector<T>`, `T?` `std::optional<T>`, bir işlev türü `std::function` (`@Kompozable () -> Unit`: `Content`). Kendi C++ türleriniz adlarıyla kullanılır; sizin bir yapınız adlı argümanlarla istenen sırayla yapılır, alanları bildirildikleri sırayla atanır:
 
 ```kotlin
 struct Point {
@@ -187,7 +189,7 @@ struct Point {
 
 float distance(Point a, Point b);
 
-@Composable
+@Kompozable
 fun Path(points: List<Point>) {
     val start = Point(y = 4f, x = 2f)
     Text("${points.size} nokta, ilki ${distance(start, points.first())} uzakta")
@@ -196,7 +198,7 @@ fun Path(points: List<Point>) {
 
 C++ işlevleriniz ve üyeleri oldukları gibi, yerleriyle çağrılır. C++ bir composable'ı kompozc'nin ondan yaptığı işlev olarak çağırır: yukarıdaki `Greeting`, `void Greeting(const std::string& name, const Modifier& modifier = Modifier(), CallSite site = CallSite::current())`'tir.
 
-Unit dönen bir `@Composable fun`, derleyici eklentisinin yaptığı gibi yeniden başlatılabilir ve atlanabilirdir: argümanları geçen seferkiyle eşit (`==`) olduğunda atlanır. Bir `data class`'ın `==`'su vardır; bir C++ yapısının ise bir taneye ihtiyacı vardır (`bool operator==(const Point&) const = default;`), yoksa composable'ı her seferinde çağıranıyla birlikte yeniden çalışır.
+Unit dönen bir `@Kompozable fun`, derleyici eklentisinin yaptığı gibi yeniden başlatılabilir ve atlanabilirdir: argümanları geçen seferkiyle eşit (`==`) olduğunda atlanır. Bir `data class`'ın `==`'su vardır; bir C++ yapısının ise bir taneye ihtiyacı vardır (`bool operator==(const Point&) const = default;`), yoksa composable'ı her seferinde çağıranıyla birlikte yeniden çalışır.
 
 Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha sonra kendi başına yeniden çalışabilir, bu yüzden hiçbir zaman yok olmuş bir şeye başvuru tutmaz. Bir lambda içinde değiştirilen bir `var`, değişkeni değil lambdanın kopyasını değiştirir: değişeni bir durumda (`mutableStateOf`) tutun, Compose da zaten bunu ister.
 

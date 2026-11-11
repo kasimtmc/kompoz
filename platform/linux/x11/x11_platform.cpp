@@ -266,7 +266,7 @@ public:
         m.language = preferredLanguage();
         return m;
     }
-    void metricsUpdated(ComposeHost&) override { desktop_.metricsUpdated(); }
+    void metricsUpdated(KompozHost&) override { desktop_.metricsUpdated(); }
     void pixelSize(int* width, int* height) const override { *width = width_, *height = height_; }
     void setWindowSize(int width, int height) override {
         if (window_) XResizeWindow(display_, window_, unsigned(std::max(1, width)), unsigned(std::max(1, height)));
@@ -286,7 +286,7 @@ public:
         return info;
     }
 
-    void attach(ComposeHost&, ComposeHost::Callbacks& callbacks) override {
+    void attach(KompozHost&, KompozHost::Callbacks& callbacks) override {
         X11Platform* self = this;
         desktop_.start(title_, [self] { self->wake(); });
         callbacks.wake = [self] { self->wake(); };
@@ -305,9 +305,9 @@ public:
         callbacks.openUri = [](const std::string& uri) { openUri(uri); };
     }
 
-    void handled(ComposeHost& h, const Event& e) override { desktop_.handled(h, e); }
+    void handled(KompozHost& h, const Event& e) override { desktop_.handled(h, e); }
 
-    void composed(ComposeHost& h, bool redraw, int64_t frameTime) override {
+    void composed(KompozHost& h, bool redraw, int64_t frameTime) override {
         // keepScreenOn: the screen saver held off while it is laid out.
         if (bool on = h.keepScreenOn(); on != screenKeptOn_) {
             screenKeptOn_ = on;

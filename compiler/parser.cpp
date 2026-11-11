@@ -159,7 +159,8 @@ Function Parser::function() {
     }
     f.composable = false;
     for (auto& n : names) {
-        if (n == "Composable") f.composable = true;
+        if (n == "Kompozable") f.composable = true;
+        else if (n == "Composable") fail(f.pos, "Kompoz's composables are @Kompozable (not @Composable)");
         else f.annotations.push_back(n);
     }
     if (!isIdent("fun")) fail("expected 'fun'");
@@ -178,7 +179,7 @@ Function Parser::function() {
         f.receiver->pos = at;
         for (size_t i = 0; i < parts.size(); ++i) f.receiver->name += (i ? "." : "") + parts[i];
     }
-    if (f.composable && f.isSuspend) fail(f.pos, "a @Composable function can't be suspend");
+    if (f.composable && f.isSuspend) fail(f.pos, "a @Kompozable function can't be suspend");
     f.params = params();
     if (acceptOp(":")) f.result = type();
     if (abstractMembers_ && !isOp("=") && !opAfterNewlines("{")) {  // an interface's fun without a body
@@ -319,7 +320,7 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
             bool wasAbstract = std::exchange(abstractMembers_, kind == "interface");
             Function f = function();
             abstractMembers_ = wasAbstract;
-            if (f.composable) fail(f.pos, a + "'s function can't be @Composable here: write it at the top level");
+            if (f.composable) fail(f.pos, a + "'s function can't be @Kompozable here: write it at the top level");
             order.push_back(methods.size() * 2 + 1);
             methods.push_back(std::move(f));
         }
@@ -600,8 +601,10 @@ Type Parser::type() {
     t.pos = cur().pos;
     std::vector<std::string> names;
     if (isOp("@")) annotations(&names);
-    for (auto& n : names)
-        if (n == "Composable") t.composable = true;
+    for (auto& n : names) {
+        if (n == "Kompozable") t.composable = true;
+        else if (n == "Composable") fail(t.pos, "a composable function type is @Kompozable () -> Unit (not @Composable)");
+    }
     if (isOp("(")) {
         take();
         std::vector<Type> inner;

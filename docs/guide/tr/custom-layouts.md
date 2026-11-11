@@ -1,6 +1,6 @@
 # Özel yerleşimler
 
-`Row`, `Column`, `Box` ve diğer yerleşimler işinizi görmediğinde çocukları `Layout` ile kendiniz ölçüp yerleştirin. Bu sayfa ayrıca layout modifier'ını, intrinsic boyutları, `SubcomposeLayout`'u ve yerleşim değişikliklerini canlandırmayı anlatıyor.
+`Row`, `Column`, `Box` ve diğer yerleşimler işinizi görmediğinde çocukları `Layout` ile kendiniz ölçüp yerleştirin. Bu sayfa ayrıca layout modifier'ını, intrinsic boyutları, `SubkompozLayout`'u ve yerleşim değişikliklerini canlandırmayı anlatıyor.
 
 ## Kısıtlar
 
@@ -22,8 +22,8 @@ Bunlar dp cinsindendir ve float'tır: Compose'unkilerin tam piksel olduğu yerde
 
 ```kotlin
 // Çocuklar alt alta, her biri bir öncekinden `indent` kadar daha sağa itilmiş.
-@Composable
-fun Staircase(indent: Dp, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+@Kompozable
+fun Staircase(indent: Dp, modifier: Modifier = Modifier, content: @Kompozable () -> Unit) {
     Layout(content = content, modifier = modifier) { measurables, constraints ->
         val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
         var width = 0f
@@ -42,7 +42,7 @@ fun Staircase(indent: Dp, modifier: Modifier = Modifier, content: @Composable ()
     }
 }
 
-@Composable
+@Kompozable
 fun Steps() {
     Staircase(24.dp) {
         Text("Wake up")
@@ -64,7 +64,7 @@ Policy kompozisyon sırasında değil, yerleşim sırasında çalışır. Okudu�
 Policy çocuklarını sırayla görür. Onları rollerine göre ayırt etmek için `Modifier.layoutId("name")` ile etiketleyin ve `layoutId`'yi okuyun:
 
 ```kotlin
-@Composable
+@Kompozable
 fun LabeledValue(label: String, value: String) {
     Layout(
         content = {
@@ -122,21 +122,21 @@ Row(modifier = Modifier.height(IntrinsicSize.Min)) {
 
 > **Not:** Kompoz'un intrinsic'leri Compose'unkilerin bir yaklaşığıdır: hem `Min` hem `Max` içeriği o eksende sınırsız olarak ölçer ve bir `Layout` intrinsic boyutlarının nasıl hesaplanacağını değiştiremez. En küçük intrinsic genişlikte metin her boşlukta satır kırar, bu yüzden en geniş kelimesi kadar geniş çıkar.
 
-## SubcomposeLayout
+## SubkompozLayout
 
-Bazen neyin kompoze edileceği bir ölçüme bağlıdır: gövdeye göre boyutlanan bir başlık, dar kısıtlar için farklı bir yerleşim, süslediği metne göre boyutlanan bir rozet. `SubcomposeLayout` içeriğinin parçalarını ölçüm *sırasında* kompoze eder:
+Bazen neyin kompoze edileceği bir ölçüme bağlıdır: gövdeye göre boyutlanan bir başlık, dar kısıtlar için farklı bir yerleşim, süslediği metne göre boyutlanan bir rozet. `SubkompozLayout` içeriğinin parçalarını ölçüm *sırasında* kompoze eder:
 
 ```kotlin
 // İçerik ve altında, içeriğin çıktığı genişlikte bir çizgi.
-@Composable
-fun Underlined(content: @Composable () -> Unit) {
-    SubcomposeLayout { constraints ->
+@Kompozable
+fun Underlined(content: @Kompozable () -> Unit) {
+    SubkompozLayout { constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val main = subcompose("main", content).map { it.measure(loose) }
+        val main = subkompoz("main", content).map { it.measure(loose) }
         val width = main.maxOf { it.width }
         val height = main.sumOf { it.height }
         // Eşleşmesi gereken genişlikle kompoze edilir; o değişince yeniden kompoze edilir.
-        val line = subcompose("line", width) {
+        val line = subkompoz("line", width) {
             Box(modifier = Modifier.size(width, 2.dp).background(MaterialTheme.colorScheme.primary))
         }.map { it.measure(loose) }
         layout(width, height + line.sumOf { it.height }) {
@@ -148,11 +148,11 @@ fun Underlined(content: @Composable () -> Unit) {
 }
 ```
 
-- `subcompose(slotId, content)` bir slot'u kompoze eder ve measurable'larını döndürür: ilk istendiğinde, Compose'unki gibi, orada hemen kompoze edilir.
-- Kompoz'un `subcompose(slotId, dependency, content)`'i, `dependency` değişince slot'u yeniden kompoze eder (Compose'unki bir slot'u her yeni içerik verildiğinde yeniden kompoze eder).
+- `subkompoz(slotId, content)` bir slot'u kompoze eder ve measurable'larını döndürür: ilk istendiğinde, Compose'unki gibi, orada hemen kompoze edilir.
+- Kompoz'un `subkompoz(slotId, dependency, content)`'i, `dependency` değişince slot'u yeniden kompoze eder (Compose'unki bir slot'u her yeni içerik verildiğinde yeniden kompoze eder).
 - İçerik daha sonra, kompozisyon sırasında çalışır; buradaki her lambda gibi kullandığını değerle yakalar.
 
-`SubcomposeLayout`, `Layout`'tan daha pahalıdır; yalnızca kompozisyon gerçekten ölçüme bağlıysa kullanın. `BoxWithConstraints` onun en yaygın kullanımının hazır hâlidir.
+`SubkompozLayout`, `Layout`'tan daha pahalıdır; yalnızca kompozisyon gerçekten ölçüme bağlıysa kullanın. `BoxWithConstraints` onun en yaygın kullanımının hazır hâlidir.
 
 ## Yerleşim değişikliklerini canlandırmak
 
@@ -161,7 +161,7 @@ fun Underlined(content: @Composable () -> Unit) {
 Çevresindeki yerleşim değiştiği için yer değiştiren ya da yeniden boyutlanan bir düğüm için `Modifier.animateBounds()`, Compose'un `animateBounds`'u gibi onu çizildiği yerden şimdiki yerine süzülerek taşır. Konumu en yakın `LookaheadScope`'a göre ölçülür (Compose'unki onu adlandırır: `animateBounds(this@LookaheadScope)`):
 
 ```kotlin
-@Composable
+@Kompozable
 fun Chips(wide: Boolean) {
     LookaheadScope(modifier = Modifier.fillMaxWidth()) {
         FlowRow(

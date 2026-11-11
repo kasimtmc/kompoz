@@ -22,7 +22,7 @@ cmake --build build -j
 ./build/showcase
 ```
 
-Bu; çekirdek kütüphaneyi (`kompoz_core`), uygulamaların üzerinde çalıştığı platform katmanını (`kompoz_app`), kompozc'yi (`.cpp` dosyalarınızdaki Compose kodunu C++'a çeviren derleyici), vitrin uygulamasını ve pencere açmadan çalışan testleri (`./build/kompoz_tests`, `./build/kompoz_compose_tests`) derler.
+Bu; çekirdek kütüphaneyi (`kompoz_core`), uygulamaların üzerinde çalıştığı platform katmanını (`kompoz_app`), kompozc'yi (`.cpp` dosyalarınızdaki Kotlin kodunu C++'a çeviren derleyici), vitrin uygulamasını ve pencere açmadan çalışan testleri (`./build/kompoz_tests`, `./build/kompozable_tests`) derler.
 
 İşe yarayan seçenekler:
 
@@ -32,14 +32,14 @@ Bu; çekirdek kütüphaneyi (`kompoz_core`), uygulamaların üzerinde çalışt�
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Vitrini derler. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (Android, iOS ve web'de `OFF`) | Pencere açmadan çalışan testleri derler. |
 | `KOMPOZ_VENDORED_DEPS` | Android, iOS, web ve Windows'ta `ON` | FreeType, HarfBuzz, zlib ve libpng'yi sistemdekileri kullanmak yerine `third_party/`'den derler. |
-| `KOMPOZ_BUILD_COMPILER` | `ON` (çapraz derlemede `OFF`) | kompozc'yi Kompoz'la birlikte derler. Kapalıysa `kompoz_compose` onu derlemeyi yapan makine için derler. |
+| `KOMPOZ_BUILD_COMPILER` | `ON` (çapraz derlemede `OFF`) | kompozc'yi Kompoz'la birlikte derler. Kapalıysa `kompozable` onu derlemeyi yapan makine için derler. |
 | `KOMPOZC` | boş | Onun yerine kullanılacak sizin bir kompozc'niz (`compiler/`'dan derlenmiş ya da kurulmuş biri). |
 
 lld bulunan masaüstlerinde, siz başka bir bağlayıcı seçmediyseniz Kompoz onunla bağlar: vitrin için GNU ld'nin yirmi beş saniyesi yerine yaklaşık bir saniye.
 
 ## Kompoz'u projenizde kullanmak
 
-Kompoz'u bir alt dizin olarak (bir klon ya da git submodule) ekleyin, programın giriş noktasını getiren platform katmanına, `kompoz::app`'e bağlayın ve hedefinizi `kompoz_compose`'a verin; böylece composable'ları Compose'un yazımıyla yazılabilir.
+Kompoz'u bir alt dizin olarak (bir klon ya da git submodule) ekleyin, programın giriş noktasını getiren platform katmanına, `kompoz::app`'e bağlayın ve hedefinizi `kompozable`'a verin; böylece composable'ları Compose'un yazımıyla yazılabilir.
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
@@ -52,11 +52,11 @@ add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
-kompoz_compose(myapp)           # kaynakları kompozc'den geçer: Compose yazımıyla @Composable işlevler
+kompozable(myapp)           # kaynakları kompozc'den geçer: Kotlin yazımıyla @Kompozable işlevler
 kompoz_copy_assets(myapp)       # fontlar ve lisanslar programın yanına
 ```
 
-`kompoz_compose`, Compose'un derleyici eklentisinin Kotlin'i yeniden yazdığı gibi, hedefin kaynaklarını C++ derleyicisinden önce kompozc'den geçirir: hedefin bütün kaynakları eklendikten sonra çağırın. `kompoz_copy_assets`, her uygulamanın birlikte dağıttığı şeyleri, yani gömülü Noto Sans fontlarını ve lisansları, her derlemede programınızın yanına kopyalar.
+`kompozable`, Compose'un derleyici eklentisinin Kotlin'i yeniden yazdığı gibi, hedefin kaynaklarını C++ derleyicisinden önce kompozc'den geçirir: hedefin bütün kaynakları eklendikten sonra çağırın. `kompoz_copy_assets`, her uygulamanın birlikte dağıttığı şeyleri, yani gömülü Noto Sans fontlarını ve lisansları, her derlemede programınızın yanına kopyalar.
 
 Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin FreeType,
 HarfBuzz ve libpng'siyle derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse (`scripts/fetch-deps.sh`: Windows ya
@@ -72,7 +72,7 @@ cmake --install kompoz/build --prefix ~/.local
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, orası zaten aranmıyorsa
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
-kompoz_compose(myapp)
+kompozable(myapp)
 kompoz_copy_assets(myapp)
 ```
 
@@ -91,10 +91,10 @@ indirir (Windows, Android ve web kendilerininkini kullanır). Her biri bulunursa
 da `WEBP`, `CURL`) onu zorunlu kılar, `OFF` dışarıda bırakır. vcpkg'nin `jpeg`, `webp`, `curl` özellikleri ve Conan'ın
 `with_jpeg`, `with_webp`, `with_curl` seçenekleri (hepsi varsayılan olarak açık) aynı şeydir.
 
-`main.cpp`'nizde Compose yazımıyla composable'larınız bulunur ve `main` yerine `kompoz::createApplication`'ı tanımlar:
+`main.cpp`'nizde Kotlin yazımıyla composable'larınız bulunur ve `main` yerine `kompoz::createApplication`'ı tanımlar:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
 
@@ -113,7 +113,7 @@ Kompoz'un tamamı tek bir başlık dosyasında, `#include <kompoz/kompoz.hpp>`, 
 
 ### kompozc
 
-kompozc derlemeyi yapan makinede çalışır. Kompoz o makine için derlenirken onu kendisiyle birlikte derler; başka biri için derlenirken (Android, web) `kompoz_compose` onu ilk gerektiğinde `compiler/`'dan, bu makinenin C++ derleyicisiyle kendi başına derler. Öyle bir derleyicinin olmadığı yerde (Visual Studio'nunki olmadan Windows'ta Android Studio), `KOMPOZC`'yi başka yerde Kompoz'un `compiler/`'ından derlenmiş (`cmake -S kompoz/compiler -B build-kompozc && cmake --build build-kompozc`) ya da Kompoz'la kurulmuş bir kompozc'ye ayarlayın.
+kompozc derlemeyi yapan makinede çalışır. Kompoz o makine için derlenirken onu kendisiyle birlikte derler; başka biri için derlenirken (Android, web) `kompozable` onu ilk gerektiğinde `compiler/`'dan, bu makinenin C++ derleyicisiyle kendi başına derler. Öyle bir derleyicinin olmadığı yerde (Visual Studio'nunki olmadan Windows'ta Android Studio), `KOMPOZC`'yi başka yerde Kompoz'un `compiler/`'ından derlenmiş (`cmake -S kompoz/compiler -B build-kompozc && cmake --build build-kompozc`) ya da Kompoz'la kurulmuş bir kompozc'ye ayarlayın.
 
 ### Application
 

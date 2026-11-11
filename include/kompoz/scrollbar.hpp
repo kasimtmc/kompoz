@@ -43,7 +43,7 @@ struct ScrollbarStyle {
     Color unhoverColor{0, 0, 0, 0.12f}, hoverColor{0, 0, 0, 0.5f};
     friend bool operator==(const ScrollbarStyle&, const ScrollbarStyle&) = default;
 };
-inline const CompositionLocal<ScrollbarStyle> LocalScrollbarStyle{ScrollbarStyle{}};
+inline const KompozitionLocal<ScrollbarStyle> LocalScrollbarStyle{ScrollbarStyle{}};
 
 struct ScrollbarOptions {
     bool reverseLayout = false;  // a reversed list's: the start at the end

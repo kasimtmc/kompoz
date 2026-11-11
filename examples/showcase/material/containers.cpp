@@ -2,7 +2,7 @@
 
 #include "showcase.hpp"
 
-@Composable
+@Kompozable
 fun AnimateItemSection() {
     val tasks = remember { mutableStateListOf(1, 2, 3, 4, 5) }
     var nextTask by remember { mutableStateOf(6) }
@@ -24,7 +24,7 @@ fun AnimateItemSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun ListItemSection() {
     val cs = MaterialTheme.colorScheme
     var notifications by remember { mutableStateOf(true) }
@@ -69,7 +69,7 @@ fun ListItemSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun DialogsSection(nav: NavController) {
     val cs = MaterialTheme.colorScheme
     var dialog by remember { mutableStateOf(false) }
@@ -195,7 +195,7 @@ fun DialogsSection(nav: NavController) {
     }
 }
 
-@Composable
+@Kompozable
 fun CardsSection() {
     val cs = MaterialTheme.colorScheme
     var cardTaps by remember { mutableStateOf(0) }

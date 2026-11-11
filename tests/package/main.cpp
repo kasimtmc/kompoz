@@ -3,7 +3,7 @@
 #include <kompoz/blocks.hpp>
 using namespace kompoz;
 
-// greeting.cpp's, written in Compose's syntax (kompozc gives it this C++ signature).
+// greeting.cpp's, written in Kotlin's syntax (kompozc gives it this C++ signature).
 void Greeting(const std::string& name, bool excited = false, CallSite site = CallSite::current());
 
 void Counter() {

@@ -3,7 +3,7 @@
 #include "showcase.hpp"
 
 // One row of the 10,000-row list. Skipped whenever the list recomposes and `index` is unchanged.
-@Composable
+@Kompozable
 fun ListRow(index: Int, nav: NavController) {
     val cs = MaterialTheme.colorScheme
     Row(modifier = traced(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(cs.surfaceContainer)
@@ -20,7 +20,7 @@ fun ListRow(index: Int, nav: NavController) {
 }
 
 // The window's size class (currentWindowAdaptiveInfo): what NavigationSuiteScaffold goes by.
-@Composable
+@Kompozable
 fun WindowClassLine() {
     val c = currentWindowAdaptiveInfo().windowSizeClass
     val window = LocalWindowSize.current
@@ -32,7 +32,7 @@ fun WindowClassLine() {
 
 // What the app runs on (mediaQuery): the pointer, the keyboard, a microphone and a camera, how
 // far the screen is seen from. Not recomposed as the window is resized.
-@Composable
+@Kompozable
 fun MediaLine() {
     val line = mediaQuery {
         val pointers = listOf("yok", "kumanda", "dokunmatik", "fare/kalem")
@@ -46,7 +46,7 @@ fun MediaLine() {
 }
 
 // Reads the list's first visible index, so only this small scope recomposes while scrolling.
-@Composable
+@Kompozable
 fun ListStatus(state: LazyListState) {
     val first = state.firstVisibleItemIndex
     val scope = rememberCoroutineScope()
@@ -66,7 +66,7 @@ fun ListStatus(state: LazyListState) {
 }
 
 // A square grid tile (aspectRatio keeps it square whatever the column width).
-@Composable
+@Kompozable
 fun GridTile(index: Int) {
     Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f).background(hueColor(index), RoundedCornerShape(16.dp)),
         contentAlignment = Alignment.Center) {
@@ -75,7 +75,7 @@ fun GridTile(index: Int) {
 }
 
 // A card of its own height for the staggered grid.
-@Composable
+@Kompozable
 fun StaggeredTile(index: Int) {
     val height = (72 + (index * 53) % 140).toFloat()
     Box(modifier = Modifier.fillMaxWidth().height(height.dp).background(hueColor(index), RoundedCornerShape(16.dp)).padding(12.dp),
@@ -84,7 +84,7 @@ fun StaggeredTile(index: Int) {
     }
 }
 
-@Composable
+@Kompozable
 fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, likes: LikesViewModel) {
     var mode by remember { mutableStateOf(0) }  // list, grid, staggered grid
     val gridState = rememberLazyGridState()
@@ -191,7 +191,7 @@ fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, lik
 
 // A row of the list, opened in the "list" navigation graph ("item/{n}"): its likes are in the
 // graph's ViewModel, which the list shows too.
-@Composable
+@Kompozable
 fun ItemScreen(index: Int, nav: NavController, vm: LikesViewModel) {
     val cs = MaterialTheme.colorScheme
     val liked by vm.likes.collectAsState()

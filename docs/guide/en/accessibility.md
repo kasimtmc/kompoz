@@ -70,7 +70,7 @@ Row(modifier = Modifier.clearAndSetSemantics { contentDescription = "Rating: 4 o
 A control you draw yourself must say what it is and how to use it. Prefer the modifiers that do this for you: `clickable`, `toggleable(value, onChange, role)`, `selectable(selected, onClick, role)` and `triStateToggleable` set the role, the state and the action:
 
 ```kotlin
-@Composable
+@Kompozable
 fun StarToggle() {
     var starred by remember { mutableStateOf(false) }
     Icon(if (starred) Icons.Filled.Star else Icons.Filled.FavoriteBorder, contentDescription = "Starred",
@@ -81,7 +81,7 @@ fun StarToggle() {
 For a row that acts as one control, put the modifier on the row and pass an empty callback to the control inside it, so the whole row is one touch target and one item:
 
 ```kotlin
-@Composable
+@Kompozable
 fun WifiRow() {
     var on by remember { mutableStateOf(true) }
     Row(modifier = Modifier.fillMaxWidth().toggleable(value = on, onValueChange = { on = it }, role = Role.Switch).padding(16.dp),

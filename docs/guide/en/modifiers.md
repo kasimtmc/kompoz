@@ -7,7 +7,7 @@ A `Modifier` decorates or augments a composable: its size and padding, its backg
 Most composables take a `modifier` parameter. A chain starts from `Modifier` and each call adds an element:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ArtistCard(name: String) {
     Row(
         modifier = Modifier
@@ -153,7 +153,7 @@ fun Modifier.cardSurface(color: Color) =
         .background(color, RoundedCornerShape(16.dp))
         .padding(16.dp)
 
-@Composable
+@Kompozable
 fun Note(text: String) {
     Box(modifier = Modifier.fillMaxWidth().cardSurface(MaterialTheme.colorScheme.surfaceContainerLow)) { Text(text) }
 }

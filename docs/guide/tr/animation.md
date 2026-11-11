@@ -20,7 +20,7 @@ Kompoz'da Compose'un animasyon API'leri var: bir hedefe doğru canlanan değerle
 `animate*AsState`, değeri hedefi her değiştiğinde o hedefe doğru canlanan bir durum döndürür (`AnimatedState<T>`, Compose'taki `State<T>`):
 
 ```kotlin
-@Composable
+@Kompozable
 fun LikeButton() {
     var liked by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (liked) 1.2f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "scale")
@@ -56,7 +56,7 @@ Material bileşenleri `MaterialTheme.motionScheme`'in yaylarını kullanır; bö
 `AnimatedVisibility`, `visible` true olduğunda içeriğini canlandırarak içeri, false olduğunda dışarı alır. Gizlendikten sonra içerik kompozisyondan çıkar.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Details() {
     var open by remember { mutableStateOf(false) }
     Column {
@@ -73,7 +73,7 @@ Giriş geçişleri `fadeIn`, `slideInHorizontally`, `slideInVertically`, `scaleI
 Her geçiş belirtimini adıyla da alır (`fadeIn(animationSpec = tween(300))`, `slideInVertically(animationSpec = tween(450)) { it }`, `scaleOut(targetScale = 0.5f)`). İlk göründüğünde içeri gelmesi gereken bir satıra, Compose'un `visibleState`'i gibi, gizli yapılıp hedefi görünür olan bir `MutableTransitionState` verilir; `currentState` ve `isIdle` nerede olduğunu söyler:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Arriving() {
     val shown = remember { MutableTransitionState(false).apply { targetState = true } }
     AnimatedVisibility(visibleState = shown, enter = fadeIn(animationSpec = tween(500)) + expandVertically()) {
@@ -93,7 +93,7 @@ Compose'taki gibi bir geçiş, içeriği yerleştirilip çizilirken okunur: çev
 `AnimatedContent`, hedef durumu değiştiğinde içerikler arasında canlandırır: eski içerik çıkarken yenisi girer ve boyut ikisi arasında canlanır.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -121,7 +121,7 @@ fun Counter() {
 ```kotlin
 enum class Page { Home, Settings }
 
-@Composable
+@Kompozable
 fun PageContent(page: Page) {
     Crossfade(targetState = page, label = "page") { p ->
         when (p) {
@@ -137,7 +137,7 @@ fun PageContent(page: Page) {
 `Modifier.animateContentSize()`, içeriği bir düğümü büyüttüğünde ya da küçülttüğünde düğümün boyutunu canlandırır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Expandable(text: String) {
     var expanded by remember { mutableStateOf(false) }
     Text(text, modifier = Modifier.clickable { expanded = !expanded }.animateContentSize(),
@@ -154,7 +154,7 @@ Birkaç değer tek bir duruma doğru birlikte canlandığında bir geçiş onlar
 ```kotlin
 enum class BoxState { Collapsed, Expanded }
 
-@Composable
+@Kompozable
 fun TransitionBox() {
     var state by remember { mutableStateOf(BoxState.Collapsed) }
     val transition = updateTransition(targetState = state, label = "box")
@@ -175,7 +175,7 @@ fun TransitionBox() {
 `rememberInfiniteTransition()`, değerleri kompozisyonda kaldıkları sürece canlandırır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Pulse() {
     val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
         initialValue = 0.85f, targetValue = 1f,
@@ -193,7 +193,7 @@ fun Pulse() {
 `Animatable`, coroutine'lerden canlandırdığınız bir değerdir: `animateTo` animasyon bitene kadar askıya alır, `snapTo` atlar, `stop` durdurur. Yeni bir `animateTo`, çalışan birinden hızını koruyarak devralır; bu da onu hareketlerle yönetilen animasyonların aracı yapar:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Shake(error: Boolean) {
     val offset = remember { Animatable(0f) }
     LaunchedEffect(error) {
@@ -218,7 +218,7 @@ Sürüklemeyle birleştirmek için bkz. [Hareketler](gestures.md).
 Paylaşılan bir öğe, Compose'daki gibi bir içerikteki yerinden ötekindeki yerine taşınır ve yeniden boyutlanır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Gallery() {
     var details by remember { mutableStateOf(false) }
     SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {

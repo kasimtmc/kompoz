@@ -178,7 +178,7 @@ struct NavController::Data {
     };
     Entries entries;
     std::string start;     // the NavHost's start destination
-    std::string reported;  // the path of the entry last reported shown (ComposeHost::reportLocation)
+    std::string reported;  // the path of the entry last reported shown (KompozHost::reportLocation)
     MutableState<uint64_t> version = mutableStateOf(uint64_t(0));  // bumped on every change: readers recompose
     std::vector<Node> nodes;
     std::map<std::string, Entries, std::less<>> saved;  // saveState, by the route of the first
@@ -518,7 +518,7 @@ void NavGraphBuilder::navigation(std::string startDestination, std::string route
 
 void detail::NavHost(const NavController& navController, std::string startDestination, const Modifier& modifier,
                      const std::function<void(NavGraphBuilder&)>& builder, const NavHostOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     NavGraphBuilder graph;
     builder(graph);
     NavController::Data& d = *navController.data();
@@ -531,7 +531,7 @@ void detail::NavHost(const NavController& navController, std::string startDestin
     d.start = startDestination;
     // A link the app was opened with (or one sent to it since) that a destination here answers;
     // else, the first time, the start destination.
-    ComposeHost& host = detail::Composer::require().host();
+    KompozHost& host = detail::Kompozer::require().host();
     // While it is here, uriHandler() opens the links it answers in it.
     DisposableEffect(navController.data(), [&host, weak = std::weak_ptr<NavController::Data>(navController.data())]() -> std::function<void()> {
         const void* owner = weak.lock().get();
@@ -588,7 +588,7 @@ void detail::NavHost(const NavController& navController, std::string startDestin
                     for (const NavBackStackEntry* e = entry.get(); e; e = e->parent().get()) shown.push_back(e->id());
                     holder.SaveableStateProvider(std::to_string(entry->id()), [&] {
                         std::shared_ptr<LifecycleOwner> owner = std::const_pointer_cast<NavBackStackEntry>(entry);
-                        CompositionLocalProvider({detail::LocalViewModelStore.provides(entry->viewModelStore()), LocalLifecycleOwner.provides(owner)},
+                        KompozitionLocalProvider({detail::LocalViewModelStore.provides(entry->viewModelStore()), LocalLifecycleOwner.provides(owner)},
                                                  [&] { dest.content(*entry); });
                     });
                     return;

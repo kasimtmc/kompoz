@@ -164,7 +164,7 @@ void DesktopServices::metricsUpdated() {
 #endif
 }
 
-void DesktopServices::handled(ComposeHost& host, const Event& e) {
+void DesktopServices::handled(KompozHost& host, const Event& e) {
     switch (e.type) {
     case EventType::AccentChanged:
         if (accent_) {
@@ -193,7 +193,7 @@ void DesktopServices::handled(ComposeHost& host, const Event& e) {
     }
 }
 
-void DesktopServices::composed(ComposeHost& host, bool redraw, int64_t frameTime, const Rect& window, float dpToPoints,
+void DesktopServices::composed(KompozHost& host, bool redraw, int64_t frameTime, const Rect& window, float dpToPoints,
                                const std::string& title) {
     // Screen readers (AT-SPI) answer from the tree last published: once asked for, after frames
     // that changed the screen.

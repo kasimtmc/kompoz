@@ -6,10 +6,10 @@ C++'ta derleyici eklentisi, Kotlin'in adlı argümanları ve parantez dışında
 
 ## Composable fonksiyonlar
 
-Kotlin'de `@Composable` ve Compose compiler plugin'i her çağrıya kimliğini verir. C++'ta bir composable sıradan bir fonksiyondur. Onu kompozisyon içinden çağırmak yeterlidir:
+Kotlin'de `@Kompozable` ve Compose compiler plugin'i her çağrıya kimliğini verir. C++'ta bir composable sıradan bir fonksiyondur. Onu kompozisyon içinden çağırmak yeterlidir:
 
 ```kotlin nocheck
-@Composable
+@Kompozable
 fun Greeting(name: String) {
     Text("Hello, $name!")
 }
@@ -27,7 +27,7 @@ Bir Kotlin composable'ı gibi kendi başına yeniden kompoze olması ve argüman
 
 ```cpp
 void Greeting(const std::string& name, CallSite site = CallSite::current()) {
-    composable(site, name, [=] {
+    kompozable(site, name, [=] {
         Text("Hello, " + name + "!");
     });
 }
@@ -181,21 +181,21 @@ Button([scope, list] { scope.launch([list]() -> Task { co_await list.animateScro
 
 ```kotlin nocheck
 val color = LocalContentColor.current
-CompositionLocalProvider(LocalContentColor provides Color.Red) { … }
+KompozitionLocalProvider(LocalContentColor provides Color.Red) { … }
 ```
 
 ```cpp body
 Color color = LocalContentColor.current();
-CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&] { Text("Red"); });
+KompozitionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&] { Text("Red"); });
 ```
 
-`MaterialTheme.colorScheme`, `MaterialTheme.typography` ve `MaterialTheme.motionScheme`, `colorScheme()`, `typography()` ve `motionScheme()`'dır. Tema genelinde bir `Shapes` yoktur: bileşenlerde Material'ın şekilleri yerleşiktir; bir bileşen şekil alıyorsa kendi şeklinizi verirsiniz (`RoundedCornerShape(12)`, `CircleShape`). [CompositionLocal](composition-local.md) sayfasına bakın.
+`MaterialTheme.colorScheme`, `MaterialTheme.typography` ve `MaterialTheme.motionScheme`, `colorScheme()`, `typography()` ve `motionScheme()`'dır. Tema genelinde bir `Shapes` yoktur: bileşenlerde Material'ın şekilleri yerleşiktir; bir bileşen şekil alıyorsa kendi şeklinizi verirsiniz (`RoundedCornerShape(12)`, `CircleShape`). [KompozitionLocal](kompozition-local.md) sayfasına bakın.
 
 ## Hızlı başvuru
 
 | Compose | Kompoz |
 |---|---|
-| `@Composable fun F()` | `void F()`, ya da `composable(site, args…, [=] { … })` ile `void F(CallSite site = CallSite::current())` |
+| `@Kompozable fun F()` | `void F()`, ya da `kompozable(site, args…, [=] { … })` ile `void F(CallSite site = CallSite::current())` |
 | `remember { x }`, `remember(key) { x }` | `remember([] { return x; })`, `remember(key, [] { return x; })` |
 | `var v by mutableStateOf(0)` | `auto v = mutableStateOf(0);` `v.get()`, `v.set(1)` |
 | `key(id) { … }` | `key(id, [&] { … })` |
@@ -209,7 +209,7 @@ CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&]
 | `LazyColumn { items(list) { … } }` | `LazyColumn(Modifier()) { items(list, [=](const T& x) { … }); };` |
 | `val vm: MyViewModel = viewModel()` | `auto vm = viewModel<MyViewModel>();` |
 | `@Preview` | `KOMPOZ_PREVIEW(Name) { … }` |
-| `createComposeRule()` | `kompoz::testing::ComposeTestRule` |
+| `createComposeRule()` | `kompoz::testing::KompozTestRule` |
 
 README'deki daha uzun tablo gezinmeyi, animasyonu, hareketleri, metin alanlarını ve fazlasını kapsar; [API sayfası](api.md) da her Compose API'sini Kompoz'daki durumuyla listeler.
 

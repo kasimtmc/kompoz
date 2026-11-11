@@ -4,12 +4,12 @@
   scripts/docs.py [out]              builds the site into out (default build-docs/); open out/index.html
   scripts/docs.py --check [page.md]  compiles every C++ snippet (all pages, or the ones named)
 
-Pages are Markdown (the subset below), listed in docs/guide/nav.txt. A ```kotlin block is Compose code
+Pages are Markdown (the subset below), listed in docs/guide/nav.txt. A ```kotlin block is Kotlin code
 as an app writes it in a .cpp file: kompozc translates it (KOMPOZC, or one built from compiler/) and
 the result is compiled after `#include <kompoz/kompoz.hpp>`, `<kompoz/testing.hpp>` and
 `using namespace kompoz;`. A ```cpp block is C++ compiled on its own after those and `<kompoz/blocks.hpp>`:
-  ```kotlin            at namespace scope (@Composable functions, data classes, C++ around them)
-  ```kotlin body       inside a @Composable function: statements, as in a composable's body
+  ```kotlin            at namespace scope (@Kompozable functions, data classes, C++ around them)
+  ```kotlin body       inside a @Kompozable function: statements, as in a composable's body
   ```kotlin continued  appended to the block before it (and that one's), as one translation unit
   ```kotlin nocheck    shown, not compiled (a sketch, or what not to do)
 and the same for ```cpp. Lines starting with "#! " are compiled but not shown (setup a snippet needs,
@@ -92,7 +92,7 @@ def kotlin_units(path):
             while lead < len(body) and body[lead].startswith('#! '):
                 lead += 1
             rest = lines[lead:] or ['']
-            lines = lines[:lead] + [f'@Composable fun kompozSnippet{line}() {{ ' + rest[0]] + rest[1:] + ['}']
+            lines = lines[:lead] + [f'@Kompozable fun kompozSnippet{line}() {{ ' + rest[0]] + rest[1:] + ['}']
         if 'continued' in words and units:
             first, source = units[-1]
         else:

@@ -21,7 +21,7 @@ Bu, ekranda olsun olmasın her çocuğu kompoze eder ve yerleştirir. Uzun liste
 ```kotlin
 data class Message(val id: Int, val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun Conversation(messages: List<Message>) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item { Text("Today", style = MaterialTheme.typography.labelLarge) }
@@ -104,7 +104,7 @@ LazyColumn(modifier = Modifier.fillMaxSize()) {
 `rememberLazyListState()`, `state` olarak vereceğiniz bir `LazyListState` verir. Listenin nerede olduğunu `firstVisibleItemIndex` (gözlemlenebilir) ve `layoutInfo` ile okuyun; onu `scrollToItem` ile ya da bir coroutine içinde `animateScrollToItem` ile hareket ettirin:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Messages(messages: List<String>) {
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -186,7 +186,7 @@ LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(2), modifier = Modi
 `HorizontalPager` ve `VerticalPager`, Compose'un pager'ları gibi bir seferde bir sayfa gösterir ve kullanıcı kaydırdıkça sayfalara yakalanır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Onboarding() {
     val pager = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
@@ -252,7 +252,7 @@ Scaffold(
 Kendiniz katılmak için `Modifier.nestedScroll`'a, Compose'daki gibi kendi nesnenizi, bir bağlantı verin (kompozc `object : NestedScrollConnection { … }`'i, fonksiyonlarının kullandığı yerelleri tutan kendine ait bir sınıf yapar). Bunun `onPreScroll`'u her miktarı çocuk kaymadan önce görür ve ne kadarını tükettiğini döndürür; `onPostScroll` çocuğun bıraktığını görür:
 
 ```kotlin
-@Composable
+@Kompozable
 fun CollapsingHeader() {
     var height by remember { mutableStateOf(160f) }
     val connection = remember {
@@ -282,7 +282,7 @@ fun CollapsingHeader() {
 
 ```kotlin
 #! suspend fun fetchNews(): List<String> = emptyList()
-@Composable
+@Kompozable
 fun News() {
     var news by remember { mutableStateOf(listOf("First")) }
     var refreshing by remember { mutableStateOf(false) }

@@ -39,11 +39,11 @@ kompoz::Application kompoz::createApplication(int, char**) {
 ## İçinde neler var
 
 - **Runtime**: akıllı recomposition'lı composable fonksiyonlar (yalnız değişen durumu okuyan yeniden çalışır,
-  değişmeyen çocuklar atlanır), `remember`/`rememberSaveable`, efektler, `CompositionLocal`, C++20 coroutine'leri
+  değişmeyen çocuklar atlanır), `remember`/`rememberSaveable`, efektler, `KompozitionLocal`, C++20 coroutine'leri
   (`LaunchedEffect`, `delay`, `Flow`/`StateFlow`), `ViewModel`, tür güvenli rotalar ve derin bağlantılarla gezinme,
   yaşam döngüsü.
 - **Yerleşim**: artımlı (bir düğüm ancak içinde bir şey değişince yeniden ölçülür), `Box`/`Row`/`Column`, `FlowRow`,
-  `FlexBox`, `Grid`, özel `Layout` ve `SubcomposeLayout`, intrinsic'ler, pencere kenar boşlukları, sağdan sola.
+  `FlexBox`, `Grid`, özel `Layout` ve `SubkompozLayout`, intrinsic'ler, pencere kenar boşlukları, sağdan sola.
 - **Listeler ve kaydırma**: `LazyColumn`/`LazyRow`/tembel ızgaralar/kademeli ızgaralar, pager'lar, carousel'ler, iç içe
   kaydırma, Android'in fling eğrisi ve kenar esnemesi, yakalama (snap), fare tekerleği ve dokunmatik yüzey.
 - **Material 3** (Compose Material 3 1.4, Expressive bileşenler dahil): Scaffold ve uygulama çubukları, gezinme
@@ -62,7 +62,7 @@ kompoz::Application kompoz::createApplication(int, char**) {
   sistemin paleti (Android 12+'da duvar kağıdınınki, Linux ve Windows'ta masaüstünün vurgu rengi) ya da duvar kağıdının kendisi
   (Linux masaüstleri, Windows, Android 8.1+); sistem yazı ölçeği; sistemin dili (kütüphanenin kendi metinleri İngilizce ya da Türkçe, `LocalStrings`,
   ve sağdan sola yerleşim); pano, titreşim, URI'ler, IME.
-- **Araçlar**: pencere açmadan UI testleri (`ComposeTestRule`), önizlemeler (`KOMPOZ_PREVIEW`), kaydedince uygulamanın
+- **Araçlar**: pencere açmadan UI testleri (`KompozTestRule`), önizlemeler (`KOMPOZ_PREVIEW`), kaydedince uygulamanın
   durumunu koruyarak yeniden derleyip başlatma (`scripts/dev.sh`), betikle ekran görüntüsü, kare profili, her platform
   için paketleme (`scripts/package.sh`).
 
@@ -72,14 +72,14 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 
 | Compose | Kompoz |
 |---|---|
-| `@Composable` + compiler plugin | Her composable'da `CallSite site = CallSite::current()` (`std::source_location`) varsayılan parametresi. Çağrı noktası + ebeveyn içindeki sıra = kimlik |
-| Restartable / skippable composable | `composable(site, args..., [=]{ ... })`: okuduğu state değişince tek başına yeniden çalışır, argümanları aynıysa atlanır |
-| Inline composable (`Column`, `Row`) | `ComposableScope scope(site);`: kimlik verir ama ayrı scope değildir (içerik lambdası alan composable'lar için) |
+| `@Kompozable` + compiler plugin | Her composable'da `CallSite site = CallSite::current()` (`std::source_location`) varsayılan parametresi. Çağrı noktası + ebeveyn içindeki sıra = kimlik |
+| Restartable / skippable composable | `kompozable(site, args..., [=]{ ... })`: okuduğu state değişince tek başına yeniden çalışır, argümanları aynıysa atlanır |
+| Inline composable (`Column`, `Row`) | `KompozableScope scope(site);`: kimlik verir ama ayrı scope değildir (içerik lambdası alan composable'lar için) |
 | `remember { }`, `remember(key) { }` | `remember([]{...})`, `remember(key, []{...})` |
 | `mutableStateOf` | `mutableStateOf(x)` → `MutableState<T>` (kopyalanabilir handle; callback'lerde değerle yakala) |
 | `key(id) { }` | `key(id, [&]{...})` |
 | `DisposableEffect`, `SideEffect` | Aynı isimler |
-| `CompositionLocal` | `CompositionLocal<T>`, `CompositionLocalProvider({Local.provides(v)}, ...)` |
+| `KompozitionLocal` | `KompozitionLocal<T>`, `KompozitionLocalProvider({Local.provides(v)}, ...)` |
 | `animate*AsState` | `animateFloatAsState`, `animateColorAsState` (sadece kendi scope'unu her frame yeniden çalıştırır) |
 | `LaunchedEffect`, `rememberCoroutineScope`, `delay` | C++20 coroutine'leri: `LaunchedEffect(key, [=]() -> Task { co_await delay(1s); ... })` |
 | `Animatable`, `tween`, `spring`, `infiniteRepeatable` | `co_await anim.animateTo(1.f, tween(300))`, aynı spec isimleri |
@@ -109,9 +109,9 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `Brush.verticalGradient(...)`, `Path` | `Brush::verticalGradient({a, b})`, `background(brush, shape)`, `d.drawPath(path, brush, Stroke(3))` |
 | `Modifier.graphicsLayer { rotationZ = ... }` | `graphicsLayer({.rotationZ = 45})` veya çizimde okunan lambda: `graphicsLayer([=](GraphicsLayerScope& l) { ... })` |
 | `TriStateCheckbox(state = ToggleableState.Indeterminate, onClick)`, `Text(…, autoSize = TextAutoSize.StepBased(12.sp, 48.sp))` | `TriStateCheckbox(ToggleableState::Indeterminate, onClick)`, `Text("…", maxLines = 1, autoSize = TextAutoSize::StepBased(12, 48))` |
-| `SubcomposeLayout { constraints -> val m = subcompose("main") { … }.map { it.measure(constraints) }; layout(w, h) { … } }` | `SubcomposeLayout(Modifier(), [](SubcomposeMeasureScope& s, const Constraints& c) { auto m = s.subcompose(std::string("main"), [] { … }); …; return Size{w, h}; })` |
+| `SubkompozLayout { constraints -> val m = subkompoz("main") { … }.map { it.measure(constraints) }; layout(w, h) { … } }` | `SubkompozLayout(Modifier(), [](SubkompozMeasureScope& s, const Constraints& c) { auto m = s.subkompoz(std::string("main"), [] { … }); …; return Size{w, h}; })` |
 | `Modifier.clickable(interactionSource = s, indication = null) { … }` + `Modifier.indication(s, ripple())` | `Modifier().clickable([] { … }, {.interactionSource = s, .indication = false})` + `Modifier().indication(s, ripple())` |
-| `Modifier.clickable(indication = ripple(bounded = false, radius = 24.dp)) { … }`, `CompositionLocalProvider(LocalIndication provides …)` | `Modifier().clickable([] { … }, {.indication = ripple(false, 24)})`, `CompositionLocalProvider({LocalIndication.provides(false)}, …)` (her tıklanabilirde varsayılan Material dalgası) |
+| `Modifier.clickable(indication = ripple(bounded = false, radius = 24.dp)) { … }`, `KompozitionLocalProvider(LocalIndication provides …)` | `Modifier().clickable([] { … }, {.indication = ripple(false, 24)})`, `KompozitionLocalProvider({LocalIndication.provides(false)}, …)` (her tıklanabilirde varsayılan Material dalgası) |
 | `val source = remember { MutableInteractionSource() }`, `val pressed by source.collectIsPressedAsState()`, `Modifier.clickable(source, indication = null) { … }` | `auto source = remember([] { return MutableInteractionSource(); });`, `bool pressed = source.collectIsPressedAsState();`, `Modifier().clickable([] { … }, {.interactionSource = source, .indication = false})` (`Button(…, interactionSource = source) { … };`, `Slider(v, set, interactionSource = source)`, `source.interactions().collect(…)`, `pagerState.interactionSource().collectIsDraggedAsState()`) |
 | `val state = remember { AnchoredDraggableState(DragValue.Start) }`, `state.updateAnchors(DraggableAnchors { Start at 0f; End at w })`, `Modifier.offset { IntOffset(state.requireOffset().roundToInt(), 0) }.anchoredDraggable(state, Orientation.Horizontal)` | `auto state = rememberAnchoredDraggableState(DragValue::Start);`, `state.updateAnchors({{DragValue::Start, 0}, {DragValue::End, w}});`, `Modifier().offset([state] { return Offset{state.requireOffset(), 0}; }).anchoredDraggable(state, Orientation::Horizontal)` (`anchored_draggable.hpp`) |
 | `val measurer = rememberTextMeasurer()`, `drawText(measurer.measure("%42", style), topLeft = …)`, `Text(text, onTextLayout = { r -> cut = r.hasVisualOverflow })` | `auto measurer = rememberTextMeasurer();`, `d.drawText(measurer.measure("%42", {.fontSize = 12}), {x, y})`, `Text(text, Modifier(), {.maxLines = 2}, [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); })` (`text_measure.hpp`) |
@@ -126,7 +126,7 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `Modifier.pointerHoverIcon(PointerIcon.Hand)` | `Modifier().pointerHoverIcon(PointerIcon::Hand)` (`Cursor::Move`, `ResizeHorizontal`…) |
 | `CenterAlignedTopAppBar(title = { … })`, `Card(onClick = { … }) { … }`, `Scaffold(floatingActionButtonPosition = FabPosition.Center)` | `CenterAlignedTopAppBar(title = [] { … })`, `Card([] { … }) { … };`, `Scaffold(floatingActionButton = …, floatingActionButtonPosition = FabPosition::Center) [=](PaddingValues padding) { … };` |
 | `LazyRow(state = s, flingBehavior = rememberSnapFlingBehavior(s)) { … }` | `LazyRow(Modifier(), state = s, flingBehavior = rememberSnapFlingBehavior(s)) { … };` |
-| `CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }`, `Modifier.absoluteOffset(x)` | `CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { … })`, `Modifier().absoluteOffset(x, 0)` |
+| `KompozitionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }`, `Modifier.absoluteOffset(x)` | `KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { … })`, `Modifier().absoluteOffset(x, 0)` |
 | `IconToggleButton(checked, onCheckedChange = { checked = it }) { Icon(…) }`, `OutlinedIconButton(onClick) { … }` | `IconToggleButton(checked.get(), [checked](bool on) { checked.set(on); }) { Icon(…); };` (`FilledIconToggleButton`, `FilledTonalIconToggleButton`, `OutlinedIconToggleButton`), `OutlinedIconButton([] { … }) { … };` |
 | `OutlinedTextField(value, onValueChange, label = { Text("Tutar") }, prefix = { Text("₺") }, suffix = { Text("kg") })` | `OutlinedTextField(value, set, label = "Tutar", prefix = "₺", suffix = "kg")` |
 | `Modifier.zIndex(1f)`, `placeable.place(x, y, zIndex)` | `Modifier().zIndex(1)`, `p.place(x, y, 1)` |
@@ -135,7 +135,7 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `TextField`/`OutlinedTextField`, `KeyboardOptions`, `FocusRequester` | `OutlinedTextField(value, onChange, modifier, singleLine = true, label = "E-posta", keyboardOptions = KeyboardOptions{.keyboardType = KeyboardType::Email, .imeAction = ImeAction::Next})`; Compose gibi `singleLine` vermeyen alan çok satırlıdır (`minLines`/`maxLines`); `rememberTextFieldState()` ile `OutlinedTextField(state)` (`state.edit([](TextFieldBuffer& b) { b.selectAll(); })`, `inputTransformation = InputTransformation::maxLength(10)`, `outputTransformation = OutputTransformation{[](TextFieldBuffer& b) { b.insert(3, " "); }}`, `state.undoState().undo()`); `Modifier().focusRequester(r)`, `r.requestFocus()`, `focusManager().clearFocus()`, `Modifier().focusProperties({.canFocus = false, .next = r})` |
 | `LocalUriHandler.current.openUri(url)`, `LocalSoftwareKeyboardController.current?.hide()`, `LocalHapticFeedback.current.performHapticFeedback(...)`, `LocalClipboardManager` | `uriHandler().openUri(url)`, `softwareKeyboardController().hide()`, `hapticFeedback().performHapticFeedback(HapticFeedbackType::LongPress)`, `clipboardManager().setText(...)` (kompozisyonda alınır, geri çağrılarda kullanılır) |
 | `ModalNavigationDrawer`, `NavigationRail`, pencere boyutu | `ModalNavigationDrawer(drawerContent, rememberDrawerState()) { … };`; `LocalWindowSize.current()` ile geniş pencerede rail |
-| `Dialog`, `AlertDialog`, `DropdownMenu`, `ModalBottomSheet`, `BackHandler` | Aynı isimler; `if (open) AlertDialog(onDismiss, title = ..., confirmButton = ...)`. Popup'lar ağaçta çağrıldıkları yerde kompoze edilir (state/CompositionLocal korunur), host onları en üstte yerleştirir |
+| `Dialog`, `AlertDialog`, `DropdownMenu`, `ModalBottomSheet`, `BackHandler` | Aynı isimler; `if (open) AlertDialog(onDismiss, title = ..., confirmButton = ...)`. Popup'lar ağaçta çağrıldıkları yerde kompoze edilir (state/KompozitionLocal korunur), host onları en üstte yerleştirir |
 | `BottomSheetScaffold(sheetContent = { ... }, scaffoldState = state, sheetPeekHeight = 128.dp) { padding -> ... }` | `BottomSheetScaffold([&] { ... }, Modifier(), scaffoldState = state, sheetPeekHeight = 128) [=](PaddingValues padding) { ... };`, `co_await state.bottomSheetState.expand()` |
 | `NavigationSuiteScaffold(navigationSuiteItems = { item(selected, onClick, icon, label) }) { content }`, `currentWindowAdaptiveInfo().windowSizeClass` | `NavigationSuiteScaffold([&](NavigationSuiteScope& nav) { nav.item(selected, onClick, Icons::Filled::Home, "Ana sayfa"); }, Modifier(), {}, content)`, `currentWindowAdaptiveInfo().windowSizeClass.windowWidthSizeClass` |
 | `Modifier.imePadding()`, `WindowInsets.statusBars`, `consumeWindowInsets` | `Modifier().padding(padding).consumeWindowInsets(padding).imePadding()`, `WindowInsets::statusBars()`, `windowInsetsPadding(WindowInsets::systemBars())`; `SystemBarsAppearance(!dark)` sistem çubuğu ikonları |
@@ -169,8 +169,8 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `Modifier.padding(..).background(..)` | `Modifier().padding(..).background(..)` (sıra önemli, Compose'daki gibi) |
 | İsimli parametreler | Adlı argümanlar: `Text("Başlık", fontSize = 24, color = ...)` (henüz çevrilmemiş bileşenler için seçenek yapıları) |
 | `@Preview` | `KOMPOZ_PREVIEW(Ad, .width = 360, .height = 200) { ... }`, `KOMPOZ_PREVIEW=Ad` ile gösterilir (bkz. [Geliştirme](#geliştirme)) |
-| `createComposeRule()`, `onNodeWithText(..).assertIsDisplayed()` | `kompoz::testing::ComposeTestRule` (pencere açmadan UI testi): `rule.onNodeWithText("Tamam").assertIsDisplayed().performClick()`; başarısızlıkta `testing::AssertionError` |
-| `Modifier.recomposeHighlighter()` (snippets) | `Modifier().recomposeHighlighter()`: node'u üreten composable'ın kaç kez çalıştığını kenarlıkla gösterir |
+| `createComposeRule()`, `onNodeWithText(..).assertIsDisplayed()` | `kompoz::testing::KompozTestRule` (pencere açmadan UI testi): `rule.onNodeWithText("Tamam").assertIsDisplayed().performClick()`; başarısızlıkta `testing::AssertionError` |
+| `Modifier.rekompozHighlighter()` (snippets) | `Modifier().rekompozHighlighter()`: node'u üreten composable'ın kaç kez çalıştığını kenarlıkla gösterir |
 
 Hangi Compose API'lerinin önce geldiğine android/snippets deposundaki kullanım sıklığına göre karar verildi; bkz.
 [docs/components.tr.md](docs/components.tr.md).
@@ -179,19 +179,19 @@ Hangi Compose API'lerinin önce geldiğine android/snippets deposundaki kullanı
 
 Compose'daki gibi çalışır:
 
-- `composable(...)` ile yazılan her fonksiyon bir **scope**. Gövdesi çalışırken okuduğu her `MutableState` ve
-  `CompositionLocal` kaydedilir.
+- `kompozable(...)` ile yazılan her fonksiyon bir **scope**. Gövdesi çalışırken okuduğu her `MutableState` ve
+  `KompozitionLocal` kaydedilir.
 - Bir durum değişince **yalnız onu okuyan scope'lar** yeniden çalışır; ebeveynleri çalışmaz.
 - Ebeveyn çalıştığında, argümanları öncekiyle **eşit** olan ve okuduğu hiçbir şey değişmemiş çocuk scope'lar
   **atlanır**: slot'ları ve düğümleri olduğu gibi kalır.
-- Bir `CompositionLocalProvider` farklı bir değer vermeye başlarsa, altında o değeri okuyan scope'lar (aradaki atlanan
+- Bir `KompozitionLocalProvider` farklı bir değer vermeye başlarsa, altında o değeri okuyan scope'lar (aradaki atlanan
   scope'lardan bağımsız olarak) yeniden çalışır.
 - Animasyonlar her karede yalnız kendi scope'larını yeniden çalıştırır; çizimde ya da yerleşimde okunan değerler
   (`graphicsLayer` lambdası, `Modifier.offset { }`, `InfiniteTransition::animateFloat`) hiç recompose etmez.
 
 ```cpp
 void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite site = CallSite::current()) {
-    composable(site, todo, todos, [=] {   // todo ve todos aynıysa liste yeniden çizilirken bu satır atlanır
+    kompozable(site, todo, todos, [=] {   // todo ve todos aynıysa liste yeniden çizilirken bu satır atlanır
         ...
     });
 }
@@ -222,7 +222,7 @@ yeniden ölçülür.
  uygulama kodu (composable fonksiyonlar)
         │
  ┌──────▼─────────────────────────────── kompoz_core (platformdan bağımsız, bağımlılık yok)
- │ runtime     slot table (Group ağacı), scope'lar ve okuma takibi, remember, durum, efektler, CompositionLocal
+ │ runtime     slot table (Group ağacı), scope'lar ve okuma takibi, remember, durum, efektler, KompozitionLocal
  │ state       derivedStateOf, mutableStateListOf, rememberUpdatedState
  │ coroutines  Task, Dispatcher (kare saatinde delay/awaitFrame), LaunchedEffect, CoroutineScope
  │ flow        Flow, StateFlow/SharedFlow (her iş parçacığından yazılır), collect, collectAsState
@@ -232,7 +232,7 @@ yeniden ölçülür.
  │ draw        DrawScope, Canvas, drawBehind/drawWithContent/drawWithCache, graphicsLayer
  │ text        AnnotatedString, çok stilli satır kaydırma, bidi (sağdan sola metin)
  │ gestures    pointerInput (düğüm başına bir coroutine), detectTap/Drag/TransformGestures
- │ host        ComposeHost: kompozisyon + yerleşim + popup katmanı + isabet testi, odak, kaydırma, fling (dp)
+ │ host        KompozHost: kompozisyon + yerleşim + popup katmanı + isabet testi, odak, kaydırma, fling (dp)
  │ nested_scroll NestedScrollConnection/Dispatcher: kaydırma ve fling'in üst öğelere zincirlenmesi
  │ lazy, pager LazyColumn/LazyRow/ızgaralar (yalnız görünenler ve bir pay), pager'lar, carousel'ler
  │ animation   spec'ler, Animatable, animate*AsState, geçişler, animateContentSize;
@@ -251,7 +251,7 @@ yeniden ölçülür.
 ```
 
 Yeni bir platform arka ucu `GraphicsContext` ve `TextMeasurer`'ı (iki fonksiyon, gradyan ve path için iki isteğe bağlı
-çağrı daha) uygular, girdi olaylarını `ComposeHost`'a verir, `frame()` ve `draw()`'ı çağırır; `DisplayList` ile yalnız
+çağrı daha) uygular, girdi olaylarını `KompozHost`'a verir, `frame()` ve `draw()`'ı çağırır; `DisplayList` ile yalnız
 değişen bölgeyi yeniden çizmek isteğe bağlıdır. Kompoz'un kendi platformları (`platform/`) yalnızca pencere sisteminin
 tarafıdır: uygulama çekirdeği ve GPU renderer'ı hepsinde aynıdır.
 
@@ -382,7 +382,7 @@ planı verir; yazı ölçeği pencerenin (`KOMPOZ_FONT_SCALE`). Resim olarak:
 
 ### Testler
 
-`kompoz::testing::ComposeTestRule` pencere açmadan, sanal bir saatle ve sabit boyutlu bir metin ölçerle kompoze eder,
+`kompoz::testing::KompozTestRule` pencere açmadan, sanal bir saatle ve sabit boyutlu bir metin ölçerle kompoze eder,
 yerleştirir ve çizer; düğümleri metne, etikete ya da semantiğe göre bulun, tıklayın, yazın, kaydırın; sınırları,
 semantiği ve çizileni denetleyin. `./build/kompoz_tests` hepsini çalıştırır (`./build/kompoz_tests lazy` yalnız adında
 "lazy" geçenleri). Testler çalışırken her artımlı yerleşim baştan yapılan bir yerleşimle karşılaştırılır.

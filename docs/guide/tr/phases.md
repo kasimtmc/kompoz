@@ -25,7 +25,7 @@ Değişen bir değeri okuyan aşama ne kadar geçse, her değişiklik o kadar az
 Animasyonlu bir değeri kompozisyonda okumak her karede yeniden kompoze eder:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Pulse() {
     val pulse by rememberInfiniteTransition().animateFloat(
         initialValue = 0.8f,
@@ -46,7 +46,7 @@ fun Pulse() {
 Bir şeyi hareket ettirmek için de aynısı geçerli. `offset(x, y)` kompozisyonda okunan değerler alır; `offset { … }` yerleşim sırasında okunan bir lambda alır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DraggableBall() {
     var x by remember { mutableStateOf(0f) }
     Box(
@@ -83,7 +83,7 @@ Bir composable'ın hesapladığı her şey her recomposition'da yeniden çalış
 ```kotlin
 data class Contact(val name: String)
 
-@Composable
+@Kompozable
 fun Contacts(contacts: List<Contact>) {
     val sorted = remember(contacts) { contacts.sortedBy { it.name } }   // yalnız kişiler değişince yeniden sıralanır
     LazyColumn(modifier = Modifier.fillMaxSize()) {

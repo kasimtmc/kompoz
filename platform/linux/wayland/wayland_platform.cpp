@@ -247,7 +247,7 @@ public:
         if (ownDecorations_ && !state_.fullscreen) m.titleBar = titleBar();
         return m;
     }
-    void metricsUpdated(ComposeHost&) override { desktop_.metricsUpdated(); }
+    void metricsUpdated(KompozHost&) override { desktop_.metricsUpdated(); }
     void pixelSize(int* width, int* height) const override { *width = pixelWidth(), *height = pixelHeight(); }
     void setWindowSize(int width, int height) override {
         width_ = width, height_ = height;
@@ -290,7 +290,7 @@ public:
         return info;
     }
 
-    void attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) override {
+    void attach(KompozHost& h, KompozHost::Callbacks& callbacks) override {
         host_ = &h;
         WaylandPlatform* self = this;
         desktop_.start(title_, [self] { self->wake(); });
@@ -311,9 +311,9 @@ public:
         callbacks.openUri = [](const std::string& uri) { openUri(uri); };
     }
 
-    void handled(ComposeHost& h, const Event& e) override { desktop_.handled(h, e); }
+    void handled(KompozHost& h, const Event& e) override { desktop_.handled(h, e); }
 
-    void composed(ComposeHost& h, bool redraw, int64_t frameTime) override {
+    void composed(KompozHost& h, bool redraw, int64_t frameTime) override {
         // keepScreenOn: an idle inhibitor on the window while it is laid out.
         if (bool on = h.keepScreenOn(); on != (inhibitor_ != nullptr) && idleInhibits_ && surface_) {
             if (on) inhibitor_ = zwp_idle_inhibit_manager_v1_create_inhibitor(idleInhibits_, surface_);
@@ -436,7 +436,7 @@ private:
     std::deque<Event> events_;
     bool quit_ = false, busy_ = false, awaitingCallback_ = false, callbackDone_ = false;
     AppCore* core_ = nullptr;
-    ComposeHost* host_ = nullptr;
+    KompozHost* host_ = nullptr;
     bool probed_ = false, hasMicrophone_ = false, hasCamera_ = false;
     DesktopServices desktop_;
 

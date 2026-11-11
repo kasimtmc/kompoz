@@ -5,7 +5,7 @@ Moving between screens with a back stack, as `androidx.navigation.compose` does:
 ## A NavHost
 
 ```kotlin
-@Composable
+@Kompozable
 fun App() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
@@ -45,7 +45,7 @@ data class Profile(val id: String, val tab: Int? = null)   // the route "Profile
 @Serializable
 object Home
 
-@Composable
+@Kompozable
 fun TypedApp() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Home, modifier = Modifier.fillMaxSize()) {
@@ -95,7 +95,7 @@ object HomeTab
 @Serializable
 object SettingsTab
 
-@Composable
+@Kompozable
 fun Tabs(nav: NavController) {
     val entry by nav.currentBackStackEntryAsState()
     val inSettings = entry?.destination?.hierarchy?.any { it.hasRoute<SettingsTab>() } == true
@@ -123,7 +123,7 @@ nav.navigate("home") { popUpTo("login") { inclusive = true } }
 `nav.currentBackStackEntryAsState()` returns the top entry and recomposes when it changes: use it to highlight the selected item of a navigation bar.
 
 ```kotlin
-@Composable
+@Kompozable
 fun BottomBar(nav: NavController) {
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
@@ -146,7 +146,7 @@ Screens that belong together, such as a sign-in flow, go in a nested graph with 
 
 ```kotlin
 #! class LoginViewModel : ViewModel() { val user = MutableStateFlow("") }
-@Composable
+@Kompozable
 fun Graphs(nav: NavController) {
     NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
         composable("home") {
@@ -212,7 +212,7 @@ The default is a cross-fade.
 `BackHandler(enabled, onBack)` takes the back button, gesture or Escape while `enabled`; the most recently composed enabled one wins. Use it for things that should close before the screen does, such as a selection mode:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Selectable() {
     var selecting by remember { mutableStateOf(false) }
     BackHandler(enabled = selecting) { selecting = false }

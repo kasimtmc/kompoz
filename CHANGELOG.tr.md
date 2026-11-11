@@ -1180,6 +1180,20 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Compose'un adını taşıyanlara Kompoz'un adları** (eski yazım kalmadı): `@Composable`, `@Kompozable` oldu (hâlâ öyle
+  yazılmışsa kompozc söyler); `CompositionLocal`, `compositionLocalOf`, `staticCompositionLocalOf`,
+  `CompositionLocalProvider`, `CompositionLocalContext` ve
+  `currentCompositionLocalContext`, `KompozitionLocal`, `kompozitionLocalOf` ve benzerleri oldu; `SubcomposeLayout`,
+  `SubcomposeMeasureScope`, `SubcomposeMeasurePolicy` ve `subcompose(…)`, `SubkompozLayout`, `SubkompozMeasureScope`,
+  `SubkompozMeasurePolicy` ve `subkompoz(…)` oldu; `ComposeTestRule`, `KompozTestRule` oldu; `recomposeHighlighter`,
+  `showRecompositions` / `LocalShowRecompositions` ve `RecompositionStats`, `rekompozHighlighter`, `showRekompozitions`
+  / `LocalShowRekompozitions` ve `RekompozitionStats` oldu. C++'ta `composable(site, …)` ve `ComposableScope`,
+  `kompozable(site, …)` ve `KompozableScope`; `ComposeHost`, `KompozHost`; `detail::Composer`, `detail::Kompozer`;
+  `composeMovable`, `kompozMovable` oldu. CMake'in `kompoz_compose(target)`'ı `kompozable(target)` (cmake/Kompozable.cmake),
+  testler `kompozable_tests` (tests/kompozable_tests.cpp), rehberin CompositionLocal sayfası kompozition-local.md oldu. CLion
+  eklentisi `dev.kompoz.kompozable` 0.2.0: CLion için yeni bir eklenti, eskisi (`dev.kompoz.compose`) elle kaldırılır.
+  Compose'un kendi adları (rehberin ve yorumların karşılaştırdığı Jetpack adları) olduğu gibi kaldı; navigasyonun
+  `composable(route) { }`'u ve composable, composition, recomposition sözcükleri de.
 - **Kotlin arayüzleri**: kompozc `interface Ad : A, B { … }`'yi okur: soyut ya da gövdeli özellikler ve işlevler
   (`fun describe() = "$name: ${count()}"`, `val title get() = …`); onları sınıflar (yapıcıdaki `override val` de),
   `ViewModel`'lar, data class'lar (alanları özellikleridir), object'ler (`Ad.describe()` arayüzün kendi işlevlerine ulaşır)

@@ -45,7 +45,7 @@ struct TransitionProgress {
     float from = 0, to = 0;
     AnimationSpec spec;
     int64_t start = 0, end = 0;
-    ComposeHost* host = nullptr;
+    KompozHost* host = nullptr;
     float at(int64_t frameTime, bool* done = nullptr) const;
     // On to `target` from where it is at `frameTime`, along `spec`.
     void turn(float target, const AnimationSpec& spec, int64_t frameTime);
@@ -406,8 +406,8 @@ void AnimatedContent(const T& targetState,
         std::optional<SizeTransform> seekSize;
         float seekDuration = 0, seekTime = 0;
     };
-    ComposableScope scope(site);
-    auto& c = detail::Composer::require();
+    KompozableScope scope(site);
+    auto& c = detail::Kompozer::require();
     int64_t now = c.frameTimeNanos();
     auto& s = remember([&] {
         return State{{Item{targetState, 0, now, false, 1, 1, {}, {}}}, targetState, 1, transitionSpec(targetState, targetState).sizeTransform};

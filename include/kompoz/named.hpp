@@ -1288,27 +1288,27 @@ inline constexpr Param<detail::names::CompositingStrategy> compositingStrategy;
 inline constexpr Param<detail::names::BlendMode> blendMode;
 } // namespace arg
 
-// CompositionLocalProvider(LocalX provides x, content = content), with one to three values or a
-// CompositionLocalContext.
+// KompozitionLocalProvider(LocalX provides x, content = content), with one to three values or a
+// KompozitionLocalContext.
 template <class F>
-void CompositionLocalProvider(const detail::Provided& a, const Named<detail::names::Content, F>& content,
+void KompozitionLocalProvider(const detail::Provided& a, const Named<detail::names::Content, F>& content,
                               CallSite site = CallSite::current()) {
-    CompositionLocalProvider({a}, Content(content.value), site);
+    KompozitionLocalProvider({a}, Content(content.value), site);
 }
 template <class F>
-void CompositionLocalProvider(const detail::Provided& a, const detail::Provided& b, const Named<detail::names::Content, F>& content,
+void KompozitionLocalProvider(const detail::Provided& a, const detail::Provided& b, const Named<detail::names::Content, F>& content,
                               CallSite site = CallSite::current()) {
-    CompositionLocalProvider({a, b}, Content(content.value), site);
+    KompozitionLocalProvider({a, b}, Content(content.value), site);
 }
 template <class F>
-void CompositionLocalProvider(const detail::Provided& a, const detail::Provided& b, const detail::Provided& c,
+void KompozitionLocalProvider(const detail::Provided& a, const detail::Provided& b, const detail::Provided& c,
                               const Named<detail::names::Content, F>& content, CallSite site = CallSite::current()) {
-    CompositionLocalProvider({a, b, c}, Content(content.value), site);
+    KompozitionLocalProvider({a, b, c}, Content(content.value), site);
 }
 template <class F>
-void CompositionLocalProvider(const CompositionLocalContext& context, const Named<detail::names::Content, F>& content,
+void KompozitionLocalProvider(const KompozitionLocalContext& context, const Named<detail::names::Content, F>& content,
                               CallSite site = CallSite::current()) {
-    CompositionLocalProvider(context, Content(content.value), site);
+    KompozitionLocalProvider(context, Content(content.value), site);
 }
 
 // Compose's rememberSaveable(saver = …) { … } and rememberSaveable(inputs, saver = …) { … }.

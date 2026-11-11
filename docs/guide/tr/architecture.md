@@ -14,7 +14,7 @@ Durum aşağı akar, olaylar yukarı:
 data class TodoItem(val id: Int, val title: String, val done: Boolean = false)
 
 // Durumsuz: öğeleri gösterir, kullanıcının ne yaptığını bildirir.
-@Composable
+@Kompozable
 fun TodoList(todos: List<TodoItem>, onToggle: (Int, Boolean) -> Unit) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(todos, key = { it.id }) { t ->
@@ -55,7 +55,7 @@ class TodoViewModel : ViewModel() {
     override fun onCleared() { /* abonelikleri iptal et, dosyaları kapat */ }
 }
 
-@Composable
+@Kompozable
 fun TodoScreen() {
     val vm = viewModel<TodoViewModel>()   // sahibi yaşadıkça hep aynısı
     val items by vm.items.collectAsState()
@@ -90,7 +90,7 @@ class NotesViewModel(private val repo: NoteRepository = FakeNotes()) : ViewModel
     }
 }
 
-@Composable
+@Kompozable
 fun NotesScreen() {
     val vm = viewModel<NotesViewModel>()
     Column {
@@ -140,7 +140,7 @@ Her şey arayüz thread'inde, toplayan coroutine içinde çalışır. Coroutine'
 Bir `Channel`, Kotlin'deki gibi değerleri bir coroutine'den (ya da bir tıklama işleyicisinden) ötekine taşır: `send` yer açılmasını bekler, `trySend` hiç beklemez (sonucu alınıp alınmadığını söyler), `receive` sıradaki değeri bekler, `consumeEach` değerleri aralarda askıya alarak tek tek alır. `scope.produce<Int> { send(i) }` bir channel'ı dolduran ve bitince kapatan bir coroutine başlatır.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Kitchen() {
     val orders = remember { Channel<Int>(3) }   // en çok üçü bekler
     var cooking by remember { mutableStateOf("boş") }
@@ -178,7 +178,7 @@ Uygulamanın ve her gezinme girdisinin, öne gelip arkaya gittikçe `Created`, `
 
 ```kotlin
 #! class Player { fun play() {} fun pause() {} }
-@Composable
+@Kompozable
 fun Video(player: Player) {
     LifecycleResumeEffect(Unit) {
         player.play()

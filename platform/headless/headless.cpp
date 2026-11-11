@@ -73,12 +73,12 @@ public:
     }
     MediaInfo media(bool) override { return {}; }  // (no pointer, keyboard, microphone or camera)
 
-    void attach(ComposeHost&, ComposeHost::Callbacks& callbacks) override {
+    void attach(KompozHost&, KompozHost::Callbacks& callbacks) override {
         callbacks.wake = [this] { post({.type = EventType::Wake}); };
         callbacks.getClipboard = [this] { return clipboard_; };  // (the app's own)
         callbacks.setClipboard = [this](const std::string& text) { clipboard_ = text; };
     }
-    void composed(ComposeHost&, bool, int64_t) override {}
+    void composed(KompozHost&, bool, int64_t) override {}
 
     // From any thread: to the core before its next frame, waking the loop.
     void post(const Event& event) {

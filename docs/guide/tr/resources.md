@@ -54,16 +54,16 @@ Bazı bileşenler kendilerine ait metinler gösterir ya da seslendirir: bir meti
 
 - Kompoz'da bunlar İngilizce (`Strings.english()`, varsayılan) ve Türkçe (`Strings.turkish()`) olarak bulunur.
 - Host bunları sistemin tercih ettiği dile göre seçer: Türkçe bir sistemde Türkçe, aksi halde İngilizce. Bunun yerine `KOMPOZ_LANGUAGE=tr` ya da `en` belirleyici olur.
-- Bir uygulama, tamamen kendi yazdığı ya da değiştirdiği metinleri `CompositionLocalProvider` ile sağlar:
+- Bir uygulama, tamamen kendi yazdığı ya da değiştirdiği metinleri `KompozitionLocalProvider` ile sağlar:
 
 ```kotlin
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun Localized() {
     val mine = Strings.english()
     mine.copy = "Duplicate"
     mine.moreOptions = "More"
-    CompositionLocalProvider(LocalStrings provides mine) { App() }
+    KompozitionLocalProvider(LocalStrings provides mine) { App() }
 }
 ```
 
@@ -73,7 +73,7 @@ Başka bir dil için, `datePicker` adları dahil kendi `Strings`'inizi doldurun 
 
 ### Uygulamanızın kendi metinleri
 
-Kompoz uygulamanızın metinlerini çevirmez. Aynı modele uyan basit bir yaklaşım, dil başına metinlerinizi içeren bir struct'tır; kendi `CompositionLocal`'ınızla sağlanır ve `LocalStrings.current().language`'a göre seçilir:
+Kompoz uygulamanızın metinlerini çevirmez. Aynı modele uyan basit bir yaklaşım, dil başına metinlerinizi içeren bir struct'tır; kendi `KompozitionLocal`'ınızla sağlanır ve `LocalStrings.current().language`'a göre seçilir:
 
 ```kotlin
 data class AppTexts(val greeting: String = "", val signIn: String = "")
@@ -81,12 +81,12 @@ data class AppTexts(val greeting: String = "", val signIn: String = "")
 fun textsFor(language: String): AppTexts =
     if (language == "tr") AppTexts("Hoş geldiniz", "Giriş yap") else AppTexts("Welcome", "Sign in")
 
-val LocalAppTexts = compositionLocalOf { AppTexts() }
+val LocalAppTexts = kompozitionLocalOf { AppTexts() }
 
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun Root() {
-    CompositionLocalProvider(LocalAppTexts provides textsFor(LocalStrings.current.language)) { App() }
+    KompozitionLocalProvider(LocalAppTexts provides textsFor(LocalStrings.current.language)) { App() }
 }
 ```
 
@@ -95,7 +95,7 @@ fun Root() {
 Composable'ların bir kompozisyon içinde edindiği ve callback'ler için sakladığı hizmetler; Compose'un `LocalUriHandler`'ı ve benzerleri gibi:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ShareRow(link: String) {
     val links = LocalUriHandler.current
     val clip = LocalClipboardManager.current

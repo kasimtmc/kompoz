@@ -396,7 +396,7 @@ struct OnSizeChangedElement final : ModifierElement {
     }
 };
 
-struct RecomposeHighlighterElement final : ModifierElement {
+struct RekompozHighlighterElement final : ModifierElement {
     void draw(GraphicsContext& canvas, const Rect& bounds, const LayoutNode& node,
               const std::function<void()>& drawContent) const override {
         drawContent();
@@ -410,7 +410,7 @@ struct RecomposeHighlighterElement final : ModifierElement {
     }
     // Always equal: observing recompositions must not cause any.
     bool equals(const ModifierElement& other) const override {
-        return as<RecomposeHighlighterElement>(other) != nullptr;
+        return as<RekompozHighlighterElement>(other) != nullptr;
     }
 };
 
@@ -436,7 +436,7 @@ std::optional<Rect> stateCircle(const Indication& indication, const Rect& bounds
 // Material's state layer at `alpha` (hover, focus, a press without a ripple), then the ripples,
 // clipped to the shape when bounded.
 void drawStateLayer(GraphicsContext& canvas, const Rect& bounds, const LayoutNode& node, const Indication& indication,
-                    const Shape& shape, Color color, float alpha, const std::vector<ComposeHost::RippleDraw>& ripples) {
+                    const Shape& shape, Color color, float alpha, const std::vector<KompozHost::RippleDraw>& ripples) {
     std::optional<Rect> circle = stateCircle(indication, bounds);
     if (alpha > 0 && circle) canvas.fillRoundRect(*circle, circle->width / 2, color.copy(alpha));
     else if (alpha > 0) canvas.fillShape(bounds, shape, node.rtl, color.copy(alpha));
@@ -464,7 +464,7 @@ void ClickableElement::draw(GraphicsContext& canvas, const Rect& bounds, const L
     // focus shows only so, as in Compose's Material 3 (its focus indicator tokens are unused).
     bool flat = indication.kind == Indication::Kind::StateLayer;
     float alpha = flat && node.pressed ? 0.16f : node.focused ? 0.1f : node.hovered ? 0.08f : 0.f;
-    std::vector<ComposeHost::RippleDraw> ripples;
+    std::vector<KompozHost::RippleDraw> ripples;
     if (!flat && node.host()) ripples = node.host()->ripples(node, bounds, indication);
     drawStateLayer(canvas, bounds, node, indication, shape, indication.color.value_or(indicationColor()), alpha, ripples);
 }
@@ -1014,7 +1014,7 @@ Modifier Modifier::clickable(std::function<void()> onClick, const ClickableOptio
         e.interactionSource = options.interactionSource;
     });
 }
-bool detail::overscrollWanted() { return !Composer::current() || LocalOverscrollFactory.current().has_value(); }
+bool detail::overscrollWanted() { return !Kompozer::current() || LocalOverscrollFactory.current().has_value(); }
 namespace {
 thread_local detail::LayoutPass gLayoutPass = detail::LayoutPass::Plain;
 
@@ -1071,7 +1071,7 @@ Modifier Modifier::approachLayout(std::function<bool(Size)> isMeasurementApproac
     return then(std::move(e));
 }
 
-BringIntoViewSpec detail::currentBringIntoViewSpec() { return Composer::current() ? LocalBringIntoViewSpec.current() : BringIntoViewSpec{}; }
+BringIntoViewSpec detail::currentBringIntoViewSpec() { return Kompozer::current() ? LocalBringIntoViewSpec.current() : BringIntoViewSpec{}; }
 
 void OverscrollEffect::draw(ContentDrawScope& scope) { scope.drawContent(); }
 
@@ -1323,14 +1323,14 @@ void IndicationElement::draw(GraphicsContext& canvas, const Rect& bounds, const 
                   : source.collectIsFocusedAsState()       ? 0.1f
                   : source.collectIsHoveredAsState()       ? 0.08f
                                                            : 0.f;
-    std::vector<ComposeHost::RippleDraw> ripples;
+    std::vector<KompozHost::RippleDraw> ripples;
     if (!flat && node.host()) {
         int64_t now = node.host()->frameTime();
-        auto tracks = detail::followPresses(source, now, [now](const detail::PressTrack& t) { return ComposeHost::rippleDone(t.start, t.released, now); });
+        auto tracks = detail::followPresses(source, now, [now](const detail::PressTrack& t) { return KompozHost::rippleDone(t.start, t.released, now); });
         bool moving = false;
         for (const auto& t : tracks) {
-            moving = moving || ComposeHost::rippleMoving(t.start, t.released, now);
-            if (auto r = ComposeHost::rippleAt(bounds, indication, t.origin, t.start, t.released, now)) ripples.push_back(*r);
+            moving = moving || KompozHost::rippleMoving(t.start, t.released, now);
+            if (auto r = KompozHost::rippleAt(bounds, indication, t.origin, t.start, t.released, now)) ripples.push_back(*r);
         }
         if (moving) node.host()->requestRedraw();  // the next frame draws it on (nothing to lay out)
     }
@@ -1543,7 +1543,7 @@ Modifier Modifier::onPreviewKeyEvent(std::function<bool(const KeyEvent&)> onPrev
     });
 }
 Modifier Modifier::focusRequester(const FocusRequester& requester) const {
-    if (auto* c = detail::Composer::current()) requester.data_->host = &c->host();
+    if (auto* c = detail::Kompozer::current()) requester.data_->host = &c->host();
     return with<FocusRequesterElement>(*this, [&](auto& e) { e.requester = requester; });
 }
 
@@ -1609,10 +1609,10 @@ void FocusManager::clearFocus() const {
     if (host_) host_->clearFocus();
 }
 bool FocusManager::moveFocus(FocusDirection direction) const { return host_ && host_->moveFocus(direction); }
-FocusManager focusManager() { return FocusManager(&detail::Composer::require().host()); }
+FocusManager focusManager() { return FocusManager(&detail::Kompozer::require().host()); }
 
-Modifier Modifier::recomposeHighlighter() const {
-    return with<RecomposeHighlighterElement>(*this, [](auto&) {});
+Modifier Modifier::rekompozHighlighter() const {
+    return with<RekompozHighlighterElement>(*this, [](auto&) {});
 }
 Modifier Modifier::then(const Modifier& other) const {
     Modifier m = *this;
@@ -1652,7 +1652,7 @@ Size stackPolicy(LayoutNode& node, const Constraints& c) {
 }
 
 void stackSlot(const Content& content) {
-    Composer::require().emit(
+    Kompozer::require().emit(
         keyOf(CallSite::current()),
         [](LayoutNode& node) {
             node.modifier = {};

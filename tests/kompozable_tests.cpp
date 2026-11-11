@@ -1,5 +1,5 @@
-// @Composable functions written in Compose's own syntax, translated by kompozc before the C++
-// compiler sees this file (kompoz_compose in CMakeLists.txt); the tests check what they do.
+// @Kompozable functions written in Kotlin's syntax, translated by kompozc before the C++
+// compiler sees this file (kompozable in CMakeLists.txt); the tests check what they do.
 
 #include <kompoz/kompoz.hpp>
 #include <kompoz/testing.hpp>
@@ -12,7 +12,7 @@
 #include <vector>
 
 using namespace kompoz;
-using kompoz::testing::ComposeTestRule;
+using kompoz::testing::KompozTestRule;
 
 namespace {
 
@@ -40,7 +40,7 @@ struct Register {
 
 }  // namespace
 
-@Composable
+@Kompozable
 fun Counter(start: Int = 0) {
     var count by remember { mutableStateOf(start) }
     Column {
@@ -50,7 +50,7 @@ fun Counter(start: Int = 0) {
 }
 
 TEST(a_delegated_state_counts) {
-    ComposeTestRule rule([] { Counter(); });
+    KompozTestRule rule([] { Counter(); });
     CHECK(rule.onNodeWithText("Count: 0").exists());
     rule.onNodeWithText("+").performClick();
     rule.onNodeWithText("+").performClick();
@@ -58,15 +58,15 @@ TEST(a_delegated_state_counts) {
 }
 
 // Named arguments in any order, defaults left out, a trailing lambda for the last parameter.
-@Composable
-fun Labeled(label: String, value: Int = 7, suffix: String = "", content: @Composable () -> Unit) {
+@Kompozable
+fun Labeled(label: String, value: Int = 7, suffix: String = "", content: @Kompozable () -> Unit) {
     Row {
         Text("$label=$value$suffix")
         content()
     }
 }
 
-@Composable
+@Kompozable
 fun NamedArguments() {
     Column {
         Labeled(suffix = "!", label = "a") { Text("içerik") }
@@ -75,13 +75,13 @@ fun NamedArguments() {
 }
 
 TEST(named_arguments_go_in_place) {
-    ComposeTestRule rule([] { NamedArguments(); });
+    KompozTestRule rule([] { NamedArguments(); });
     CHECK(rule.onNodeWithText("a=7!").exists());
     CHECK(rule.onNodeWithText("içerik").exists());
     CHECK(rule.onNodeWithText("b=3").exists());
 }
 
-@Composable
+@Kompozable
 fun Branches(n: Int) {
     Column {
         for (i in 0 until n) {
@@ -101,16 +101,16 @@ fun Branches(n: Int) {
 }
 
 TEST(loops_ifs_and_whens) {
-    ComposeTestRule rule([] { Branches(4); });
+    KompozTestRule rule([] { Branches(4); });
     CHECK(rule.onNodeWithText("satır 0").exists() && rule.onNodeWithText("satır 3").exists());
     CHECK(!rule.onNodeWithText("satır 4").exists());
     CHECK(rule.onNodeWithText("geri 10").exists() && rule.onNodeWithText("geri 8").exists() && !rule.onNodeWithText("geri 9").exists());
     CHECK(rule.onNodeWithText("çok").exists() && rule.onNodeWithText("orta").exists() && rule.onNodeWithText("çift").exists());
-    ComposeTestRule none([] { Branches(0); });
+    KompozTestRule none([] { Branches(0); });
     CHECK(!none.onNodeWithText("satır 0").exists() && none.onNodeWithText("sıfır").exists() && none.onNodeWithText("az").exists());
 }
 
-@Composable
+@Kompozable
 fun Templates() {
     val ratio = 2.5f
     val whole = 3f
@@ -119,11 +119,11 @@ fun Templates() {
 }
 
 TEST(string_templates_write_numbers_as_kotlin_does) {
-    ComposeTestRule rule([] { Templates(); });
+    KompozTestRule rule([] { Templates(); });
     CHECK(rule.onNodeWithTag("t").text() == "6 harf, 2.5, 3.0, 5.0");
 }
 
-@Composable
+@Kompozable
 fun Collections() {
     val names = listOf("ayla", "ali", "veli")
     Column {
@@ -145,14 +145,14 @@ fun Collections() {
 }
 
 TEST(kotlin_standard_functions) {
-    ComposeTestRule rule([] { Collections(); });
+    KompozTestRule rule([] { Collections(); });
     CHECK(rule.onNodeWithText("AYLA").exists() && rule.onNodeWithText("ALI").exists() && !rule.onNodeWithText("VELI").exists());
     CHECK(rule.onNodeWithTag("lengths").text() == "4+3+4");
     CHECK(rule.onNodeWithTag("indent").text() == "bir\n  iki");
     CHECK(rule.onNodeWithText("yok").exists() && rule.onNodeWithText("var: 4").exists() && rule.onNodeWithText("son: veli").exists());
 }
 
-@Composable
+@Kompozable
 fun Ticker() {
     var ticks by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
@@ -165,7 +165,7 @@ fun Ticker() {
 }
 
 TEST(launched_effect_is_a_coroutine) {
-    ComposeTestRule rule([] { Ticker(); });
+    KompozTestRule rule([] { Ticker(); });
     rule.advanceTimeBy(150);
     CHECK(rule.onNodeWithText("tik 1").exists());
     rule.advanceTimeBy(500);
@@ -174,12 +174,12 @@ TEST(launched_effect_is_a_coroutine) {
 
 data class Note(val id: Int, val title: String, val pinned: Boolean = false, val tags: List<String> = listOf())
 
-@Composable
+@Kompozable
 fun NoteRow(note: Note) {
     Text("${note.id}: ${note.title}${if (note.pinned) " *" else ""}")
 }
 
-@Composable
+@Kompozable
 fun Notes() {
     val a = Note(title = "alışveriş", id = 1)
     val b = a.copy(pinned = true, title = "iş")
@@ -192,14 +192,14 @@ fun Notes() {
 }
 
 TEST(data_classes) {
-    ComposeTestRule rule([] { Notes(); });
+    KompozTestRule rule([] { Notes(); });
     CHECK(rule.onNodeWithText("1: alışveriş").exists() && rule.onNodeWithText("1: iş *").exists());
     CHECK(rule.onNodeWithTag("str").text() == "Note(id=1, title=iş, pinned=true, tags=[])");
     CHECK(rule.onNodeWithText("eşit").exists());
 }
 
 // The arguments a composable needs (onClick, value, checked, ...) by their names too.
-@Composable
+@Kompozable
 fun NamedHeads() {
     var on by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
@@ -214,7 +214,7 @@ fun NamedHeads() {
 }
 
 TEST(required_arguments_by_name) {
-    ComposeTestRule rule([] { NamedHeads(); });
+    KompozTestRule rule([] { NamedHeads(); });
     CHECK(rule.onNodeWithText("kapalı").exists());
     rule.onNodeWithText("düğme").performClick();
     CHECK(rule.onNodeWithText("değer: basıldı").exists());
@@ -231,7 +231,7 @@ struct Size2 {
     int height = 0;
 };
 
-@Composable
+@Kompozable
 fun StructsByName() {
     val s = Size2(height = 3, width = 2)
     Column {
@@ -241,16 +241,16 @@ fun StructsByName() {
 }
 
 TEST(structs_by_name) {
-    ComposeTestRule rule([] { StructsByName(); });
+    KompozTestRule rule([] { StructsByName(); });
     CHECK(rule.onNodeWithTag("boyut").text() == "2x3");
     CHECK(rule.onNodeWithTag("stil").bounds().height > 30);
 }
 
 // The user's own Compose code, as written for Android (textSize() is theirs too).
-@Composable
+@Kompozable
 fun textSize(): TextUnit = 18.sp
 
-@Composable
+@Kompozable
 fun AddTextDialog(
     colors: ColorScheme,
     title: String,
@@ -346,7 +346,7 @@ fun AddTextDialog(
     }
 }
 
-@Composable
+@Kompozable
 fun DialogHost(saved: (String) -> Unit) {
     var open by remember { mutableStateOf(true) }
     if (open) {
@@ -367,13 +367,13 @@ fun DialogHost(saved: (String) -> Unit) {
 
 TEST(the_users_add_text_dialog) {
     auto saved = std::make_shared<std::string>();
-    ComposeTestRule rule([saved] { DialogHost([saved](std::string s) { *saved = s; }); });
+    KompozTestRule rule([saved] { DialogHost([saved](std::string s) { *saved = s; }); });
     CHECK(rule.onNodeWithText("Vazgeç").exists() && rule.onNodeWithText("Ekle").exists());
     *saved = "-";
     rule.onNodeWithText("Ekle").performClick();
     CHECK(saved->empty());  // (nothing typed)
     CHECK(!rule.onNodeWithText("Ekle").exists());
-    ComposeTestRule cancel([saved] { DialogHost([saved](std::string s) { *saved = s; }); });
+    KompozTestRule cancel([saved] { DialogHost([saved](std::string s) { *saved = s; }); });
     *saved = "-";
     cancel.onNodeWithText("Vazgeç").performClick();
     CHECK(*saved == "-" && !cancel.onNodeWithText("Vazgeç").exists());
@@ -385,7 +385,7 @@ object AppIcons {
     val Add = Icons.Default.Add
 }
 
-@Composable
+@Kompozable
 fun ScaffoldExample() {
     var presses by remember { mutableIntStateOf(0) }
 
@@ -456,7 +456,7 @@ object Tally {
     }
 }
 
-@Composable
+@Kompozable
 fun ObjectForms() {
     var shown by remember { mutableStateOf(Tally.describe()) }
     Column {
@@ -469,7 +469,7 @@ fun ObjectForms() {
 }
 
 TEST(objects_with_members) {
-    ComposeTestRule rule([] { ObjectForms(); });
+    KompozTestRule rule([] { ObjectForms(); });
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("toplam 10").exists());
     rule.onNodeWithText("Ekle").performClick();
@@ -498,7 +498,7 @@ data class Disc(val r: Float) : Figure
 
 object Speck : Figure
 
-@Composable
+@Kompozable
 fun LoadView(state: LoadState) {
     when (state) {
         is LoadState.Loading -> Text("yükleniyor")
@@ -514,7 +514,7 @@ fun describe(figure: Figure): String = when (figure) {
 
 fun area(figure: Figure): Float = if (figure is Disc && figure.r > 0f) figure.r * figure.r else 0f
 
-@Composable
+@Kompozable
 fun SealedForms() {
     var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
     Column {
@@ -529,7 +529,7 @@ fun SealedForms() {
 }
 
 TEST(sealed_classes_and_is) {
-    ComposeTestRule rule([] { SealedForms(); });
+    KompozTestRule rule([] { SealedForms(); });
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("yükleniyor").exists());
     std::string line = rule.onNodeWithText("disk ", true).text();
@@ -544,7 +544,7 @@ TEST(sealed_classes_and_is) {
 }
 
 TEST(composes_scaffold_sample) {
-    ComposeTestRule rule([] { ScaffoldExample(); });
+    KompozTestRule rule([] { ScaffoldExample(); });
     CHECK(rule.onNodeWithText("Top app bar").exists() && rule.onNodeWithText("Bottom app bar").exists());
     CHECK(rule.onNodeWithText("You have pressed the floating action button 0 times.", true).exists());
     rule.onNodeWithContentDescription("Add").performClick();
@@ -553,8 +553,8 @@ TEST(composes_scaffold_sample) {
     CHECK(rule.onNodeWithText("This is an example of a scaffold.", true).text().starts_with("This is an example"));  // (trimIndent: no indent)
 }
 
-// From compose_tests_other.cpp, as from another Kotlin file of the module.
-@Composable
+// From kompozable_tests_other.cpp, as from another Kotlin file of the module.
+@Kompozable
 fun OtherFile() {
     Column {
         StickerRow(suffix = "!", sticker = Sticker(count = 3, label = "yeni"))
@@ -563,20 +563,20 @@ fun OtherFile() {
 }
 
 TEST(another_files_composables) {
-    ComposeTestRule rule([] { OtherFile(); });
+    KompozTestRule rule([] { OtherFile(); });
     CHECK(rule.onNodeWithText("yeni:3!").exists() && rule.onNodeWithText("eski:0").exists());
 }
 
 // From this file's C++ too: a file of the target still in C++ calls the module's Kotlin (the
 // other file's function and data class) with no header, as the showcase's files do.
 TEST(cpp_calls_the_modules_kotlin) {
-    ComposeTestRule rule([] { StickerRow(Sticker{"çıkartma", 3}, "", "!"); });
+    KompozTestRule rule([] { StickerRow(Sticker{"çıkartma", 3}, "", "!"); });
     CHECK(rule.onNodeWithText("çıkartma:3!").exists());
 }
 
 // Kotlin's String.format with Java's specifiers, more of its collection functions, x++ as a value
 // on a state, ListItemDefaults.colors and a constexpr constructor called by place (CornerRadius(24f)).
-@Composable
+@Kompozable
 fun KotlinHelpers() {
     var nextId by remember { mutableStateOf(4) }
     val ids = remember { mutableStateListOf(1, 2, 3) }
@@ -599,7 +599,7 @@ fun KotlinHelpers() {
 }
 
 TEST(kotlin_helpers_through_kompozc) {
-    ComposeTestRule rule([] { KotlinHelpers(); });
+    KompozTestRule rule([] { KotlinHelpers(); });
     CHECK(rule.onNodeWithText("1.2 km · 007 dk · ab  | · ff").exists() || rule.onNodeWithText("1.3 km · 007 dk · ab  | · ff").exists());
     CHECK(rule.onNodeWithText("ilk 0 son 2").exists());
     CHECK(rule.onNodeWithText("a: armut, ayva · öteki: 3 · gruplar: 3 · en uzun: armut").exists());
@@ -618,7 +618,7 @@ struct Mail {
     std::string from;  // (no ==: a list of it is never compared, so its composable isn't skipped)
 };
 
-@Composable
+@Kompozable
 fun Inbox(mails: List<Mail>, log: (String) -> Unit) {
     DisposableEffect(mails.size) {
         log("açıldı ${mails.size}")
@@ -626,7 +626,7 @@ fun Inbox(mails: List<Mail>, log: (String) -> Unit) {
     }
     MaterialTheme(colorScheme = darkColorScheme()) {
         Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surface) {
-            CompositionLocalProvider(LocalContentColor provides Color.Red) {
+            KompozitionLocalProvider(LocalContentColor provides Color.Red) {
                 LazyColumn(modifier = Modifier.height(300.dp)) {
                     item { Text("Gelen kutusu") }
                     itemsIndexed(mails) { index, mail -> Text("$index: ${mail.from}", color = LocalContentColor.current) }
@@ -639,7 +639,7 @@ fun Inbox(mails: List<Mail>, log: (String) -> Unit) {
 TEST(lazy_items_effects_and_locals) {
     auto log = std::make_shared<std::vector<std::string>>();
     auto show = mutableStateOf(true);
-    ComposeTestRule rule([log, show] {
+    KompozTestRule rule([log, show] {
         if (show.get()) Inbox({Mail{"ayşe"}, Mail{"ali"}}, [log](std::string s) { log->push_back(std::move(s)); });
     });
     CHECK(rule.onNodeWithText("Gelen kutusu").exists() && rule.onNodeWithText("1: ali").exists());
@@ -649,7 +649,7 @@ TEST(lazy_items_effects_and_locals) {
 }
 
 // ListItem as Compose writes it: its slots by name; an interactive one's headline is its block.
-@Composable
+@Kompozable
 fun Settings() {
     var wifi by remember { mutableStateOf(false) }
     var opened by remember { mutableStateOf(0) }
@@ -661,7 +661,7 @@ fun Settings() {
 }
 
 TEST(list_items_by_name) {
-    ComposeTestRule rule([] { Settings(); });
+    KompozTestRule rule([] { Settings(); });
     CHECK(rule.onNodeWithText("Kapalı").exists() && rule.onNodeWithText("0 kez").exists());
     rule.onNodeWithText("Wi-Fi'yi aç").performClick();
     rule.onNodeWithText("Hakkında").performClick();
@@ -671,13 +671,13 @@ TEST(list_items_by_name) {
 // A lazy list's items with Compose's key = { … }: an item's state follows it when the list changes.
 data class Row2(val id: Int, val label: String)
 
-@Composable
+@Kompozable
 fun KeyedRow(row: Row2) {
     var taps by remember { mutableStateOf(0) }
     Text("${row.label}:$taps", modifier = Modifier.clickable { taps++ })
 }
 
-@Composable
+@Kompozable
 fun KeyedList(rows: List<Row2>) {
     LazyColumn(modifier = Modifier.height(400.dp)) {
         item(key = "başlık") { Text("Satırlar") }
@@ -688,7 +688,7 @@ fun KeyedList(rows: List<Row2>) {
 
 TEST(lazy_keys_by_name) {
     auto rows = mutableStateOf(std::vector<Row2>{Row2{1, "bir"}, Row2{2, "iki"}});
-    ComposeTestRule rule([rows] { KeyedList(rows.get()); });
+    KompozTestRule rule([rows] { KeyedList(rows.get()); });
     rule.onNodeWithText("iki:0").performClick();
     CHECK(rule.onNodeWithText("iki:1").exists());
     rows.set({Row2{2, "iki"}});  // the first one gone: "iki" keeps its taps
@@ -707,7 +707,7 @@ const auto townSaver = mapSaver<Town>([](const Town& t) { return SavedValue::Map
                                           return n ? std::optional(Town{*n}) : std::nullopt;
                                       });
 
-@Composable
+@Kompozable
 fun StateForms() {
     val list = rememberLazyListState()
     val todos = remember { mutableStateOf(listOf("bir")) }
@@ -728,7 +728,7 @@ fun StateForms() {
 }
 
 TEST(state_forms_as_compose_writes_them) {
-    ComposeTestRule rule([] { StateForms(); });
+    KompozTestRule rule([] { StateForms(); });
     CHECK(rule.onNodeWithText("ilk görünen 0").exists() && rule.onNodeWithText("yapılacak 1").exists());
     CHECK(rule.onNodeWithText("etiket 2").exists() && rule.onNodeWithText("İzmir 0").exists());
     rule.onNodeWithText("ekle").performClick();
@@ -742,7 +742,7 @@ TaskOf<int> slowDouble(int x) {
     co_return x * 2;
 }
 
-@Composable
+@Kompozable
 fun Awaits() {
     val produced by produceState(0, 21) { value = slowDouble(21) }
     var both by remember { mutableStateOf("…") }
@@ -811,7 +811,7 @@ fun kindOf(t: Titled): String = when (t) {
     else -> "başka"
 }
 
-@Composable
+@Kompozable
 fun InterfaceForms() {
     val vm = viewModel<ShelfViewModel>()
     val nonEmpty = Check { it.isNotEmpty() }
@@ -832,7 +832,7 @@ fun InterfaceForms() {
 }
 
 TEST(interfaces_as_kotlin_writes_them) {
-    ComposeTestRule rule([] { InterfaceForms(); });
+    KompozTestRule rule([] { InterfaceForms(); });
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("[sahte] 2").exists());
     CHECK(rule.onNodeWithText("<raf> [adsız] [boş] [etiket] [boş]").exists());
@@ -872,7 +872,7 @@ object Prefs {
     val mode get() = if (dark) "koyu" else "açık"
 }
 
-@Composable
+@Kompozable
 fun DelegatedMembers() {
     val vm = viewModel<CounterViewModel>()
     val form = remember { FormState() }
@@ -890,7 +890,7 @@ fun DelegatedMembers() {
 }
 
 TEST(class_properties_by_delegates_and_accessors) {
-    ComposeTestRule rule([] { DelegatedMembers(); });
+    KompozTestRule rule([] { DelegatedMembers(); });
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("0 0 sayaç 0").exists() && rule.onNodeWithText("|false|merhaba açık").exists());
     rule.onNodeWithText("Artır").performClick();
@@ -937,7 +937,7 @@ class Counting : Source {
     }
 }
 
-@Composable
+@Kompozable
 fun SuspendFunctions() {
     var text by remember { mutableStateOf("…") }
     LaunchedEffect(Unit) {
@@ -952,14 +952,14 @@ fun SuspendFunctions() {
 }
 
 TEST(suspend_functions) {
-    ComposeTestRule rule([] { SuspendFunctions(); });
+    KompozTestRule rule([] { SuspendFunctions(); });
     CHECK(rule.onNodeWithText("…").exists());
     rule.advanceTimeBy(1500);
     CHECK(rule.onNodeWithText("merhaba dünya [1, 2] 20 2 1").exists() || (std::printf("metin: %s\n", rule.onNodeWithText("merhaba", true).text().c_str()), false));
 }
 
 TEST(coroutines_await_what_suspends) {
-    ComposeTestRule rule([] { Awaits(); });
+    KompozTestRule rule([] { Awaits(); });
     CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());
     rule.advanceTimeBy(400);
     CHECK(rule.onNodeWithText("üretilen 42").exists() && rule.onNodeWithText("ikisi 6 X").exists());
@@ -967,7 +967,7 @@ TEST(coroutines_await_what_suspends) {
 
 // A lambda with a receiver (Kotlin's T.() -> R): what its body doesn't declare is the receiver's,
 // a local of the same name first, as in Kotlin; `this` is the receiver.
-@Composable
+@Kompozable
 fun Receivers(tint: Color) {
     val alpha = 0.5f
     Column {
@@ -981,7 +981,7 @@ fun Receivers(tint: Color) {
 
 TEST(lambdas_with_receivers) {
     Color tint = Color(0xFF123456);
-    ComposeTestRule rule([=] { Receivers(tint); });
+    KompozTestRule rule([=] { Receivers(tint); });
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
     CHECK(std::count(canvas.layerAlphas.begin(), canvas.layerAlphas.end(), 0.5f) == 1);
@@ -995,27 +995,27 @@ TEST(lambdas_with_receivers) {
 data class Spacing(val small: Dp = 4.dp, val large: Dp = 16.dp)
 data class Account(val name: String)
 
-@Composable
+@Kompozable
 fun SpacedTitle(title: String) {
     Text("$title ${LocalSpacing.current.large} $StickerGreeting")
 }
 
-val LocalSpacing = staticCompositionLocalOf { Spacing() }
-val LocalAccount = compositionLocalOf<Account> { error("LocalAccount was not provided") }
+val LocalSpacing = staticKompozitionLocalOf { Spacing() }
+val LocalAccount = kompozitionLocalOf<Account> { error("LocalAccount was not provided") }
 private val Purple = Color(0xFF6650A4)
 
-@Composable
-fun AppTheme(content: @Composable () -> Unit) {
+@Kompozable
+fun AppTheme(content: @Kompozable () -> Unit) {
     MaterialTheme(colorScheme = lightColorScheme(), content = content)
 }
 
-@Composable
+@Kompozable
 fun Locals() {
     AppTheme {
         Column {
             SpacedTitle("geniş")
-            CompositionLocalProvider(LocalSpacing provides Spacing(2.dp, 8.dp), content = { SpacedTitle("dar") })
-            CompositionLocalProvider(LocalAccount provides Account("Ada")) {
+            KompozitionLocalProvider(LocalSpacing provides Spacing(2.dp, 8.dp), content = { SpacedTitle("dar") })
+            KompozitionLocalProvider(LocalAccount provides Account("Ada")) {
                 Box(modifier = Modifier.background(Purple), content = { Text(LocalAccount.current.name) })
             }
         }
@@ -1023,7 +1023,7 @@ fun Locals() {
 }
 
 TEST(top_level_vals_and_content_by_name) {
-    ComposeTestRule rule([] { Locals(); });
+    KompozTestRule rule([] { Locals(); });
     CHECK(rule.onNodeWithText("geniş 16.0 selam !").exists() && rule.onNodeWithText("dar 8.0 selam !").exists());
     CHECK(rule.onNodeWithText("Ada").exists());
     bool threw = false;
@@ -1054,7 +1054,7 @@ private fun label(count: Int): String {
 
 fun shout(text: String) = text.uppercase() + "!"
 
-@Composable
+@Kompozable
 fun Extensions() {
     Column {
         Box(modifier = Modifier.testTag("framed").framed(Color.Red).tallerBy(8.dp)) { Text(label(1)) }
@@ -1063,7 +1063,7 @@ fun Extensions() {
 }
 
 TEST(plain_and_extension_functions) {
-    ComposeTestRule rule([] { Extensions(); });
+    KompozTestRule rule([] { Extensions(); });
     CHECK(rule.onNodeWithText("one item").exists() && rule.onNodeWithText("3 ITEMS!").exists());
     Rect box = rule.onNodeWithTag("framed").bounds(), text = rule.onNodeWithText("one item").bounds();
     // (a border takes no room: 4 dp of padding each side, 8 more above)
@@ -1076,7 +1076,7 @@ TEST(plain_and_extension_functions) {
 
 // Layouts as Compose writes them: FlexBox's and Grid's config = { … } on their scopes, flex { … },
 // 1.fr, FlowRow's arrangements, BoxWithConstraints' maxWidth, mediaQuery { … }.
-@Composable
+@Kompozable
 fun ComposeLayouts() {
     Column {
         FlexBox(modifier = Modifier.width(200.dp).testTag("flex"), config = { columnGap(10.dp) }) {
@@ -1101,7 +1101,7 @@ fun ComposeLayouts() {
 }
 
 TEST(layouts_as_compose_writes_them) {
-    ComposeTestRule rule([] { ComposeLayouts(); });
+    KompozTestRule rule([] { ComposeLayouts(); });
     Rect box = rule.onNodeWithTag("flex").bounds(), grown = rule.onNodeWithTag("grows").bounds();
     CHECK(std::abs(grown.x - box.x - 50) < 0.5f && std::abs(grown.width - 150) < 0.5f);
     Rect cell = rule.onNodeWithTag("cell").bounds();
@@ -1111,9 +1111,9 @@ TEST(layouts_as_compose_writes_them) {
 }
 
 // Compose's custom layouts: Layout's measure policy with layout(w, h) { … }, a var changed in
-// forEach { } (an inline function's lambda reaches it by reference), SubcomposeLayout.
-@Composable
-fun Staircase(indent: Dp, content: @Composable () -> Unit) {
+// forEach { } (an inline function's lambda reaches it by reference), SubkompozLayout.
+@Kompozable
+fun Staircase(indent: Dp, content: @Kompozable () -> Unit) {
     Layout(content = content, modifier = Modifier.testTag("stairs")) { measurables, constraints ->
         val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0f, minHeight = 0f)) }
         var width = 0f
@@ -1134,13 +1134,13 @@ fun Staircase(indent: Dp, content: @Composable () -> Unit) {
     }
 }
 
-@Composable
-fun Underlined(content: @Composable () -> Unit) {
-    SubcomposeLayout(modifier = Modifier.testTag("underlined")) { constraints ->
-        val main = subcompose("main", content).map { it.measure(constraints.copy(minWidth = 0f, minHeight = 0f)) }
+@Kompozable
+fun Underlined(content: @Kompozable () -> Unit) {
+    SubkompozLayout(modifier = Modifier.testTag("underlined")) { constraints ->
+        val main = subkompoz("main", content).map { it.measure(constraints.copy(minWidth = 0f, minHeight = 0f)) }
         val width = main.maxOf { it.width }  // (composed as it is asked for: there on the first pass)
         val height = main.sumOf { it.height }
-        val line = subcompose("line", width) { Box(modifier = Modifier.size(width, 2.dp)) }.map { it.measure(constraints) }
+        val line = subkompoz("line", width) { Box(modifier = Modifier.size(width, 2.dp)) }.map { it.measure(constraints) }
         layout(width, height + 2f) {
             main.forEach { it.placeRelative(0f, 0f) }
             line.forEach { it.placeRelative(0f, height) }
@@ -1148,7 +1148,7 @@ fun Underlined(content: @Composable () -> Unit) {
     }
 }
 
-@Composable
+@Kompozable
 fun CustomLayouts() {
     Column {
         Staircase(24.dp) {
@@ -1161,7 +1161,7 @@ fun CustomLayouts() {
 }
 
 TEST(custom_layouts_as_compose_writes_them) {
-    ComposeTestRule rule([] { CustomLayouts(); });
+    KompozTestRule rule([] { CustomLayouts(); });
     Rect stairs = rule.onNodeWithTag("stairs").bounds(), last = rule.onNodeWithTag("step2").bounds();
     CHECK(std::abs(last.x - stairs.x - 48) < 0.5f && std::abs(last.y - stairs.y - 40) < 0.5f);
     CHECK(std::abs(stairs.width - 68) < 0.5f && std::abs(stairs.height - 60) < 0.5f);
@@ -1178,7 +1178,7 @@ fun counting(counter: MutableState<Float>) = object : NestedScrollConnection {
     }
 }
 
-@Composable
+@Kompozable
 fun SpannedGrid() {
     LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.width(300.dp).height(100.dp)) {
         item(span = { GridItemSpan(maxLineSpan) }) { Box(modifier = Modifier.fillMaxWidth().height(20.dp).testTag("header")) }
@@ -1193,13 +1193,13 @@ TEST(objects_and_spans) {
     auto connection = counting(counter);
     Offset used = connection->onPreScroll({0, 10}, NestedScrollSource::UserInput);
     CHECK(counter.get() == 10 && used.y == 5);
-    ComposeTestRule rule([] { SpannedGrid(); });
+    KompozTestRule rule([] { SpannedGrid(); });
     CHECK(std::abs(rule.onNodeWithTag("header").bounds().width - 300) < 0.5f && std::abs(rule.onNodeWithTag("a").bounds().width - 200) < 0.5f);
 }
 
 // Material as Compose writes it: chips with label = { }, toggleable(role = Role.Checkbox), a
 // snackbar awaited with actionLabel, progress = { }, NavigationSuiteScaffold's items block.
-@Composable
+@Kompozable
 fun MaterialForms(undo: () -> Unit) {
     var unread by remember { mutableStateOf(false) }
     var muted by remember { mutableStateOf(false) }
@@ -1234,7 +1234,7 @@ fun MaterialForms(undo: () -> Unit) {
 
 TEST(material_as_compose_writes_it) {
     int undone = 0;
-    ComposeTestRule rule([&] { MaterialForms([&] { ++undone; }); }, {400, 800});
+    KompozTestRule rule([&] { MaterialForms([&] { ++undone; }); }, {400, 800});
     rule.onNodeWithTag("chip").performClick();
     rule.onNodeWithTag("row").performClick();
     CHECK(rule.onNodeWithTag("bar").exists() && rule.onNodeWithText("Tab 0").exists());
@@ -1261,10 +1261,10 @@ fun schemeFor(choice: ThemeChoice): ColorScheme = when (choice) {
 int gNextId = 0;
 Shape gMedium;
 
-@Composable
+@Kompozable
 fun counted(): Int = remember { ++gNextId }
 
-@Composable
+@Kompozable
 fun Themed(choice: ThemeChoice) {
     val base = MaterialTheme.typography
     val type = base.copy(headlineSmall = base.headlineSmall.copy(fontFamily = FontFamily.Serif, fontSize = 30.sp))
@@ -1282,7 +1282,7 @@ fun Themed(choice: ThemeChoice) {
 
 TEST(theming_as_compose_writes_it) {
     CHECK(schemeFor(ThemeChoice::Dark).primary == Color::argb(0xFF9ECAFF) && schemeFor(ThemeChoice::Light).onPrimary == Color::White);  // (Color(Long): AARRGGBB)
-    ComposeTestRule rule([] { Themed(ThemeChoice::System); });
+    KompozTestRule rule([] { Themed(ThemeChoice::System); });
     CHECK(rule.onNodeWithTag("size").text() == "30");
     CHECK(gMedium == RoundedCornerShape(20));
     CHECK(rule.onNodeWithText("a 1").exists() && rule.onNodeWithText("b 2").exists());
@@ -1296,7 +1296,7 @@ TEST(theming_as_compose_writes_it) {
 // label and supporting text, a state field with lineLimits and a placeholder, a measurer in a Canvas.
 fun openTerms() {}
 
-@Composable
+@Kompozable
 fun TextForms() {
     var email by remember { mutableStateOf("") }
     val message = rememberTextFieldState()
@@ -1318,7 +1318,7 @@ fun TextForms() {
 }
 
 TEST(text_as_compose_writes_it) {
-    ComposeTestRule rule([] { TextForms(); });
+    KompozTestRule rule([] { TextForms(); });
     CHECK(rule.onNodeWithText("accept the terms now", true).exists());
     CHECK(rule.onNodeWithText("Email").exists() && rule.onNodeWithText("Never shared").exists() && rule.onNodeWithText("Message").exists());
     CHECK(rule.onNodeWithText("Order KMP-1").exists());
@@ -1345,7 +1345,7 @@ val BadgeIcon = ImageVector.Builder("Badge", 24.dp, 24.dp, 24f, 24f)
     }
     .build()
 
-@Composable
+@Kompozable
 fun Drawings() {
     val ink = Color.White.copy(alpha = 0.5f)
     Column {
@@ -1369,7 +1369,7 @@ fun Drawings() {
 }
 
 TEST(graphics_as_compose_writes_it) {
-    ComposeTestRule rule([] { Drawings(); });
+    KompozTestRule rule([] { Drawings(); });
     CHECK(rule.onNodeWithTag("tuval").exists());
     CHECK(rule.onNodeWithContentDescription("Badge").exists());
     CHECK(rule.onNodeWithContentDescription("Done").exists());
@@ -1385,7 +1385,7 @@ TEST(graphics_as_compose_writes_it) {
 enum class Panel { Closed, Open }
 val InkBlue = Color(0xFF1E88E5)   // Compose's Color(Long): AARRGGBB
 
-@Composable
+@Kompozable
 fun Animations(open: Boolean, count: Int) {
     val scale by animateFloatAsState(if (open) 1.2f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "scale")
     val tint by animateColorAsState(if (open) Color.White else Color.Black, tween(300))
@@ -1428,7 +1428,7 @@ fun Animations(open: Boolean, count: Int) {
 TEST(animation_as_compose_writes_it) {
     auto open = mutableStateOf(false);
     auto count = mutableStateOf(0);
-    ComposeTestRule rule([&] { Animations(open.get(), count.get()); });
+    KompozTestRule rule([&] { Animations(open.get(), count.get()); });
     CHECK(rule.onNodeWithText("ölçek 10").exists() && rule.onNodeWithText("sayı 0").exists() && rule.onNodeWithText("kapalı").exists());
     CHECK(!rule.onNodeWithText("ayrıntılar").exists() && rule.onNodeWithTag("küçük").exists());
     CHECK(std::abs(rule.onNodeWithTag("kutu").bounds().width - 80) < 0.5f);
@@ -1445,7 +1445,7 @@ TEST(animation_as_compose_writes_it) {
 // its infix `at`, draggable and dragAndDropTarget by name, a drag's points in a state list.
 enum class DragValue { Start, End }
 
-@Composable
+@Kompozable
 fun Gestures(onEvent: (String) -> Unit) {
     var x by remember { mutableStateOf(0f) }
     val state = rememberAnchoredDraggableState(DragValue.Start)
@@ -1472,7 +1472,7 @@ fun Gestures(onEvent: (String) -> Unit) {
 
 TEST(gestures_as_compose_writes_it) {
     std::vector<std::string> log;
-    ComposeTestRule rule([&] { Gestures([&](std::string e) { log.push_back(std::move(e)); }); });
+    KompozTestRule rule([&] { Gestures([&](std::string e) { log.push_back(std::move(e)); }); });
     CHECK(rule.onNodeWithText("x 0 noktalar 0 konum 0").exists());
     rule.swipe({10, 28}, {40, 28});
     int x = std::stoi(rule.onNodeWithText("x ", true).text().substr(2));
@@ -1527,7 +1527,7 @@ class QueryViewModel(private val state: SavedStateHandle) : ViewModel() {
 
 class Player { var playing = false; fun play() { playing = true } fun pause() { playing = false } }
 
-@Composable
+@Kompozable
 fun TodoScreen(player: Player) {
     val vm = viewModel<TodoViewModel>()
     val items by vm.items.collectAsState()
@@ -1544,7 +1544,7 @@ fun TodoScreen(player: Player) {
 
 TEST(classes_as_kotlin_writes_them) {
     Player player;
-    ComposeTestRule rule([&] { TodoScreen(player); });
+    KompozTestRule rule([&] { TodoScreen(player); });
     CHECK(rule.onNodeWithText("Yaz").exists());
     CHECK(player.kompoz_object().playing);  // (the composable copied the handle: the same object)
     rule.onNodeWithText("Yaz").performClick();
@@ -1571,7 +1571,7 @@ data class Detail(val id: Int, val tab: String? = null)
 @Serializable
 object Start
 
-@Composable
+@Kompozable
 fun Navigator(nav: NavController) {
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
@@ -1609,7 +1609,7 @@ struct Item {
 
 enum class Side { Left, Right }
 
-@Composable
+@Kompozable
 fun SideLine(vm: TodoViewModel, side: Side) {
     val items by vm.items.collectAsState()
     val counts = mapOf(1 to 3)
@@ -1618,7 +1618,7 @@ fun SideLine(vm: TodoViewModel, side: Side) {
     Text("öğe ${items.size} · ${side.ordinal} · $n $m · ${counts.keys.sum()} · ${counts.values.sum()} · ${routes.Item(7).n}")
 }
 
-@Composable
+@Kompozable
 fun Mixed() {
     val vm = viewModel<TodoViewModel>()
     var pick by remember { mutableStateOf(0) }
@@ -1641,7 +1641,7 @@ fun Mixed() {
 }
 
 TEST(view_models_maps_and_segments_as_kotlin_writes_them) {
-    ComposeTestRule rule([] { Mixed(); });
+    KompozTestRule rule([] { Mixed(); });
     CHECK(rule.onNodeWithText("öğe 2 · 1 · 3 0 · 1 · 3 · 7").exists());
     rule.onNodeWithText("İki").performClick();
     rule.onNodeWithText("Kalın").performClick();
@@ -1653,7 +1653,7 @@ TEST(view_models_maps_and_segments_as_kotlin_writes_them) {
 // M3 Expressive's buttons as Compose writes them: a connected ButtonGroup (Modifier.animateWidth), a
 // group from items with its overflowIndicator, a toggle button, a split button, a Label; a slider's
 // valueRange and a RangeSlider's range value; a lambda or null, a value or null, ifEmpty.
-@Composable
+@Kompozable
 fun Expressive() {
     var last by remember { mutableStateOf("") }
     var bold by remember { mutableStateOf(false) }
@@ -1698,7 +1698,7 @@ fun Expressive() {
 }
 
 TEST(expressive_buttons_and_sliders_as_compose_writes_them) {
-    ComposeTestRule rule([] { Expressive(); });
+    KompozTestRule rule([] { Expressive(); });
     CHECK(rule.onNodeWithText("son: yok · 200–800 · kimse · 3 · 17 · ince · kapalı").exists());
     rule.onNodeWithTag("oynat").performClick();
     rule.onNodeWithText("Kaydet").performClick();
@@ -1713,7 +1713,7 @@ TEST(expressive_buttons_and_sliders_as_compose_writes_them) {
 
 // Badges, a segmented list item, the loading indicator, an extended FAB's slots and a bottom app
 // bar's insets as Compose writes them; a lazy list over a SnapshotStateList, shuffled and refilled.
-@Composable
+@Kompozable
 fun Containers() {
     val tasks = remember { mutableStateListOf(1, 2, 3) }
     var plan by remember { mutableStateOf(0) }
@@ -1743,7 +1743,7 @@ fun Containers() {
 }
 
 TEST(containers_as_compose_writes_them) {
-    ComposeTestRule rule([] { Containers(); });
+    KompozTestRule rule([] { Containers(); });
     CHECK(rule.onNodeWithText("sıra: 1,2,3").exists() && rule.onNodeWithText("görev 2").exists());
     rule.onNodeWithText("Karıştır").performClick();
     std::string order = rule.onNodeWithText("sıra: ", true).text();
@@ -1763,7 +1763,7 @@ TEST(containers_as_compose_writes_them) {
 
 // Tabs, the FAB menu and a floating toolbar as Compose writes them; a lambda kept past its block
 // reads the scope it was in (graphicsLayer { rotationZ = 45 * checkedProgress }: a copy of the scope).
-@Composable
+@Kompozable
 fun Navigation() {
     var tab by remember { mutableStateOf(0) }
     var open by remember { mutableStateOf(false) }
@@ -1799,7 +1799,7 @@ fun Navigation() {
 }
 
 TEST(tabs_and_fab_menu_as_compose_writes_them) {
-    ComposeTestRule rule([] { Navigation(); });
+    KompozTestRule rule([] { Navigation(); });
     CHECK(rule.onNodeWithText("seçili 0 · yok · az").exists() && rule.onNodeWithText("sekme 1").exists() && rule.onNodeWithText("kayan 1").exists());
     rule.onNodeWithText("kayan 1").performClick();
     rule.onNodeWithTag("daha").performClick();
@@ -1814,7 +1814,7 @@ TEST(tabs_and_fab_menu_as_compose_writes_them) {
 
 // A text field's transformations as Compose writes them: InputTransformation.byValue { current, proposed -> },
 // OutputTransformation { insert(…) } on the buffer, a text filtered by its characters, LocalFocusManager.
-@Composable
+@Kompozable
 fun Phone() {
     val phone = rememberTextFieldState("5551234567")
     var digits by remember { mutableStateOf("a1b2") }
@@ -1830,7 +1830,7 @@ fun Phone() {
 }
 
 TEST(text_field_transformations_as_compose_writes_them) {
-    ComposeTestRule rule([] { Phone(); });
+    KompozTestRule rule([] { Phone(); });
     CHECK(rule.onNodeWithText("değer 5551234567 · 12 · ab").exists());
     rule.onNodeWithTag("telefon").performTextInput("x9");  // the letter refused, the digit kept, then the length's limit
     CHECK(rule.onNodeWithText("değer 5551234567", true).exists());
@@ -1839,7 +1839,7 @@ TEST(text_field_transformations_as_compose_writes_them) {
 // A swipe-to-dismiss box, a search bar with its state, tooltips, a date picker dialog and focus
 // properties as Compose writes them; WindowInsets.statusBars read as a property, a nullable read after
 // its null check, Pair(a, b), tween(easing = …).
-@Composable
+@Kompozable
 fun SectionsForms() {
     val tasks = remember { mutableStateListOf(1, 2) }
     val search = rememberSearchBarState()
@@ -1885,7 +1885,7 @@ fun SectionsForms() {
 }
 
 TEST(sections_forms_as_compose_writes_them) {
-    ComposeTestRule rule([] { SectionsForms(); });
+    KompozTestRule rule([] { SectionsForms(); });
     CHECK(rule.onNodeWithText("tasks 2 · yok · 7 · 0 · 5").exists() && rule.onNodeWithTag("görev1").exists() && rule.onNodeWithTag("arama").exists());
     rule.onNodeWithTag("aç").performClick();
     rule.mainClock().advanceTimeBy(500);
@@ -1899,7 +1899,7 @@ TEST(sections_forms_as_compose_writes_them) {
 // Text styles as Compose writes them: a typography style's copy(brush = …, shadow = …, lineHeightStyle = …,
 // textIndent = TextIndent(24.sp), fontFeatureSettings = …, lineBreak = …), basicMarquee by name, TextAutoSize.StepBased in sp,
 // the measurer's style = a typography style.
-@Composable
+@Kompozable
 fun TextStyles() {
     val typography = MaterialTheme.typography
     val measurer = rememberTextMeasurer()
@@ -1917,7 +1917,7 @@ fun TextStyles() {
 }
 
 TEST(text_styles_as_compose_writes_them) {
-    ComposeTestRule rule([] { TextStyles(); });
+    KompozTestRule rule([] { TextStyles(); });
     CHECK(rule.onNodeWithText("degrade").exists() && rule.onNodeWithText("gölge").exists() && rule.onNodeWithText("girinti").exists());
     CHECK(rule.onNodeWithText("küçük büyük").exists() && rule.onNodeWithTag("kayan").exists() && rule.onNodeWithText("sığ").exists());
     CHECK(rule.onNodeWithText("ölçü var").exists());
@@ -1927,7 +1927,7 @@ TEST(text_styles_as_compose_writes_them) {
 // CornerSize(percent), a PathMeasure's length, withTransform's transform block, drawText(measurer, text, topLeft =,
 // style =), record(layer, size =) { } with the layer's properties, onVisibilityChanged(minFractionVisible =) { },
 // draggable2D(state, startDragImmediately =), rememberScrollable2DState's value, Offset.Zero, PointerIcon.Move.
-@Composable
+@Kompozable
 fun DrawingForms() {
     val measurer = rememberTextMeasurer()
     val layer = rememberGraphicsLayer()
@@ -1983,7 +1983,7 @@ fun DrawingForms() {
 }
 
 TEST(drawing_forms_as_compose_writes_them) {
-    ComposeTestRule rule([] { DrawingForms(); }, {400, 800});
+    KompozTestRule rule([] { DrawingForms(); }, {400, 800});
     rule.waitForIdle();
     testing::RecordingCanvas canvas;
     rule.host().draw(canvas);
@@ -1998,7 +1998,7 @@ TEST(drawing_forms_as_compose_writes_them) {
 // delayMillis =, tooltipPlacement =) { }, Modifier.onClick(matcher =, keyboardModifiers = { }) { }, an event's changes.first(),
 // transformable(state, canPan = { }), clickable(interactionSource = null, indication = null) { }, Popup(popupPositionProvider =
 // object : PopupPositionProvider { … }, properties = PopupProperties(focusable = false)) { }, Offset arithmetic, DpOffset.
-@Composable
+@Kompozable
 fun InputForms() {
     var picked by remember { mutableStateOf("yok") }
     var clicks by remember { mutableStateOf(0) }
@@ -2038,7 +2038,7 @@ fun InputForms() {
 }
 
 TEST(input_forms_as_compose_writes_them) {
-    ComposeTestRule rule([] { InputForms(); }, {400, 800});
+    KompozTestRule rule([] { InputForms(); }, {400, 800});
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("seçim: yok").exists() && rule.onNodeWithTag("açılır").exists() && rule.host().overlayCount() == 1);
     CHECK(std::abs(rule.onNodeWithTag("açılır").bounds().x - 10) < 0.5f);
@@ -2078,7 +2078,7 @@ class TickViewModel : ViewModel() {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 }
 
-@Composable
+@Kompozable
 fun KitchenForms() {
     val orders = remember { Channel<Int>(2) }
     var served by remember { mutableStateOf(listOf<Int>()) }
@@ -2111,7 +2111,7 @@ fun KitchenForms() {
 }
 
 TEST(state_forms_as_kotlin_writes_them) {
-    ComposeTestRule rule([] { KitchenForms(); }, {400, 800});
+    KompozTestRule rule([] { KitchenForms(); }, {400, 800});
     rule.host().setLifecycleState(LifecycleState::Resumed);
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("servis 0 · ret 0 · ").exists() && rule.onNodeWithText("durum açık · 400 ms · tik var").exists());
@@ -2129,12 +2129,12 @@ TEST(state_forms_as_kotlin_writes_them) {
 // icon =, label =) }, AppBarWithSearch(state =, inputField =, navigationIcon =), Modifier.pullToRefresh by name with
 // PullToRefreshDefaults.Indicator / IndicatorBox and LoadingIndicator(progress = { }), overscrollEffect = null and an
 // OverscrollEffect? parameter, Animatable<Float, AnimationVector1D>.
-@Composable
+@Kompozable
 fun TiledRow(effect: OverscrollEffect?) {
     LazyRow(modifier = Modifier.height(40.dp), overscrollEffect = effect) { items(3) { Box(modifier = Modifier.size(40.dp)) } }
 }
 
-@Composable
+@Kompozable
 fun ScrollForms(a: Animatable<Float, AnimationVector1D>) {
     var log by remember { mutableStateOf("") }
     var refreshing by remember { mutableStateOf(false) }
@@ -2174,7 +2174,7 @@ fun ScrollForms(a: Animatable<Float, AnimationVector1D>) {
 
 TEST(scroll_forms_as_compose_writes_them) {
     Animatable<float> a(0.f);
-    ComposeTestRule rule([&] { ScrollForms(a); }, {400, 800});
+    KompozTestRule rule([&] { ScrollForms(a); }, {400, 800});
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("günlük: içinde sonunda · 3").exists());
     CHECK(rule.onNodeWithContentDescription("Paylaş").exists() && rule.onNodeWithContentDescription("More options").exists());  // two slots: the rest in the menu
@@ -2187,7 +2187,7 @@ TEST(scroll_forms_as_compose_writes_them) {
 // VerticalDragHandle on Modifier.paneExpansionDraggable, onFirstVisible(minDurationMs =) { }, approachLayout(isMeasurementApproachInProgress =,
 // approachMeasure =), Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), spring<Float>(…), HorizontalPager(key = { }), a list
 // indexed by a smart-cast nullable, "ab".repeat(2).
-@Composable
+@Kompozable
 fun LayoutForms() {
     val navigator = rememberListDetailPaneScaffoldNavigator<Int>()
     val expansion = rememberPaneExpansionState(listOf(PaneExpansionAnchor.Proportion(0.5f)))
@@ -2232,7 +2232,7 @@ fun LayoutForms() {
 }
 
 TEST(layout_forms_as_compose_writes_them) {
-    ComposeTestRule rule([] { LayoutForms(); }, {400, 800});
+    KompozTestRule rule([] { LayoutForms(); }, {400, 800});
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("Ankara").exists());
     rule.onNodeWithText("İzmir").performClick();
@@ -2255,7 +2255,7 @@ val StripeVector = ImageVector.Builder("stripe", 24.dp, 24.dp, 24f, 24f)
     .addPath(pathData = addPathNodes("M0,0h24v24h-24z"), fill = Brush.solid(Color.Red))
     .build()
 
-@Composable
+@Kompozable
 fun GraphicsForms() {
     val rows = listOf(1, 2, 3)
     var lens by remember { mutableStateOf(Offset.Unspecified) }
@@ -2283,7 +2283,7 @@ fun GraphicsForms() {
     }
     val gray = ColorMatrix(floatArrayOf(0.5f, 0.5f, 0f, 0f, 0f))
     val doubled = Matrix().apply { scale(2f, 2f) }
-    val label: @Composable (String, (Int) -> String) -> Unit = { name, format -> Text(name + format(7)) }
+    val label: @Kompozable (String, (Int) -> String) -> Unit = { name, format -> Text(name + format(7)) }
     LaunchedEffect(fed) {
         if (fed) return@LaunchedEffect
         fed = true
@@ -2316,7 +2316,7 @@ fun GraphicsForms() {
 }
 
 TEST(graphics_forms_as_compose_writes_them) {
-    ComposeTestRule rule([] { GraphicsForms(); }, {400, 800});
+    KompozTestRule rule([] { GraphicsForms(); }, {400, 800});
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("kare 2 yay 200 bit 48 satır 2").exists());
     CHECK(rule.onNodeWithText("gri 5 matris 2 akış true").exists() && rule.onNodeWithText("ad-7").exists());
@@ -2341,7 +2341,7 @@ object AccountGraph
 @Serializable
 data class Member(val n: Int)
 
-@Composable
+@Kompozable
 fun AppShellForms(nav: NavController) {
     val entry by nav.currentBackStackEntryAsState()
     val destination = entry?.destination
@@ -2387,7 +2387,7 @@ fun AppShellForms(nav: NavController) {
 
 TEST(app_shell_as_compose_writes_it) {
     NavController nav;
-    ComposeTestRule rule([&] { AppShellForms(nav); }, {600, 800});
+    KompozTestRule rule([&] { AppShellForms(nav); }, {600, 800});
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("kabuk ekranı").exists() && rule.onNodeWithText("sekme kabuk").exists());
     CHECK(rule.onNodeWithText("koyu false boy 1 eylem 7").exists());
@@ -2410,7 +2410,7 @@ TEST(app_shell_as_compose_writes_it) {
 
 TEST(navigation_as_compose_writes_it) {
     NavController nav;
-    ComposeTestRule rule([&] { Navigator(nav); });
+    KompozTestRule rule([&] { Navigator(nav); });
     rule.waitForIdle();  // (the entry read above the NavHost arrives with its first composition)
     CHECK(rule.onNodeWithText("Aç").exists());
     std::string rota = rule.onNodeWithText("rota ", true).text();

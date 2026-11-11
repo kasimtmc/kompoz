@@ -380,7 +380,7 @@ private:
 };
 
 void flexBox(const CallSite& site, const Modifier& modifier, std::function<FlexBoxConfig(const Constraints&)> config, const Content& content) {
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(site),
         [&](LayoutNode& node) {
             node.modifier = modifier;

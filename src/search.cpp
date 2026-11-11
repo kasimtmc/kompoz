@@ -27,7 +27,7 @@ void searchField(const SearchBarDefaults::InputFieldOptions& o, const std::optio
                      if (change) change(true);
                  })
                   .semantics({.contentDescription = o.query.empty() ? o.placeholder : o.query, .role = SemanticsRole::Button});
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
         detail::Row(row, {.verticalAlignment = Alignment::CenterVertically}, [&] {
             if (o.leadingIcon) detail::Box(Modifier().padding(16, 0, 0, 0), o.leadingIcon);
             detail::Box(Modifier().weight(1).padding(16, 0), Alignment::CenterStart, [&] {
@@ -46,7 +46,7 @@ void searchField(const SearchBarDefaults::InputFieldOptions& o, const std::optio
                     else
                         detail::BasicTextField(o.query, o.onQueryChange, field, std::move(options));
                 } else if (o.query.empty() && o.placeholderContent) {  // Compose's placeholder = { Text("…") }
-                    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.bodyLarge)}, o.placeholderContent);
+                    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.bodyLarge)}, o.placeholderContent);
                 } else {
                     detail::Text(o.query.empty() ? o.placeholder : o.query,
                          {.font = t.bodyLarge, .color = o.query.empty() ? cs.onSurfaceVariant : cs.onSurface, .maxLines = 1,
@@ -101,7 +101,7 @@ std::optional<SearchBarState> Saver<SearchBarState>::restore(const SavedValue& v
 }
 
 SearchBarState rememberSearchBarState(SearchBarValue initialValue, CallSite site) {
-    ComposableScope group(site);
+    KompozableScope group(site);
     auto scope = rememberCoroutineScope();
     auto& state = rememberSaveable([initialValue] { return SearchBarState(initialValue); });
     state.data_->scope = scope;
@@ -111,13 +111,13 @@ SearchBarState rememberSearchBarState(SearchBarValue initialValue, CallSite site
 namespace SearchBarDefaults {
 
 void detail::InputField(const InputFieldOptions& o, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     searchField(o, std::nullopt, modifier);
 }
 
 void detail::InputField(const SearchBarState& state, const TextFieldState& textFieldState, const InputFieldOptions& options,
                 const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto own = rememberCoroutineScope();
     CoroutineScope coroutines = state.data_->scope.value_or(own);
     InputFieldOptions o = options;
@@ -145,7 +145,7 @@ bool showsExpanded(const SearchBarState& state) {
 } // namespace
 
 void detail::SearchBar(const SearchBarState& state, const Content& inputField, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto d = state.data_;
     detail::Box(modifier.heightIn(56)
@@ -181,7 +181,7 @@ struct SearchBack {
 // away from the edge it came from, and up or down with the finger by up to 24 dp (never past
 // the bar); done, it goes back into the bar from there.
 void detail::ExpandedFullScreenSearchBar(const SearchBarState& state, const Content& inputField, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto own = rememberCoroutineScope();
     CoroutineScope coroutines = state.data_->scope.value_or(own);
@@ -245,7 +245,7 @@ void detail::ExpandedFullScreenSearchBar(const SearchBarState& state, const Cont
 }
 
 void detail::ExpandedDockedSearchBar(const SearchBarState& state, const Content& inputField, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto own = rememberCoroutineScope();
     CoroutineScope coroutines = state.data_->scope.value_or(own);
@@ -274,7 +274,7 @@ void detail::ExpandedDockedSearchBar(const SearchBarState& state, const Content&
 
 void detail::SearchBar(const Content& inputField, bool expanded, std::function<void(bool)> onExpandedChange,
                const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto change = rememberUpdatedState(std::move(onExpandedChange));
     // The pill keeps its place in the layout while the search view is open over everything.
@@ -302,7 +302,7 @@ void detail::SearchBar(const Content& inputField, bool expanded, std::function<v
 
 void DockedSearchBar(const Content& inputField, bool expanded, std::function<void(bool)> onExpandedChange,
                      const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto change = rememberUpdatedState(std::move(onExpandedChange));
     auto width = remember([] { return mutableStateOf(0.f); });

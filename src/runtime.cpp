@@ -12,7 +12,7 @@ namespace kompoz::detail {
 
 namespace {
 
-thread_local Composer* gCurrent = nullptr;
+thread_local Kompozer* gCurrent = nullptr;
 // Where what leaves the composition is handed over (forgetLater), while one goes on or groups go.
 thread_local std::vector<std::function<void()>>* gForgets = nullptr;
 
@@ -69,7 +69,7 @@ uint64_t keyOf(const CallSite& site) {
 }
 
 void recordRead(const void* key) {
-    if (Composer* c = gCurrent; c && c->recording())
+    if (Kompozer* c = gCurrent; c && c->recording())
         c->recordRead(key);
     else if (LayoutNode* node = measuringNode(); node && node->host())  // read by a layout: changed, it's measured again
         node->host()->recordLayoutRead(key, *node);
@@ -77,13 +77,13 @@ void recordRead(const void* key) {
         node->host()->recordDrawRead(key, *node);
 }
 
-Scope::~Scope() { composer.forget(*this); }
+Scope::~Scope() { kompozer.forget(*this); }
 
 Content scopedBlock(Content block) {
     if (!block) return {};
     // In a scope of its own: what it reads runs it alone again. (A block can't be compared: when its
     // composable runs, it runs.)
-    return [block = std::move(block)] { Composer::require().restartable(keyOf(CallSite::current()), std::tuple<Content>(block), block); };
+    return [block = std::move(block)] { Kompozer::require().restartable(keyOf(CallSite::current()), std::tuple<Content>(block), block); };
 }
 
 void forgetLater(std::function<void()> forgotten) {
@@ -91,7 +91,7 @@ void forgetLater(std::function<void()> forgotten) {
     else forgotten();
 }
 
-void Composer::forgetSlot(Group& g) {
+void Kompozer::forgetSlot(Group& g) {
     if (!g.slot) return;
     if (RememberObserver* o = g.slot->observer())
         forgetLater([o, keep = std::shared_ptr<SlotBase>(std::move(g.slot))] { o->onForgotten(); });  // kept until told
@@ -107,7 +107,7 @@ Group::~Group() {
     bool outermost = !gForgets;
     if (outermost) gForgets = &forgotten;
     if (onForget) gForgets->push_back(std::move(onForget));
-    Composer::forgetSlot(*this);
+    Kompozer::forgetSlot(*this);
     std::vector<std::unique_ptr<Group>> below;
     for (auto& [k, child] : children)
         if (child) below.push_back(std::move(child));  // (a movable content parked from here leaves its place empty)
@@ -121,9 +121,9 @@ Group::~Group() {
     }
 }
 
-Composer* Composer::current() { return gCurrent; }
+Kompozer* Kompozer::current() { return gCurrent; }
 
-Composer& Composer::require() {
+Kompozer& Kompozer::require() {
     if (!gCurrent) {
         std::fputs("kompoz: composable called outside of a composition\n", stderr);
         std::abort();
@@ -131,18 +131,18 @@ Composer& Composer::require() {
     return *gCurrent;
 }
 
-void Composer::setRoot(Group& root, std::function<void()> content) {
+void Kompozer::setRoot(Group& root, std::function<void()> content) {
     root_ = &root;
     root.scope = std::make_unique<Scope>(*this, &root);
     root.scope->body = std::move(content);
     invalidateScope(*root.scope);
 }
 
-void Composer::invalidateRoot() {
+void Kompozer::invalidateRoot() {
     if (root_ && root_->scope) invalidateScope(*root_->scope);
 }
 
-void Composer::invalidateScope(Scope& scope) {
+void Kompozer::invalidateScope(Scope& scope) {
     if (scope.onInvalidated) {  // an observer (derived state): recompute instead of recompose
         auto onInvalidated = scope.onInvalidated;
         onInvalidated();
@@ -153,7 +153,7 @@ void Composer::invalidateScope(Scope& scope) {
     invalid_.push_back(&scope);
 }
 
-void Composer::invalidateReaders(const void* key) {
+void Kompozer::invalidateReaders(const void* key) {
     host_.invalidateLayoutReaders(key);
     host_.invalidateDrawReaders(key);
     auto it = readers_.find(key);
@@ -162,14 +162,14 @@ void Composer::invalidateReaders(const void* key) {
         if (s) invalidateScope(*s);
 }
 
-void Composer::invalidateFrameScopes(int64_t frameTimeNanos) {
+void Kompozer::invalidateFrameScopes(int64_t frameTimeNanos) {
     for (Scope* s : std::exchange(frameScopes_, {})) invalidateScope(*s);
     std::vector<Scope*> due;
     std::erase_if(timedScopes_, [&](const auto& t) { return t.first <= frameTimeNanos && (due.push_back(t.second), true); });
     for (Scope* s : due) invalidateScope(*s);
 }
 
-void Composer::requestFrameAt(int64_t frameTimeNanos) {
+void Kompozer::requestFrameAt(int64_t frameTimeNanos) {
     if (!currentScope_) return;
     for (auto& [at, scope] : timedScopes_)
         if (scope == currentScope_) {
@@ -179,14 +179,14 @@ void Composer::requestFrameAt(int64_t frameTimeNanos) {
     timedScopes_.push_back({frameTimeNanos, currentScope_});
 }
 
-void Composer::requestFrame() {
+void Kompozer::requestFrame() {
     if (currentScope_ && std::find(frameScopes_.begin(), frameScopes_.end(), currentScope_) == frameScopes_.end())
         frameScopes_.push_back(currentScope_);
 }
 
-bool Composer::recompose(int64_t frameTimeNanos) {
+bool Kompozer::recompose(int64_t frameTimeNanos) {
     if (invalid_.empty()) return false;
-    Composer* previous = std::exchange(gCurrent, this);
+    Kompozer* previous = std::exchange(gCurrent, this);
     frameTime_ = frameTimeNanos;
     effects_.clear();
     sideEffects_.clear();
@@ -229,9 +229,9 @@ bool Composer::recompose(int64_t frameTimeNanos) {
     return true;
 }
 
-bool Composer::composeNow(Scope& scope) {
+bool Kompozer::composeNow(Scope& scope) {
     if (currentScope_ || gCurrent == this) return false;
-    Composer* previous = std::exchange(gCurrent, this);
+    Kompozer* previous = std::exchange(gCurrent, this);
     auto effects = std::exchange(effects_, {});
     auto sideEffects = std::exchange(sideEffects_, {});
     std::vector<std::function<void()>> forgotten;
@@ -256,12 +256,12 @@ bool Composer::composeNow(Scope& scope) {
 
 // Runs a scope on its own, without its parent: the composition locals come from the
 // providers above it, and the node it emits into gets its children list rebuilt.
-void Composer::restart(Scope& scope) {
+void Kompozer::restart(Scope& scope) {
     groups_.clear();
     locals_ = localsAbove(*scope.group);
     currentScope_ = nullptr;
     run(scope);
-    locals_.clear();  // what they hold (a nav entry's ViewModelStore) isn't the composer's to keep
+    locals_.clear();  // what they hold (a nav entry's ViewModelStore) isn't the kompozer's to keep
     for (Group* p = scope.group->parent; p; p = p->parent) {
         if (p->node) {
             rebuildChildren(*p);
@@ -270,7 +270,7 @@ void Composer::restart(Scope& scope) {
     }
 }
 
-void Composer::run(Scope& scope) {
+void Kompozer::run(Scope& scope) {
     Scope* outer = std::exchange(currentScope_, &scope);
     clearReads(scope);
     std::erase_if(timedScopes_, [&](const auto& t) { return t.second == &scope; });  // (asked again if still due)
@@ -282,7 +282,7 @@ void Composer::run(Scope& scope) {
     ++stats_.scopesRun;
 }
 
-void Composer::recordRead(const void* key) {
+void Kompozer::recordRead(const void* key) {
     Scope* s = currentScope_;
     if (!s || std::ranges::any_of(s->reads, [&](const Scope::Read& r) { return r.key == key; })) return;
     Readers& readers = readers_[key];
@@ -290,8 +290,8 @@ void Composer::recordRead(const void* key) {
     readers.scopes.push_back(s);
 }
 
-void Composer::observeReads(Scope& observer, const std::function<void()>& fn) {
-    Composer* previous = std::exchange(gCurrent, this);
+void Kompozer::observeReads(Scope& observer, const std::function<void()>& fn) {
+    Kompozer* previous = std::exchange(gCurrent, this);
     Scope* outer = std::exchange(currentScope_, &observer);
     clearReads(observer);
     fn();
@@ -299,7 +299,7 @@ void Composer::observeReads(Scope& observer, const std::function<void()>& fn) {
     gCurrent = previous;
 }
 
-void Composer::clearReads(Scope& scope) {
+void Kompozer::clearReads(Scope& scope) {
     for (const Scope::Read& read : scope.reads) {
         auto it = readers_.find(read.key);
         if (it == readers_.end()) continue;
@@ -318,7 +318,7 @@ void Composer::clearReads(Scope& scope) {
     scope.reads.clear();
 }
 
-void Composer::forget(Scope& scope) {
+void Kompozer::forget(Scope& scope) {
     clearReads(scope);
     std::erase(invalid_, &scope);
     std::erase(frameScopes_, &scope);
@@ -326,7 +326,7 @@ void Composer::forget(Scope& scope) {
     if (currentScope_ == &scope) currentScope_ = nullptr;
 }
 
-Group& Composer::beginGroup(uint64_t key) {
+Group& Kompozer::beginGroup(uint64_t key) {
     Group& parent = *groups_.back();
     uint64_t id = mixKey(key, parent.occurrences[key]++);
     auto& child = parent.children[id];
@@ -350,7 +350,7 @@ void setDepth(Group& g, int depth) {
 }
 } // namespace
 
-void Composer::park(std::unique_ptr<Group>& owner) {
+void Kompozer::park(std::unique_ptr<Group>& owner) {
     if (!owner) return;
     if (owner->movable && owner->movable->group == owner.get()) {
         owner->parent = nullptr;
@@ -365,7 +365,7 @@ void Composer::park(std::unique_ptr<Group>& owner) {
     for (auto& [k, child] : owner->children) park(child);
 }
 
-std::unique_ptr<Group> Composer::takeMovable(MovableData& data) {
+std::unique_ptr<Group> Kompozer::takeMovable(MovableData& data) {
     Group* g = data.group;
     if (!g || g->composedIn == pass_) return nullptr;  // gone, or composed already in this composition
     if (!g->parent) {
@@ -395,7 +395,7 @@ std::unique_ptr<Group> Composer::takeMovable(MovableData& data) {
     return out;
 }
 
-void Composer::composeMovable(const std::shared_ptr<MovableData>& data) {
+void Kompozer::kompozMovable(const std::shared_ptr<MovableData>& data) {
     Group& parent = *groups_.back();
     uint64_t key = mixKey(0x6d6f7661626c6521ULL, uint64_t(reinterpret_cast<uintptr_t>(data.get())));
     uint64_t id = mixKey(key, parent.occurrences[key]++);
@@ -420,16 +420,16 @@ void Composer::composeMovable(const std::shared_ptr<MovableData>& data) {
     endGroup();
 }
 
-void Composer::enter(Group& g) {
+void Kompozer::enter(Group& g) {
     g.occurrences.clear();
     g.order.clear();
     for (auto& [k, child] : g.children) child->visited = false;
     groups_.push_back(&g);
 }
 
-void Composer::startGroup(uint64_t key) { enter(beginGroup(key)); }
+void Kompozer::startGroup(uint64_t key) { enter(beginGroup(key)); }
 
-void Composer::endGroup() {
+void Kompozer::endGroup() {
     Group& g = *groups_.back();
     // Whatever was not called this time has left the composition. Skipped scopes count as
     // called: they keep their slots and nodes.
@@ -448,7 +448,7 @@ void Composer::endGroup() {
     groups_.pop_back();
 }
 
-LayoutNode& Composer::emit(uint64_t key, const std::function<void(LayoutNode&)>& update, const Content& content) {
+LayoutNode& Kompozer::emit(uint64_t key, const std::function<void(LayoutNode&)>& update, const Content& content) {
     startGroup(key);
     Group& g = group();
     if (!g.node) g.node = std::make_unique<LayoutNode>(&host_);
@@ -461,7 +461,7 @@ LayoutNode& Composer::emit(uint64_t key, const std::function<void(LayoutNode&)>&
     return node;
 }
 
-void Composer::provide(uint64_t key, std::vector<Provided> values, const Content& content) {
+void Kompozer::provide(uint64_t key, std::vector<Provided> values, const Content& content) {
     std::erase_if(values, [&](const Provided& v) { return v.ifMissing && findLocal(v.key); });  // provided above already
     startGroup(key);
     Group& g = group();
@@ -480,13 +480,13 @@ void Composer::provide(uint64_t key, std::vector<Provided> values, const Content
     endGroup();
 }
 
-const void* Composer::findLocal(const void* key) const {
+const void* Kompozer::findLocal(const void* key) const {
     for (auto it = locals_.rbegin(); it != locals_.rend(); ++it)
         if (it->key == key) return it->value.get();
     return nullptr;
 }
 
-const Provided* Composer::readProvided(const void* key) {
+const Provided* Kompozer::readProvided(const void* key) {
     for (auto it = locals_.rbegin(); it != locals_.rend(); ++it)
         if (it->key == key) {
             recordRead(providedKey(key, it->provider));
@@ -495,7 +495,7 @@ const Provided* Composer::readProvided(const void* key) {
     return nullptr;
 }
 
-const void* Composer::readLocal(const void* key) {
+const void* Kompozer::readLocal(const void* key) {
     for (auto it = locals_.rbegin(); it != locals_.rend(); ++it)
         if (it->key == key) {
             recordRead(providedKey(key, it->provider));
@@ -504,7 +504,7 @@ const void* Composer::readLocal(const void* key) {
     return nullptr;  // (the default: nothing to recompose for)
 }
 
-std::vector<Provided> Composer::localsAbove(const Group& g) const {
+std::vector<Provided> Kompozer::localsAbove(const Group& g) const {
     std::vector<const Group*> providers;
     for (const Group* p = g.parent; p; p = p->parent)
         if (!p->provided.empty()) providers.push_back(p);
@@ -514,11 +514,11 @@ std::vector<Provided> Composer::localsAbove(const Group& g) const {
     return locals;
 }
 
-const CompositionLocal<std::shared_ptr<SaveableRegistry>> LocalSaveableRegistry{nullptr};
+const KompozitionLocal<std::shared_ptr<SaveableRegistry>> LocalSaveableRegistry{nullptr};
 
 uint64_t keyBelow(const Group* boundary) {
     uint64_t key = 1469598103934665603ull;
-    for (const Group* g = &Composer::require().group(); g && g != boundary; g = g->parent) key = mixKey(key, g->key);
+    for (const Group* g = &Kompozer::require().group(); g && g != boundary; g = g->parent) key = mixKey(key, g->key);
     return key;
 }
 
@@ -588,7 +588,7 @@ void SaveableStateHolder::SaveableStateProvider(const std::string& key, const Co
     std::shared_ptr<detail::SaveableRegistry> scratch;
     auto& registry = removed ? scratch : (*registries_)[key];
     if (!registry) registry = std::make_shared<detail::SaveableRegistry>();
-    auto& c = detail::Composer::require();
+    auto& c = detail::Kompozer::require();
     c.startGroup(detail::mixKey(detail::keyOf(site), std::hash<std::string>{}(key)));
     registry->boundary = &c.group();  // positions are counted from here down
     registry->present = true;
@@ -599,7 +599,7 @@ void SaveableStateHolder::SaveableStateProvider(const std::string& key, const Co
         }
     };
     remember([] { return std::make_shared<Presence>(); })->registry = registry;
-    CompositionLocalProvider({detail::LocalSaveableRegistry.provides(registry)}, content);
+    KompozitionLocalProvider({detail::LocalSaveableRegistry.provides(registry)}, content);
     c.endGroup();
 }
 

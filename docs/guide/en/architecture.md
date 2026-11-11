@@ -14,7 +14,7 @@ State flows down, events flow up:
 data class TodoItem(val id: Int, val title: String, val done: Boolean = false)
 
 // Stateless: shows the items, reports what the user did.
-@Composable
+@Kompozable
 fun TodoList(todos: List<TodoItem>, onToggle: (Int, Boolean) -> Unit) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(todos, key = { it.id }) { t ->
@@ -55,7 +55,7 @@ class TodoViewModel : ViewModel() {
     override fun onCleared() { /* cancel subscriptions, close files */ }
 }
 
-@Composable
+@Kompozable
 fun TodoScreen() {
     val vm = viewModel<TodoViewModel>()   // the same one while its owner lives
     val items by vm.items.collectAsState()
@@ -90,7 +90,7 @@ class NotesViewModel(private val repo: NoteRepository = FakeNotes()) : ViewModel
     }
 }
 
-@Composable
+@Kompozable
 fun NotesScreen() {
     val vm = viewModel<NotesViewModel>()
     Column {
@@ -140,7 +140,7 @@ Everything runs on the UI thread, in the collecting coroutine. Cancelling the co
 A `Channel` hands values from one coroutine (or a click handler) to another, as Kotlin's: `send` waits for room, `trySend` never does (its result says whether it was taken), `receive` waits for the next value, and `consumeEach` takes them one by one, suspending in between. `scope.produce<Int> { send(i) }` starts a coroutine that fills a channel and closes it when it is done.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Kitchen() {
     val orders = remember { Channel<Int>(3) }   // at most three waiting
     var cooking by remember { mutableStateOf("idle") }
@@ -178,7 +178,7 @@ The app, and each navigation entry, has a `Lifecycle` that moves through `Create
 
 ```kotlin
 #! class Player { fun play() {} fun pause() {} }
-@Composable
+@Kompozable
 fun Video(player: Player) {
     LifecycleResumeEffect(Unit) {
         player.play()

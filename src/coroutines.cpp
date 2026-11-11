@@ -10,7 +10,7 @@
 
 namespace kompoz::detail {
 
-Dispatcher& currentDispatcher() { return Composer::require().host().dispatcher(); }
+Dispatcher& currentDispatcher() { return Kompozer::require().host().dispatcher(); }
 
 namespace {
 // What a coroutine threw that nobody takes (a cancellation isn't a failure).

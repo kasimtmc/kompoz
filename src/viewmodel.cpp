@@ -99,11 +99,11 @@ void ViewModelStore::put(const std::string& key, std::shared_ptr<void> value, Vi
     entries_[key] = {std::move(value), viewModel};
 }
 
-const CompositionLocal<std::shared_ptr<ViewModelStore>> detail::LocalViewModelStore{nullptr};
+const KompozitionLocal<std::shared_ptr<ViewModelStore>> detail::LocalViewModelStore{nullptr};
 
 std::shared_ptr<ViewModelStore> detail::currentViewModelStore() {
     if (auto store = LocalViewModelStore.current()) return store;
-    return Composer::require().host().viewModelStore();
+    return Kompozer::require().host().viewModelStore();
 }
 
 } // namespace kompoz

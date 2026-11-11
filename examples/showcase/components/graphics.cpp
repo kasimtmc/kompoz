@@ -3,7 +3,7 @@
 #include "showcase.hpp"
 
 // Progress indicators, an Animatable driven by a coroutine, and a bouncy spring.
-@Composable
+@Kompozable
 fun ProgressSection() {
     val scope = rememberCoroutineScope()
     val progress = remember { Animatable(0f) }
@@ -56,7 +56,7 @@ fun ProgressSection() {
 // What the feed shows: loading, or loaded with so many posts.
 data class Feed(val loaded: Boolean, val posts: Int)
 
-@Composable
+@Kompozable
 fun AnimationsSection() {
     var expanded by remember { mutableStateOf(false) }
     var count by remember { mutableStateOf(0) }
@@ -207,14 +207,14 @@ fun AnimationsSection() {
 // AsyncImage: JPEG and WebP assets loaded away from the UI thread, cross-fading in from a
 // placeholder, and a big photo from the network when asked for, decoded at its box's size and
 // kept on disk.
-@Composable
+@Kompozable
 fun AsyncImageSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     var url by remember { mutableStateOf("https://picsum.photos/seed/kompoz/2400/1600") }
     var requested by remember { mutableStateOf("") }
     var decoded by remember { mutableStateOf("") }
-    val placeholder: @Composable () -> Unit = {
+    val placeholder: @Kompozable () -> Unit = {
         Box(modifier = Modifier.fillMaxSize().background(cs.surfaceContainerHighest), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(modifier = Modifier.size(24.dp))
         }
@@ -262,7 +262,7 @@ ImageBitmap checkerBitmap() {
     return ImageBitmap::fromPixels(64, 64, std::move(px));
 }
 
-@Composable
+@Kompozable
 fun ImagesSection() {
     val photo = imageResource("images/landscape.png")
     val generated = remember { checkerBitmap() }
@@ -374,7 +374,7 @@ const ShapeOutline& starOutline() {
 
 // Material's 35 shapes (MaterialShapes): tap one for its name; the big one morphs to the next of
 // a few on each tap.
-@Composable
+@Kompozable
 fun MaterialShapesSection() {
     val cycle = listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Clover4Leaf, MaterialShapes.Sunny, MaterialShapes.Heart, MaterialShapes.SoftBurst, MaterialShapes.Pill)
     val cs = MaterialTheme.colorScheme
@@ -414,7 +414,7 @@ fun MaterialShapesSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun ShapesSection() {
     val triangle = ShapeOutline(points = listOf(Offset(0.5f, 0f), Offset(1f, 1f), Offset(0f, 1f)))
     val cs = MaterialTheme.colorScheme
@@ -484,7 +484,7 @@ fun ShapesSection() {
 
 // SharedTransitionLayout: a list and the detail of a row; the picture and the title move
 // between their places in the two.
-@Composable
+@Kompozable
 fun SharedElementSection() {
     var selected by remember { mutableStateOf(-1) }
     val palette = listOf(Color(0xFFB8705F), Color(0xFF6C9F6A), Color(0xFF5F82B8))
@@ -527,7 +527,7 @@ fun SharedElementSection() {
 
 // BlendMode in an offscreen layer: a list whose top and bottom fade out (DstIn), and a hole
 // punched through a card (DstOut).
-@Composable
+@Kompozable
 fun BlendModeSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -564,7 +564,7 @@ fun BlendModeSection() {
 // TileMode: a 60 dp gradient across 300 dp, past its end as each mode goes. Shaders: a photo
 // mirrored as tiles (ImageShader), a gradient lit by a radial one (Brush.composite, Screen), a
 // sweep made for each size (ShaderBrush), turned round its center.
-@Composable
+@Kompozable
 fun TileModeSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -602,14 +602,14 @@ fun TileModeSection() {
 // it, by their sRGB numbers as a gradient mixes them; colors made in other color spaces (Display
 // P3, CIE L*a*b*, Oklab) shown in sRGB, their sRGB said; a color animated (animateColorAsState,
 // in Oklab as Compose's Color.VectorConverter).
-@Composable
+@Kompozable
 fun ColorSpaceSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     var warm by remember { mutableStateOf(false) }
     val animated by animateColorAsState(if (warm) Color(0xFFFF6D00) else Color(0xFF2962FF), tween(1200))
     Section("Color · ColorSpace · Oklab") {
-        val strip: @Composable (String, (Float) -> Color) -> Unit = { name, colorAt ->
+        val strip: @Kompozable (String, (Float) -> Color) -> Unit = { name, colorAt ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(name, modifier = Modifier.width(104.dp), style = typography.labelLarge)
                 Row(modifier = Modifier.weight(1f).height(32.dp).clip(RoundedCornerShape(8.dp))) {
@@ -645,7 +645,7 @@ fun ColorSpaceSection() {
 // colors multiplied by the vertices'. Bitmaps drawn into: rings drawn once into one, shown by
 // Image; a circle and a line anti-aliased and not (isAntiAlias false); a star in an Alpha8 one,
 // drawn in two paints' colors.
-@Composable
+@Kompozable
 fun CanvasSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -796,7 +796,7 @@ fun CanvasSection() {
 // another blurred progressively, more towards the bottom; one blurred by a shader's alpha, more
 // towards its edges; a frosted glass panel (Morph) and a card whose picture alone is blurred
 // (Self).
-@Composable
+@Kompozable
 fun BlurSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -896,7 +896,7 @@ struct Turn final : vector::VectorConfig {
 };
 std::shared_ptr<const vector::VectorConfig> turnConfig(float degrees) { return std::make_shared<Turn>(degrees); }
 
-@Composable
+@Kompozable
 fun ColorVectorSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography

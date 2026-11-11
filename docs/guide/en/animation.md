@@ -20,7 +20,7 @@ Kompoz has Compose's animation APIs: values that animate to a target, content th
 `animate*AsState` returns a state (`AnimatedState<T>`, Compose's `State<T>`) whose value animates to its target whenever the target changes:
 
 ```kotlin
-@Composable
+@Kompozable
 fun LikeButton() {
     var liked by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (liked) 1.2f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "scale")
@@ -56,7 +56,7 @@ Material components use `MaterialTheme.motionScheme`'s springs, so they move the
 `AnimatedVisibility` animates its content in when `visible` becomes true and out when it becomes false. Once hidden, the content leaves the composition.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Details() {
     var open by remember { mutableStateOf(false) }
     Column {
@@ -73,7 +73,7 @@ Enter transitions are `fadeIn`, `slideInHorizontally`, `slideInVertically`, `sca
 Each transition takes its spec by name too (`fadeIn(animationSpec = tween(300))`, `slideInVertically(animationSpec = tween(450)) { it }`, `scaleOut(targetScale = 0.5f)`). A row that should come in the first time it shows is given a `MutableTransitionState` made hidden with a visible target, as Compose's `visibleState`; its `currentState` and `isIdle` say where it is:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Arriving() {
     val shown = remember { MutableTransitionState(false).apply { targetState = true } }
     AnimatedVisibility(visibleState = shown, enter = fadeIn(animationSpec = tween(500)) + expandVertically()) {
@@ -93,7 +93,7 @@ As in Compose, a transition is read as its content is laid out and drawn: the co
 `AnimatedContent` animates between contents when its target state changes: the old content leaves while the new one enters, and the size animates between them.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -121,7 +121,7 @@ The content lambda gets the state it shows, which for leaving content is the old
 ```kotlin
 enum class Page { Home, Settings }
 
-@Composable
+@Kompozable
 fun PageContent(page: Page) {
     Crossfade(targetState = page, label = "page") { p ->
         when (p) {
@@ -137,7 +137,7 @@ fun PageContent(page: Page) {
 `Modifier.animateContentSize()` animates a node's size whenever its content makes it grow or shrink:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Expandable(text: String) {
     var expanded by remember { mutableStateOf(false) }
     Text(text, modifier = Modifier.clickable { expanded = !expanded }.animateContentSize(),
@@ -154,7 +154,7 @@ When several values animate together towards one state, a transition keeps them 
 ```kotlin
 enum class BoxState { Collapsed, Expanded }
 
-@Composable
+@Kompozable
 fun TransitionBox() {
     var state by remember { mutableStateOf(BoxState.Collapsed) }
     val transition = updateTransition(targetState = state, label = "box")
@@ -175,7 +175,7 @@ fun TransitionBox() {
 `rememberInfiniteTransition()` animates values for as long as they are in the composition:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Pulse() {
     val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
         initialValue = 0.85f, targetValue = 1f,
@@ -193,7 +193,7 @@ fun Pulse() {
 `Animatable` is a value you animate from coroutines: `animateTo` suspends until the animation ends, `snapTo` jumps, `stop` stops it. A new `animateTo` takes over from a running one, keeping its velocity, which makes it the tool for animations driven by gestures:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Shake(error: Boolean) {
     val offset = remember { Animatable(0f) }
     LaunchedEffect(error) {
@@ -218,7 +218,7 @@ See [Gestures](gestures.md) for combining it with dragging.
 A shared element moves and resizes from its place in one piece of content to its place in another, as in Compose:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Gallery() {
     var details by remember { mutableStateOf(false) }
     SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {

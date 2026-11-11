@@ -2,12 +2,12 @@
 
 Kompoz is a declarative UI library for C++20 in the style of Jetpack Compose, with Material 3 components, running on Linux, Windows, Android and the web from one codebase.
 
-If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names, and the same way of writing it. A composable is a `@Composable fun` in Compose's own syntax, written in a `.cpp` file; Kompoz's compiler, kompozc, turns it into C++ as the build goes, the way Compose's compiler plugin rewrites Kotlin, and everything around it is C++. Kompoz 0.1.1 is licensed under the Apache License 2.0.
+If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names, and the same way of writing it. A composable is a `@Kompozable fun` in Kotlin's syntax, written in a `.cpp` file; Kompoz's compiler, kompozc, turns it into C++ as the build goes, the way Compose's compiler plugin rewrites Kotlin, and everything around it is C++. Kompoz 0.1.1 is licensed under the Apache License 2.0.
 
 ![The showcase's home screen](../../screenshots/home.png)
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
 
@@ -24,9 +24,9 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 ## Get started
 
-- [Setup](setup.md): build Kompoz, add it to your CMake project with `kompoz_compose`, and run on each platform.
+- [Setup](setup.md): build Kompoz, add it to your CMake project with `kompozable`, and run on each platform.
 - [Tutorial](tutorial.md): build a first app step by step, from a line of text to a Material list.
-- [Coming from Compose](coming-from-compose.md): Compose code in `.cpp` files, what kompozc reads, and the C++ around it.
+- [Coming from Compose](coming-from-compose.md): Kotlin code in `.cpp` files, what kompozc reads, and the C++ around it.
 - [Writing in C++](cpp.md): Kompoz's composables written in C++ itself, without kompozc.
 
 ## Foundation
@@ -36,13 +36,13 @@ kompoz::Application kompoz::createApplication(int, char**) {
 - [Lifecycle and identity](lifecycle.md): how calls are identified, and what makes them skip.
 - [Side effects](side-effects.md): coroutines, `LaunchedEffect`, `DisposableEffect` and the other effect APIs.
 - [Phases](phases.md): composition, layout and drawing, and how to keep each one cheap.
-- [CompositionLocal](composition-local.md): handing values down the tree, and the built-in locals.
+- [KompozitionLocal](kompozition-local.md): handing values down the tree, and the built-in locals.
 
 ## Design
 
 - [Modifiers](modifiers.md): decorating composables, why order matters, and writing your own.
 - [Layouts](layouts.md): `Column`, `Row`, `Box`, flow layouts, `FlexBox`, `Grid` and adaptive layouts.
-- [Custom layouts](custom-layouts.md): `Layout`, constraints, intrinsics and `SubcomposeLayout`.
+- [Custom layouts](custom-layouts.md): `Layout`, constraints, intrinsics and `SubkompozLayout`.
 - [Lists and grids](lists.md): lazy lists and grids, pagers, carousels and nested scrolling.
 - [Material components](material.md): a tour of the Material 3 components.
 - [Theming](theming.md): color schemes, dark theme, dynamic color, typography and design systems.

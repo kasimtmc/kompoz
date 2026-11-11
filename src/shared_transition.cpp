@@ -10,7 +10,7 @@ namespace kompoz {
 namespace detail {
 
 struct SharedRegistry {
-    ComposeHost* host = nullptr;
+    KompozHost* host = nullptr;
     std::vector<std::weak_ptr<SharedInstance>> instances;
     // Nodes drawn in the overlay while they say so (renderInSharedTransitionScopeOverlay).
     struct OverlayRender {
@@ -346,9 +346,9 @@ bool SharedTransitionScope::isTransitionActive() const { return registry_->movin
 
 void detail::SharedTransitionLayout(const Modifier& modifier, const std::function<void(const SharedTransitionScope&)>& content,
                                     CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto registry = remember([] { return std::make_shared<SharedRegistry>(); });
-    registry->host = &detail::Composer::require().host();
+    registry->host = &detail::Kompozer::require().host();
     auto overlay = std::make_shared<SharedOverlayElement>();
     overlay->registry = registry;
     SharedTransitionScope shared(registry);

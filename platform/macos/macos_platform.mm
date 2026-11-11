@@ -286,7 +286,7 @@ public:
         return info;
     }
 
-    void attach(ComposeHost&, ComposeHost::Callbacks& callbacks) override {
+    void attach(KompozHost&, KompozHost::Callbacks& callbacks) override {
         MacPlatform* self = this;
         callbacks.wake = [self] { self->wake(); };
         callbacks.textInput = [self](bool active, Rect area, const TextEditState&, const ImeOptions&) {
@@ -310,7 +310,7 @@ public:
         };
     }
 
-    void composed(ComposeHost& h, bool, int64_t) override {
+    void composed(KompozHost& h, bool, int64_t) override {
         // keepScreenOn: the display kept from sleeping while it is laid out.
         if (bool on = h.keepScreenOn(); on != keptOn_) {
             keptOn_ = on;

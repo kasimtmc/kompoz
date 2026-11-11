@@ -34,7 +34,7 @@ enum class EventType {
     // Things learned on other threads: the desktop's accent color, the wallpaper's colors, an
     // assistive technology's requests.
     AccentChanged, WallpaperChanged, AccessibilityRequest,
-    Wake,  // asked for by ComposeHost's wake (work for the next frame)
+    Wake,  // asked for by KompozHost's wake (work for the next frame)
 };
 
 enum class MouseButton { Left, Right, Middle, Back, Forward };

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""kompozc's language server (kompozc --lsp), driven as an editor drives it, on tests/compose_tests_other.cpp
-(a source of kompoz_compose_tests, so the build's kompozc_commands.json knows its translation).
+"""kompozc's language server (kompozc --lsp), driven as an editor drives it, on tests/kompozable_tests_other.cpp
+(a source of kompozable_tests, so the build's kompozc_commands.json knows its translation).
 
     python3 tests/kompozc_lsp_test.py --kompozc build/compiler/kompozc [--clangd clangd-19 | --no-clangd]
 
@@ -17,7 +17,7 @@ ap.add_argument('--no-clangd', action='store_true')
 args = ap.parse_args()
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-path = os.path.join(root, 'tests', 'compose_tests_other.cpp')
+path = os.path.join(root, 'tests', 'kompozable_tests_other.cpp')
 uri = 'file://' + path
 command = [args.kompozc, '--lsp', '--clangd', '/nonexistent/clangd' if args.no_clangd else args.clangd, '--background-index=false']
 server = subprocess.Popen(command, cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE)

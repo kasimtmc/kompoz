@@ -1,4 +1,4 @@
-// A Kompoz app on a platform: the application made and composed (ComposeHost), drawn by Kompoz's
+// A Kompoz app on a platform: the application made and composed (KompozHost), drawn by Kompoz's
 // GPU renderer into a kept frame where only what changed is drawn again, shown in the platform's
 // window. The same on every platform; the platform (Platform) gives it its window and events and
 // says when frames are due.
@@ -46,7 +46,7 @@ public:
     void surfaceChanged();
     // Before the platform goes: KOMPOZ_STATE_FILE written.
     void quit();
-    ComposeHost& host();
+    KompozHost& host();
 
 private:
     std::unique_ptr<AppState> app_;

@@ -3,9 +3,9 @@
 #include "showcase.hpp"
 
 // Every color animates when the theme changes. The calls need a stable position in the
-// composition, which ComposableScope plus the fixed call order inside it provides.
+// composition, which KompozableScope plus the fixed call order inside it provides.
 ColorScheme animateColorScheme(const ColorScheme& t, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // Every color gets its own animation; their call sites differ by order (positional memoization).
     return t.map([](Color c) { return animateColorAsState(c, 400); });
 }
@@ -24,8 +24,8 @@ Color hueColor(int i) {
 }
 
 // A small titled section of the components screen.
-@Composable
-fun Section(title: String, content: @Composable () -> Unit) {
+@Kompozable
+fun Section(title: String, content: @Kompozable () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -35,7 +35,7 @@ fun Section(title: String, content: @Composable () -> Unit) {
 }
 
 // On a phone, above a section that needs what phones seldom have (a hardware keyboard): a warning.
-@Composable
+@Kompozable
 fun DesktopNote(text: String) {
     if (!kOnAndroid) return
     val cs = MaterialTheme.colorScheme

@@ -1,6 +1,6 @@
 #pragma once
 
-// What kompozc's translations of @Composable functions call for Kotlin's own features: string
+// What kompozc's translations of @Kompozable functions call for Kotlin's own features: string
 // templates, null, ranges, `in`, `?:`, `!!`, a state's value. Code written by hand has no need
 // of it.
 
@@ -725,7 +725,7 @@ void check(bool condition, F&& message = 0) {
     if (!condition) throw std::logic_error(str(message));
 }
 // Kotlin's Nothing: what error() and TODO() give, as they never return. It goes for a value of any
-// type: compositionLocalOf<User> { error("…") }, x ?: error("…").
+// type: kompozitionLocalOf<User> { error("…") }, x ?: error("…").
 struct Nothing {
     template <class T>
     [[noreturn]] operator T() const {

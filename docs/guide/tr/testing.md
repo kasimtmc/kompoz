@@ -1,13 +1,13 @@
 # Test
 
-Compose'un `createComposeRule()`'u gibi pencere olmadan çalışan arayüz testleri: `ComposeTestRule { … }` bir composable'ı kompoze eder, düğümleri bulun, onlar üzerinde işlem yapın ve sonucu kontrol edin; animasyonları ve coroutine'leri deterministik kılan sanal bir saatle.
+Compose'un `createComposeRule()`'u gibi pencere olmadan çalışan arayüz testleri: `KompozTestRule { … }` bir composable'ı kompoze eder, düğümleri bulun, onlar üzerinde işlem yapın ve sonucu kontrol edin; animasyonları ve coroutine'leri deterministik kılan sanal bir saatle.
 
 ## İlk test
 
-`ComposeTestRule`, içeriğini ekransız (headless) olarak, sabit boyutlu bir metin ölçücüyle kompoze eder, yerleştirir ve çizer. Düğümleri metne, içerik açıklamasına ya da test etiketine göre bulun, onlar üzerinde işlem yapın ve doğrulayın:
+`KompozTestRule`, içeriğini ekransız (headless) olarak, sabit boyutlu bir metin ölçücüyle kompoze eder, yerleştirir ve çizer. Düğümleri metne, içerik açıklamasına ya da test etiketine göre bulun, onlar üzerinde işlem yapın ve doğrulayın:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
     Column {
@@ -18,7 +18,7 @@ fun Counter() {
 
 @Test
 fun counterIncrements() {
-    val rule = ComposeTestRule { Counter() }
+    val rule = KompozTestRule { Counter() }
     rule.onNodeWithText("Count: 0").assertIsDisplayed()
     rule.onNodeWithText("Add").performClick()
     rule.onNodeWithText("Count: 1").assertIsDisplayed()
@@ -53,7 +53,7 @@ Compose'da olduğu gibi bulucular birleştirilmiş semantiği kullanır: bir tı
 Metni değişen ya da çevrilen bir şeyi bulmanın en sağlam yolu bir test etiketidir:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Search() {
     val query = rememberTextFieldState()
     OutlinedTextField(state = query, modifier = Modifier.testTag("search"), label = { Text("Search") })
@@ -61,7 +61,7 @@ fun Search() {
 
 @Test
 fun typingFillsTheField() {
-    val rule = ComposeTestRule { Search() }
+    val rule = KompozTestRule { Search() }
     rule.onNodeWithTag("search").performTextInput("kompoz")
     rule.onNodeWithText("kompoz").assertExists()
 }
@@ -84,10 +84,10 @@ Her işlem ardından arayüzün durulmasını bekler.
 `assertExists`, `assertDoesNotExist`, `assertIsDisplayed` (pencerede, kırpılıp gizlenmemiş), `assertIsNotDisplayed`, `assertTextEquals`, `assertTextContains`, `assertContentDescriptionEquals`, `assertHasClickAction`, `assertIsEnabled`, `assertIsNotEnabled`, `assertIsSelected` (seçili bir sekme, işaretli bir checkbox, açık bir anahtar), `assertIsOn`, `assertIsOff`. Düğümü döndürdükleri için zincirlenebilirler:
 
 ```kotlin
-#! @Composable fun Form() {}
+#! @Kompozable fun Form() {}
 @Test
 fun saves() {
-    val rule = ComposeTestRule { Form() }
+    val rule = KompozTestRule { Form() }
     rule.onNodeWithText("Save").assertIsDisplayed().assertIsEnabled().performClick()
 }
 ```
@@ -103,7 +103,7 @@ Rule'un saati sanaldır: zaman yalnızca test öyle dediğinde ilerler; böylece
 - `rule.advanceFrame()` bir kare çalıştırır; `rule.mainClock.advanceTimeBy(ms)`, `rule.advanceTimeBy(ms)`'nin Compose'daki adıdır.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Toast(show: Boolean) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(show) {
@@ -118,7 +118,7 @@ fun Toast(show: Boolean) {
 
 @Test
 fun toastGoesAwayAfterTwoSeconds() {
-    val rule = ComposeTestRule { Toast(true) }
+    val rule = KompozTestRule { Toast(true) }
     rule.onNodeWithText("Saved").assertExists()
     rule.mainClock.advanceTimeBy(2100)
     rule.onNodeWithText("Saved").assertDoesNotExist()
@@ -135,7 +135,7 @@ fun toastGoesAwayAfterTwoSeconds() {
 @Test
 fun showsTheNewName() {
     val name = mutableStateOf("Ada")
-    val rule = ComposeTestRule { Text("Hello, ${name.value}") }
+    val rule = KompozTestRule { Text("Hello, ${name.value}") }
     rule.onNodeWithText("Hello, Ada").assertExists()
     name.value = "Grace"
     rule.waitForIdle()

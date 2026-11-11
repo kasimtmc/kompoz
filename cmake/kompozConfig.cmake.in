@@ -37,8 +37,8 @@ if(@KOMPOZ_PACKAGE_APP@)
                            COMMAND ${CMAKE_COMMAND} -E copy_directory ${KOMPOZ_ASSETS_DIR} $<TARGET_FILE_DIR:${target}>)
     endfunction()
 endif()
-# kompoz_compose(target): its @Composable functions written in Compose's own syntax (kompozc).
+# kompozable(target): its @Kompozable functions written in Kotlin's syntax (kompozc).
 set(KOMPOZ_HEADERS_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@/kompoz")
-include(${CMAKE_CURRENT_LIST_DIR}/KompozCompose.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/Kompozable.cmake)
 
 check_required_components(kompoz)

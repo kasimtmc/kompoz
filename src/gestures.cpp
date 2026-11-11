@@ -256,7 +256,7 @@ Modifier Modifier::onClick(std::function<void()> onClick, OnClickOptions options
     struct Latest {  // what the running handlers call
         std::function<void()> onClick;
         OnClickOptions options;
-        ComposeHost* host = nullptr;
+        KompozHost* host = nullptr;
         bool pressed = false;  // another button went down over it...
         int press = 0;         // ...as the host's press of such buttons numbered so far (none since)
         bool keysHeld(const KeyModifiers& m) const { return !options.keyboardModifiers || options.keyboardModifiers(m); }
@@ -264,14 +264,14 @@ Modifier Modifier::onClick(std::function<void()> onClick, OnClickOptions options
     auto latest = remember([] { return std::make_shared<Latest>(); }, site);
     latest->onClick = std::move(onClick);
     latest->options = std::move(options);
-    latest->host = &detail::Composer::require().host();
+    latest->host = &detail::Kompozer::require().host();
     const OnClickOptions& o = latest->options;
     if (!o.enabled) return *this;
     if (o.matcher.button == PointerButton::Primary) {  // a tap of a finger or the primary button
         std::pair<bool, bool> key{bool(o.onDoubleClick), bool(o.onLongClick)};
         return pointerInput(key, [latest, key](PointerInputScope& scope) -> Task {
             auto allowed = [latest] {
-                bool mouse = latest->host->pointerType() == ComposeHost::PointerType::Mouse;
+                bool mouse = latest->host->pointerType() == KompozHost::PointerType::Mouse;
                 const PointerMatcher& m = latest->options.matcher;
                 return (mouse ? m.acceptsMouse : m.acceptsTouch) && latest->keysHeld(latest->host->keyboardModifiers());
             };

@@ -8,7 +8,7 @@
 //
 //   Strings mine = Strings::english();
 //   mine.copy = "Duplicate";
-//   CompositionLocalProvider({LocalStrings.provides(mine)}, content);
+//   KompozitionLocalProvider({LocalStrings.provides(mine)}, content);
 
 #include "runtime.hpp"
 
@@ -66,6 +66,6 @@ struct Strings {
     static Strings forLanguage(std::string_view language);
     friend bool operator==(const Strings&, const Strings&) = default;
 };
-inline const CompositionLocal<Strings> LocalStrings{Strings{}};
+inline const KompozitionLocal<Strings> LocalStrings{Strings{}};
 
 } // namespace kompoz

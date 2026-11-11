@@ -5,7 +5,7 @@
 // A puck on a track: thrown, it slides on from the finger's speed and slows down (animateDecay,
 // stopping at the track's ends: updateBounds); or it springs back to the middle carrying that
 // speed (animateTo with an initial velocity). A VelocityTracker measures how fast the finger let go.
-@Composable
+@Kompozable
 fun FlingTrack(a: Animatable<Float, AnimationVector1D>, decays: Boolean, onReleased: (Float) -> Unit) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -40,7 +40,7 @@ fun FlingTrack(a: Animatable<Float, AnimationVector1D>, decays: Boolean, onRelea
     }
 }
 
-@Composable
+@Kompozable
 fun FlingSection() {
     val cs = MaterialTheme.colorScheme
     val slide = remember { Animatable(0f) }
@@ -57,7 +57,7 @@ fun FlingSection() {
 }
 
 // The standard drawers in small frames: one always shown, one that pushes the page aside.
-@Composable
+@Kompozable
 fun DrawersSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -65,7 +65,7 @@ fun DrawersSection() {
     val drawer = rememberDrawerState()
     val coroutines = rememberCoroutineScope()
     val pages = listOf("Gelen", "Gönderilen", "Taslaklar")
-    val items: @Composable (Boolean) -> Unit = { closeAfter ->
+    val items: @Kompozable (Boolean) -> Unit = { closeAfter ->
         for (i in 0 until 3)
             NavigationDrawerItem(label = { Text(pages[i]) }, selected = page == i, onClick = {
                 page = i
@@ -96,7 +96,7 @@ fun DrawersSection() {
 
 // Desktop scrollbars beside a scrolled column, a long lazy list and a row: drag a thumb, click a
 // track to page, hover to darken.
-@Composable
+@Kompozable
 fun ScrollbarSection() {
     val cs = MaterialTheme.colorScheme
     val column = rememberScrollState()
@@ -143,7 +143,7 @@ fun ScrollbarSection() {
 // PredictiveBackHandler: while the panel is open, Android's back gesture (14+) shrinks it and
 // moves it away from the edge the finger came from; done, it closes; called off, it comes back.
 // Escape (the back button before Android 13) closes it at once.
-@Composable
+@Kompozable
 fun PredictiveBackSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -200,7 +200,7 @@ fun PredictiveBackSection() {
 
 // PointerEventPass: a parent that sees each press before what is inside it (Initial) and can
 // take it, and after (Final) to tell whether something inside took it.
-@Composable
+@Kompozable
 fun PointerPassSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -232,7 +232,7 @@ fun PointerPassSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun ScrollableSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -312,7 +312,7 @@ private:
 std::shared_ptr<OverscrollEffect> offsetOverscroll() { return std::make_shared<OffsetOverscroll>(); }
 
 // A row of tiles with the overscroll effect given: the stretch, one of our own, or none (null).
-@Composable
+@Kompozable
 fun OverscrollRow(title: String, effect: OverscrollEffect?) {
     val cs = MaterialTheme.colorScheme
     Text(title, style = MaterialTheme.typography.labelLarge)
@@ -325,7 +325,7 @@ fun OverscrollRow(title: String, effect: OverscrollEffect?) {
 }
 
 // OverscrollEffect: the stretch (the default), an effect of one's own, none.
-@Composable
+@Kompozable
 fun OverscrollSection() {
     val cs = MaterialTheme.colorScheme
     val offset = remember { offsetOverscroll() }
@@ -340,7 +340,7 @@ fun OverscrollSection() {
 
 // LocalBringIntoViewSpec: where a row brings its focused card — a third of the way in, as a TV
 // row keeps it — or, switched off, the default (just far enough that it shows).
-@Composable
+@Kompozable
 fun BringIntoViewSection() {
     val cs = MaterialTheme.colorScheme
     var pinned by remember { mutableStateOf(true) }
@@ -348,7 +348,7 @@ fun BringIntoViewSection() {
     val requesters = remember { List(20) { FocusRequester() } }
     val third = BringIntoViewSpec(calculateScrollDistance = { offset, size, container -> offset - (container - size) * 0.3f })
     Section("LocalBringIntoViewSpec · BringIntoViewSpec") {
-        CompositionLocalProvider(LocalBringIntoViewSpec provides (if (pinned) third else BringIntoViewSpec())) {
+        KompozitionLocalProvider(LocalBringIntoViewSpec provides (if (pinned) third else BringIntoViewSpec())) {
             LazyRow(modifier = Modifier.fillMaxWidth().height(72.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(20) { i ->
                     val current = focused == i
@@ -375,7 +375,7 @@ fun BringIntoViewSection() {
 
 // Nested scrolling: an inner list hands over to the page, a pager takes over from the row in
 // its page, a vertical pager, and a large app bar that collapses before its list scrolls.
-@Composable
+@Kompozable
 fun NestedScrollSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -388,7 +388,7 @@ fun NestedScrollSection() {
     val searchScroll = SearchBarDefaults.enterAlwaysSearchBarScrollBehavior()
     val mailSearch = rememberSearchBarState()
     val mailQuery = rememberTextFieldState()
-    val caption: @Composable (String) -> Unit = { text -> Text(text, color = cs.onSurfaceVariant, style = typography.bodyMedium) }
+    val caption: @Kompozable (String) -> Unit = { text -> Text(text, color = cs.onSurfaceVariant, style = typography.bodyMedium) }
     Section("İç içe kaydırma (nestedScroll)") {
         caption("İçteki liste sonuna gelince sayfa kaymaya devam eder:")
         Column(modifier = Modifier.fillMaxWidth().height(150.dp).background(cs.surfaceContainerHighest, RoundedCornerShape(12.dp)).verticalScroll(inner).padding(16.dp, 6.dp)) {
@@ -455,7 +455,7 @@ fun NestedScrollSection() {
                                 modifier = Modifier.clip(RoundedCornerShape(16.dp)))
         caption("LargeTopAppBar + exitUntilCollapsed (alt başlıklı): önce başlık küçülür, sonra liste kayar.")
         Box(modifier = Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp))) {
-            CompositionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
+            KompozitionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
                 Scaffold(modifier = Modifier.fillMaxSize().nestedScroll(appBar.nestedScrollConnection),
                          topBar = {
                              LargeTopAppBar(title = { Text("Gelen kutusu") },
@@ -479,7 +479,7 @@ fun NestedScrollSection() {
         }
         caption("TwoRowsTopAppBar: başlık iki satırda da kendi biçimini seçer — açıkken büyük ve iki satır, kapanınca kısa.")
         Box(modifier = Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp))) {
-            CompositionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
+            KompozitionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
                 Scaffold(modifier = Modifier.fillMaxSize().nestedScroll(twoRows.nestedScrollConnection),
                          topBar = {
                              TwoRowsTopAppBar(
@@ -528,12 +528,12 @@ fun NestedScrollSection() {
         }
         caption("AppBarWithSearch + enterAlways: liste ilerledikçe arama çubuğu yukarı kayar, geri kaydırınca önce o gelir; dokununca " +
                 "tam ekran arama açılır.")
-        val mailField: @Composable () -> Unit = {
+        val mailField: @Kompozable () -> Unit = {
             SearchBarDefaults.InputField(searchBarState = mailSearch, textFieldState = mailQuery, onSearch = {},
                                          placeholder = { Text("Postalarda ara") }, leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Ara") })
         }
         Box(modifier = Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp))) {
-            CompositionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
+            KompozitionLocalProvider(LocalSystemInsets provides SystemInsets()) {  // not at the window's edge
                 Scaffold(modifier = Modifier.fillMaxSize().nestedScroll(searchScroll.nestedScrollConnection),
                          topBar = {
                              AppBarWithSearch(state = mailSearch, inputField = mailField,
@@ -565,7 +565,7 @@ fun NestedScrollSection() {
 }
 
 // Modifier.pullToRefresh on a plain Box, with the default indicator or one of our own in an IndicatorBox.
-@Composable
+@Kompozable
 fun PullToRefreshSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography

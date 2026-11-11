@@ -49,7 +49,7 @@ An `AnnotatedString` carries styles over parts of its text, as Compose's does. B
 
 ```kotlin
 #! fun openTerms() {}
-@Composable
+@Kompozable
 fun Terms() {
     Text(buildAnnotatedString {
         append("By continuing you accept the ")
@@ -76,7 +76,7 @@ Your own fonts are asset files:
 ```kotlin
 val Lora = FontFamily.fromFiles(listOf(FontFile("fonts/Lora-Regular.ttf"), FontFile("fonts/Lora-Bold.ttf", FontWeight.Bold)))
 
-@Composable
+@Kompozable
 fun Quote(text: String) {
     Text(text, fontSize = 20.sp, fontStyle = FontStyle.Italic, fontFamily = Lora)
 }
@@ -105,7 +105,7 @@ SelectionContainer {
 ### With a value and a callback
 
 ```kotlin
-@Composable
+@Kompozable
 fun EmailField() {
     var email by rememberSaveable { mutableStateOf("") }
     OutlinedTextField(
@@ -126,8 +126,8 @@ A `TextFieldState` keeps the text and its selection, and an undo history:
 
 ```kotlin
 #! fun send(text: String) {}
-@Composable
-fun Composer() {
+@Kompozable
+fun Kompozer() {
     val message = rememberTextFieldState()
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
@@ -168,7 +168,7 @@ On Android, the soft keyboard shows suggestions and autocorrects, and its type a
 A `FocusRequester` moves focus to a field from code, and `focusManager()` clears it:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Search() {
     val query = rememberTextFieldState()
     val focus = remember { FocusRequester() }
@@ -184,7 +184,7 @@ fun Search() {
 To draw text on a `Canvas`, or to know how a text was laid out, use a text measurer:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Gauge(percent: Int) {
     val measurer = rememberTextMeasurer()
     val primary = MaterialTheme.colorScheme.primary   // the theme is read in composition, not while drawing
@@ -199,7 +199,7 @@ fun Gauge(percent: Int) {
 `Text` can also tell you how it was laid out, through an `onTextLayout` callback: how many lines it took, whether it was cut off.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Excerpt(article: String) {
     var cut by remember { mutableStateOf(false) }
     Column {

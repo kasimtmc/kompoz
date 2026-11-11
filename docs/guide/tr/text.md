@@ -49,7 +49,7 @@ Bir `AnnotatedString`, Compose'daki gibi metninin parçaları üzerinde stiller 
 
 ```kotlin
 #! fun openTerms() {}
-@Composable
+@Kompozable
 fun Terms() {
     Text(buildAnnotatedString {
         append("By continuing you accept the ")
@@ -76,7 +76,7 @@ Kendi fontlarınız varlık dosyalarıdır:
 ```kotlin
 val Lora = FontFamily.fromFiles(listOf(FontFile("fonts/Lora-Regular.ttf"), FontFile("fonts/Lora-Bold.ttf", FontWeight.Bold)))
 
-@Composable
+@Kompozable
 fun Quote(text: String) {
     Text(text, fontSize = 20.sp, fontStyle = FontStyle.Italic, fontFamily = Lora)
 }
@@ -105,7 +105,7 @@ SelectionContainer {
 ### Bir değer ve bir callback ile
 
 ```kotlin
-@Composable
+@Kompozable
 fun EmailField() {
     var email by rememberSaveable { mutableStateOf("") }
     OutlinedTextField(
@@ -126,8 +126,8 @@ Bir `TextFieldState`, metni ve seçimini, bir de geri alma geçmişini tutar:
 
 ```kotlin
 #! fun send(text: String) {}
-@Composable
-fun Composer() {
+@Kompozable
+fun Kompozer() {
     val message = rememberTextFieldState()
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
@@ -168,7 +168,7 @@ Android'de yazılım klavyesi öneriler gösterir ve otomatik düzeltme yapar; t
 Bir `FocusRequester` odağı koddan bir alana taşır, `focusManager()` ise odağı temizler:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Search() {
     val query = rememberTextFieldState()
     val focus = remember { FocusRequester() }
@@ -184,7 +184,7 @@ fun Search() {
 Bir `Canvas`'a metin çizmek ya da bir metnin nasıl yerleştirildiğini öğrenmek için bir metin ölçer kullanın:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Gauge(percent: Int) {
     val measurer = rememberTextMeasurer()
     val primary = MaterialTheme.colorScheme.primary   // tema çizerken değil, kompozisyonda okunur
@@ -199,7 +199,7 @@ fun Gauge(percent: Int) {
 `Text` de nasıl yerleştirildiğini bir `onTextLayout` callback'i üzerinden söyleyebilir: kaç satır kapladığı, kesilip kesilmediği.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Excerpt(article: String) {
     var cut by remember { mutableStateOf(false) }
     Column {

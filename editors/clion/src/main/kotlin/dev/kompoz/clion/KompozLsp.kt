@@ -1,4 +1,4 @@
-// kompozc's language server in CLion: started for C++ sources with Compose code in them, which
+// kompozc's language server in CLion: started for C++ sources with Kotlin code in them, which
 // CLion's own C++ engine would read as broken C++. In those files, CLion's highlighting is turned
 // off (the language server's diagnostics still show: they aren't a highlighting pass of CLion's),
 // so what is wrong there comes from kompozc --lsp: kompozc's errors and clangd's, on their lines.
@@ -27,14 +27,14 @@ import java.util.concurrent.ConcurrentHashMap
 
 private val LOG = logger<KompozLspIntegrationProvider>()
 
-/** Which files are C++ with Compose code: a line that starts a Kotlin declaration no C++ line starts. */
-object ComposeSources {
+/** Which files are C++ with Kotlin code: a line that starts a Kotlin declaration no C++ line starts. */
+object KompozableSources {
     private val extensions = setOf("cpp", "cc", "cxx")
     private val kotlinDeclaration =
-        Regex("""^(@Composable\b|@Serializable\b|(private |internal )?(fun|val|var) |object \w|data class )""", RegexOption.MULTILINE)
+        Regex("""^(@Kompozable\b|@Serializable\b|(private |internal )?(fun|val|var) |object \w|data class )""", RegexOption.MULTILINE)
     private val known = ConcurrentHashMap<String, Pair<Long, Boolean>>()  // by path: the text's stamp, the answer
 
-    fun isCompose(file: VirtualFile): Boolean {
+    fun isKompozable(file: VirtualFile): Boolean {
         if (file.extension?.lowercase() !in extensions) return false
         val document = FileDocumentManager.getInstance().getCachedDocument(file)
         val stamp = document?.modificationStamp ?: file.modificationStamp
@@ -46,22 +46,22 @@ object ComposeSources {
 
 class KompozLspIntegrationProvider : LspIntegrationProvider {
     override fun fileOpened(project: Project, file: VirtualFile, clientStarter: LspIntegrationProvider.LspClientStarter) {
-        if (!ComposeSources.isCompose(file)) return
-        LOG.info("Kompoz: ${file.path} has Compose code: kompozc --lsp for it")
+        if (!KompozableSources.isKompozable(file)) return
+        LOG.info("Kompoz: ${file.path} has Kotlin code: kompozc --lsp for it")
         clientStarter.ensureClientStarted(KompozLspClientDescriptor(project))
-        ComposeHighlighting.leaveToKompoz(project, file)
+        KompozableHighlighting.leaveToKompoz(project, file)
     }
 }
 
-/** A file with Compose code opened in an editor: CLion's highlighting off in it (again, if it was put back). */
+/** A file with Kotlin code opened in an editor: CLion's highlighting off in it (again, if it was put back). */
 class KompozEditorListener(private val project: Project) : FileEditorManagerListener {
     override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-        if (ComposeSources.isCompose(file)) ComposeHighlighting.leaveToKompoz(project, file)
+        if (KompozableSources.isKompozable(file)) KompozableHighlighting.leaveToKompoz(project, file)
     }
 }
 
 /**
- * A file with Compose code given another highlighting level: off again. CLion's C++ engine (Nova) keeps a level of its
+ * A file with Kotlin code given another highlighting level: off again. CLion's C++ engine (Nova) keeps a level of its
  * own for each file and, when it takes a file up, puts that one on the file (its default: all problems), after the
  * plugin set it; a change of the file's level is what Nova sends back to its engine, so setting it off again here
  * reaches the engine too.
@@ -70,15 +70,15 @@ class KompozHighlightingListener(private val project: Project) : FileHighlightin
     override fun settingChanged(root: PsiElement, setting: FileHighlightingSetting) {
         if (setting == FileHighlightingSetting.SKIP_HIGHLIGHTING) return
         val file = root.containingFile?.virtualFile ?: return
-        if (!ComposeSources.isCompose(file)) return
+        if (!KompozableSources.isKompozable(file)) return
         LOG.info("Kompoz: ${file.path}: highlighting set to $setting: off again")
-        ComposeHighlighting.leaveToKompoz(project, file)
+        KompozableHighlighting.leaveToKompoz(project, file)
     }
 }
 
 // CLion's own highlighting off in a file (its C++ engine would mark the Kotlin): the level a user sets
 // with the file's highlighting widget, as None.
-object ComposeHighlighting {
+object KompozableHighlighting {
     fun leaveToKompoz(project: Project, file: VirtualFile) {
         // (any modality: the plugin may be installed from the settings dialog, with the file open)
         ApplicationManager.getApplication().invokeLater({
@@ -97,7 +97,7 @@ object ComposeHighlighting {
 }
 
 private class KompozLspClientDescriptor(project: Project) : ProjectWideLspClientDescriptor(project, "Kompoz") {
-    override fun isSupportedFile(file: VirtualFile): Boolean = ComposeSources.isCompose(file)
+    override fun isSupportedFile(file: VirtualFile): Boolean = KompozableSources.isKompozable(file)
 
     override fun createCommandLine(): GeneralCommandLine =
         GeneralCommandLine(KompozSettings.kompozc(project), "--lsp").withWorkDirectory(project.basePath)

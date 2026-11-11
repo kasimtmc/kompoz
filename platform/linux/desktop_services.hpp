@@ -56,10 +56,10 @@ public:
     std::optional<std::string> buttonLayout() const;  // GNOME's (DesktopAccent::buttonLayout)
     // Platform's hooks, as the platform passes them on.
     void metricsUpdated();
-    void handled(ComposeHost& host, const Event& event);
+    void handled(KompozHost& host, const Event& event);
     // After a frame's composition: the semantics tree published to the screen readers, as they
     // ask for it, `window` where the window is (its points) and `title` its title.
-    void composed(ComposeHost& host, bool redraw, int64_t frameTime, const Rect& window, float dpToPoints, const std::string& title);
+    void composed(KompozHost& host, bool redraw, int64_t frameTime, const Rect& window, float dpToPoints, const std::string& title);
     bool wantsFrames() const;
     // Their threads ended, before the loop they wake goes.
     void stop();

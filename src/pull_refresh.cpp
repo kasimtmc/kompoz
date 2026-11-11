@@ -55,7 +55,7 @@ PullToRefreshState rememberPullToRefreshState(CallSite site) {
 
 Modifier Modifier::pullToRefresh(bool isRefreshing, const PullToRefreshState& state, std::function<void()> onRefresh,
                                  bool enabled, float threshold, CallSite site) const {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto node = remember([] { return std::make_shared<PullNode>(); });
     node->isRefreshing = isRefreshing;
     node->enabled = enabled;
@@ -110,7 +110,7 @@ Modifier Modifier::pullToRefresh(bool isRefreshing, const PullToRefreshState& st
 
 void detail::PullToRefreshBox(bool isRefreshing, std::function<void()> onRefresh, const Modifier& modifier, const Content& content,
                       PullToRefreshOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     PullToRefreshState state = options.state ? *options.state : rememberPullToRefreshState();
     ::kompoz::detail::Box(modifier.pullToRefresh(isRefreshing, state, std::move(onRefresh), options.enabled, options.threshold),
         options.contentAlignment, [&] {
@@ -129,7 +129,7 @@ Color indicatorColor() { return colorScheme().onSurfaceVariant; }
 
 void IndicatorBox(const PullToRefreshState& state, bool isRefreshing, const Modifier& modifier, const Content& content,
                   float maxDistance, Shape shape, std::optional<Color> containerColor, float elevation, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     float fraction = state.distanceFraction();  // recomposes this small box as it moves
     Modifier m = modifier.size(kContainerSize)
                      .drawWithContent([](ContentDrawScope& s) {
@@ -148,7 +148,7 @@ namespace {
 // The arc that grows with the pull and its arrowhead, faint until the threshold (Compose's
 // CircularArrowProgressIndicator, after SwipeRefreshLayout).
 void ArrowIndicator(float progress, Color color, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto shown = animateFloatAsState(progress >= 1 ? 1.f : 0.3f, tween(150));  // (read as it is drawn)
     Canvas(Modifier().size(kSpinnerSize), [=](DrawScope& s) {
         float adjusted = std::max(std::min(1.f, progress) - 0.4f, 0.f) * 5 / 3;  // the first 40% shows nothing
@@ -177,7 +177,7 @@ void ArrowIndicator(float progress, Color color, CallSite site = CallSite::curre
 
 void Indicator(const PullToRefreshState& state, bool isRefreshing, const Modifier& modifier, std::optional<Color> containerColor,
                std::optional<Color> color, float maxDistance, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Color c = color.value_or(indicatorColor());
     float fraction = state.distanceFraction();
     Modifier m = modifier;

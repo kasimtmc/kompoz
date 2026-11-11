@@ -108,7 +108,7 @@ std::function<Task(PointerInputScope&)> drawerDrag(DrawerState state, CoroutineS
 
 // The drawer its sheet is in (Modal and DismissibleNavigationDrawer give it to their drawer
 // content): the sheet follows its back gesture.
-const CompositionLocal<std::shared_ptr<DrawerState::Data>> LocalDrawer{std::shared_ptr<DrawerState::Data>{}};
+const KompozitionLocal<std::shared_ptr<DrawerState::Data>> LocalDrawer{std::shared_ptr<DrawerState::Data>{}};
 
 // Back closes an open drawer; its gesture stretches the sheet as M3's: wider towards the edge
 // it came from if that is the drawer's (up to 12 dp), otherwise narrower (24 dp), and lower
@@ -166,7 +166,7 @@ void standardSheet(const std::shared_ptr<DrawerState::Data>& d, const Modifier& 
     const ColorScheme& cs = colorScheme();
     auto& size = remember([] { return std::make_shared<Size>(); });
     Stretch stretch = backStretch(d, size, 0, LocalLayoutDirection.current() == LayoutDirection::Rtl);
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
         detail::Column(modifier.fillMaxHeight().widthIn(240, 360).then(stretch.container).background(cs.surface), [&] {
             detail::Column(Modifier()
                        .fillMaxSize()
@@ -185,7 +185,7 @@ void modalSheet(const std::shared_ptr<DrawerState::Data>& d, const Modifier& mod
     auto& size = remember([] { return std::make_shared<Size>(); });
     Stretch stretch = backStretch(d, size, 16 / (width + 16), LocalLayoutDirection.current() == LayoutDirection::Rtl);
     // Reaches 16 dp past the start edge so only the end corners show rounded.
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
         detail::Column(modifier.fillMaxHeight()
                    .width(width + 16)
                    .offset(-16, 0)
@@ -208,7 +208,7 @@ void modalSheet(const std::shared_ptr<DrawerState::Data>& d, const Modifier& mod
 
 void detail::ModalNavigationDrawer(const Content& drawerContent, DrawerState state, const Content& content,
                            DrawerOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto d = state.data_;
     auto coroutines = rememberCoroutineScope();
     bool visible = d->visible.get();
@@ -232,24 +232,24 @@ void detail::ModalNavigationDrawer(const Content& drawerContent, DrawerState sta
                 .fillMaxHeight()
                 .offset([d] { return Offset{-(d->width.get() + 16) * (1 - d->fraction.value()), 0}; })
                 .onSizeChanged([d](Size s) { d->width.set(s.width); }),
-            [&] { CompositionLocalProvider({LocalDrawer.provides(d)}, drawerContent); });
+            [&] { KompozitionLocalProvider({LocalDrawer.provides(d)}, drawerContent); });
     });
     drawerBack(state, coroutines, visible && open, rtl);
 }
 
 void detail::ModalDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     modalSheet(LocalDrawer.current(), modifier, content);
 }
 
 void detail::ModalDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     modalSheet(drawerState.data_, modifier, content);
 }
 
 void detail::DismissibleNavigationDrawer(const Content& drawerContent, DrawerState state, const Content& content,
                                  DrawerOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto d = state.data_;
     auto coroutines = rememberCoroutineScope();
     bool visible = d->visible.get(), open = d->open.get();
@@ -260,7 +260,7 @@ void detail::DismissibleNavigationDrawer(const Content& drawerContent, DrawerSta
     kompoz::Layout(
         root,
         [&] {
-            if (visible) detail::Box(Modifier().fillMaxHeight(), [&] { CompositionLocalProvider({LocalDrawer.provides(d)}, drawerContent); });
+            if (visible) detail::Box(Modifier().fillMaxHeight(), [&] { KompozitionLocalProvider({LocalDrawer.provides(d)}, drawerContent); });
             detail::Box(Modifier().fillMaxSize(), content);
         },
         [d, visible](const std::vector<Measurable>& children, const Constraints& c) {
@@ -279,17 +279,17 @@ void detail::DismissibleNavigationDrawer(const Content& drawerContent, DrawerSta
 }
 
 void detail::DismissibleDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     standardSheet(LocalDrawer.current(), modifier, content);
 }
 
 void detail::DismissibleDrawerSheet(DrawerState drawerState, const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     standardSheet(drawerState.data_, modifier, content);
 }
 
 void detail::PermanentNavigationDrawer(const Content& drawerContent, const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::Row(modifier.fillMaxSize(), [&] {
         drawerContent();
         detail::Box(Modifier().weight(1).fillMaxHeight(), content);
@@ -297,19 +297,19 @@ void detail::PermanentNavigationDrawer(const Content& drawerContent, const Modif
 }
 
 void detail::PermanentDrawerSheet(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     standardSheet(nullptr, modifier, content);
 }
 
 void detail::NavigationDrawerItem(const Content& label, bool selected, std::function<void()> onClick, const Content& icon,
                           const Content& badge, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // Compose 1.4's: at least 56 dp, a pill in secondaryContainer when selected (at once), the
     // label in the text style around it; read as a tab.
     Color container = selected ? cs.secondaryContainer : colors::Transparent;
     Color content = selected ? cs.onSecondaryContainer : cs.onSurfaceVariant;
-    CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(content)}, [&] {
         detail::Row(modifier.fillMaxWidth().heightIn(56).background(container, 28).selectable(selected, std::move(onClick), SemanticsRole::Tab)
                 .padding(16, 0, 24, 0),
             {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically}, [&] {
@@ -321,11 +321,11 @@ void detail::NavigationDrawerItem(const Content& label, bool selected, std::func
 }
 
 void detail::NavigationRail(const Modifier& modifier, const Content& header, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = detail::systemBarsForVisualComponents().only(WindowInsetsSides::Vertical | WindowInsetsSides::Start).asPaddingValues();
     // Compose 1.4's: at least 80 dp wide, 4 dp above, below and between the items, 8 under the header.
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
         detail::Column(modifier.fillMaxHeight().background(cs.surface).padding(insets.start, insets.top, 0, insets.bottom).widthIn(80)
                    .padding(0, 4),
                {.verticalArrangement = Arrangement::spacedBy(4), .horizontalAlignment = Alignment::CenterHorizontally},
@@ -346,7 +346,7 @@ void detail::NavigationRailItem(bool selected, std::function<void()> onClick, co
 
 void detail::NavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
                         const NavigationRailItemOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // Compose 1.4's: 80 × 56, the 56 dp wide indicator at the top.
     detail::indicatorNavigationItem(selected, std::move(onClick), icon, label, modifier.widthIn(80).height(56), 56, 0, options.enabled,
                                     options.interactionSource);

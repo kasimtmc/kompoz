@@ -3,7 +3,7 @@
 #include "showcase.hpp"
 
 // One task row that can be swiped away (left: delete, right: done).
-@Composable
+@Kompozable
 fun SwipeableTask(id: Int, tasks: SnapshotStateList<Int>) {
     val cs = MaterialTheme.colorScheme
     val state = rememberSwipeToDismissBoxState(confirmValueChange = {
@@ -73,12 +73,12 @@ private val cities = listOf("Adana", "Ankara", "Antalya", "Aydın", "Balıkesir"
 
 // The same search, full screen (ExpandedFullScreenSearchBar) or opening in place
 // (ExpandedDockedSearchBar), each a SearchBarState with its query in a TextFieldState.
-@Composable
+@Kompozable
 private fun CitySearchBar(docked: Boolean, state: SearchBarState, query: TextFieldState, chosen: MutableState<String>) {
     val scope = rememberCoroutineScope()
     val close: () -> Unit = { scope.launch { state.animateToCollapsed() } }  // (typed: GCC 16 crashes on a lambda returning the launch's job)
     val expanded = state.targetValue == SearchBarValue.Expanded
-    val field: @Composable () -> Unit = {
+    val field: @Kompozable () -> Unit = {
         SearchBarDefaults.InputField(
             searchBarState = state, textFieldState = query,
             onSearch = { chosen.value = it; close() },
@@ -97,7 +97,7 @@ private fun CitySearchBar(docked: Boolean, state: SearchBarState, query: TextFie
             },
         )
     }
-    val suggestions: @Composable () -> Unit = {
+    val suggestions: @Kompozable () -> Unit = {
         Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
             val typed = query.text
             for (city in cities) {
@@ -118,7 +118,7 @@ private fun CitySearchBar(docked: Boolean, state: SearchBarState, query: TextFie
 }
 
 // A search bar over a list of cities: the suggestions narrow as you type (in either case).
-@Composable
+@Kompozable
 fun SearchSection() {
     val cs = MaterialTheme.colorScheme
     val chosen = remember { mutableStateOf("") }
@@ -136,7 +136,7 @@ fun SearchSection() {
 
 // TooltipBox: a long press (or a resting mouse) shows the tooltip; the rich one stays. The share
 // and info tooltips point at their buttons with a caret.
-@Composable
+@Kompozable
 fun TooltipSection() {
     val cs = MaterialTheme.colorScheme
     var liked by remember { mutableStateOf(false) }
@@ -182,7 +182,7 @@ fun TooltipSection() {
 private val fruits = listOf("Elma", "Armut", "Kiraz", "Muz", "Çilek", "Karpuz", "Kayısı", "Şeftali", "Üzüm", "İncir", "Nar", "Ayva")
 
 // ExposedDropdownMenuBox: a read-only field that picks from a menu, and one that filters as you type.
-@Composable
+@Kompozable
 fun DropdownSection() {
     var open by remember { mutableStateOf(false) }
     var fruit by remember { mutableStateOf("Elma") }
@@ -213,7 +213,7 @@ fun DropdownSection() {
 // shrinks while held, a card with its own pressed and hover looks instead of the overlay) or
 // heard one by one (the button's log; a read-only field that opens a date picker when tapped).
 // A pager that moves on by itself waits while the user holds it (collectIsDraggedAsState).
-@Composable
+@Kompozable
 fun InteractionSection() {
     val cs = MaterialTheme.colorScheme
     val button = remember { MutableInteractionSource() }
@@ -290,7 +290,7 @@ enum class Spot { Start, Middle, End }
 
 enum class RowReveal { Closed, Open }
 
-@Composable
+@Kompozable
 fun RevealRow(title: String, onAction: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     val state = remember {
@@ -321,7 +321,7 @@ fun RevealRow(title: String, onAction: (String) -> Unit) {
     }
 }
 
-@Composable
+@Kompozable
 fun AnchoredDraggableSection() {
     val cs = MaterialTheme.colorScheme
     val names = listOf("Start", "Middle", "End")
@@ -362,8 +362,8 @@ fun AnchoredDraggableSection() {
 }
 
 // A control and its label under it, 76 dp wide (the ripple samples).
-@Composable
-private fun Labelled(label: String, content: @Composable () -> Unit) {
+@Kompozable
+private fun Labelled(label: String, content: @Kompozable () -> Unit) {
     Column(modifier = Modifier.width(76.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         content()
         Text(label, modifier = Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
@@ -373,7 +373,7 @@ private fun Labelled(label: String, content: @Composable () -> Unit) {
 
 // Ripples (Compose's indication): every clickable has Material's; ripple() makes it unbounded,
 // sized or colored, a flat state layer or none instead; LocalIndication sets it for a subtree.
-@Composable
+@Kompozable
 fun RippleSection() {
     val cs = MaterialTheme.colorScheme
     Section("Ripple · indication · LocalIndication") {
@@ -407,7 +407,7 @@ fun RippleSection() {
                     contentAlignment = Alignment.Center) { Icon(Icons.Filled.Check, contentDescription = "Düz") }
             }
             Labelled("yok (Local)") {
-                CompositionLocalProvider(LocalIndication provides false) {
+                KompozitionLocalProvider(LocalIndication provides false) {
                     Box(modifier = Modifier.size(64.dp).background(cs.secondaryContainer, RoundedCornerShape(16.dp)).clickable { }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Filled.Close, contentDescription = "Yok")
                     }
@@ -419,7 +419,7 @@ fun RippleSection() {
 
 // Semantics: what accessibility services (TalkBack) read — a row as one, five star icons as
 // one sentence, a decoration not at all.
-@Composable
+@Kompozable
 fun SemanticsSection() {
     val cs = MaterialTheme.colorScheme
     var unread by remember { mutableStateOf(3) }
@@ -466,7 +466,7 @@ fun SemanticsSection() {
 // focusProperties: "Bir" sends Tab straight to "Dört", "İki" never takes the focus. A keyboard's
 // Tab moves it; without one, the buttons below do (a tap ends the keyboard focus, so they first
 // give it back to the button that had it, then move it a frame later).
-@Composable
+@Kompozable
 fun FocusPropertiesDemo() {
     val requesters = remember { List(4) { FocusRequester() } }
     var focused by remember { mutableStateOf(-1) }
@@ -506,7 +506,7 @@ fun FocusPropertiesDemo() {
 // selectable / toggleable rows: the whole row takes the tap (and reads as one radio button or
 // switch to accessibility services), the controls in it have no callback of their own.
 // matchParentSize: a gradient as big as the text in front of it made the box.
-@Composable
+@Kompozable
 fun SelectableRowsSection() {
     val cs = MaterialTheme.colorScheme
     var choice by remember { mutableStateOf(1) }
@@ -537,7 +537,7 @@ fun SelectableRowsSection() {
 }
 
 // DatePickerDialog: the picked date shows under the button; the dialog opens on it.
-@Composable
+@Kompozable
 fun DatePickerSection() {
     val cs = MaterialTheme.colorScheme
     var open by remember { mutableStateOf(false) }
@@ -582,7 +582,7 @@ fun DatePickerSection() {
 }
 
 // TimePickerDialog: the dial or, with the keyboard button, two number fields.
-@Composable
+@Kompozable
 fun TimePickerSection() {
     val cs = MaterialTheme.colorScheme
     var open by remember { mutableStateOf(false) }
@@ -621,7 +621,7 @@ fun TimePickerSection() {
 }
 
 // Material You: the switch and the system's palettes (Android 12+).
-@Composable
+@Kompozable
 fun DynamicColorSection(source: MutableState<ColorSource>) {
     val cs = MaterialTheme.colorScheme
     val system = LocalDynamicTonalPalette.current
@@ -655,7 +655,7 @@ fun DynamicColorSection(source: MutableState<ColorSource>) {
 
 // The section on its own, in the colors of the source picked in it (KOMPOZ_PREVIEW=DynamicColorPreview).
 @Preview(widthDp = 420, heightDp = 330)
-@Composable
+@Kompozable
 fun DynamicColorPreview() {
     val source = remember { mutableStateOf(ColorSource.Wallpaper) }
     val dark = isSystemInDarkTheme()
@@ -669,7 +669,7 @@ fun DynamicColorPreview() {
 
 // imeNestedScroll: a chat whose keyboard comes up as the messages are pulled on past their end
 // (and goes as they are pushed down), with the field focused.
-@Composable
+@Kompozable
 fun ImeNestedScrollSection() {
     val cs = MaterialTheme.colorScheme
     var draft by remember { mutableStateOf("") }
@@ -693,7 +693,7 @@ fun ImeNestedScrollSection() {
 
 // preferredFrameRate: the refresh rate asked for while this is laid out (a dot moving across to
 // see it by).
-@Composable
+@Kompozable
 fun FrameRateSection() {
     val cs = MaterialTheme.colorScheme
     var choice by remember { mutableStateOf(0) }
@@ -721,7 +721,7 @@ fun FrameRateSection() {
 }
 
 // What each kind of system UI covers right now (the ime row follows the keyboard).
-@Composable
+@Kompozable
 fun InsetsSection() {
     val cs = MaterialTheme.colorScheme
     Section("WindowInsets (dp: sol, üst, sağ, alt)") {

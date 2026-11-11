@@ -75,7 +75,7 @@ struct AppState {
     std::unique_ptr<kompoz::detail::BitmapRenderer> bitmaps;  // draws into bitmaps (AppBitmaps)
     GraphicsContext& graphics() { return *gpuCanvas; }
     float pixelScale() const { return gpuCanvas->scale; }
-    std::unique_ptr<ComposeHost> host;
+    std::unique_ptr<KompozHost> host;
     float scale = 1, pointToDp = 1;
     MutableState<std::optional<TitleBar>> titleBar{std::nullopt};  // Kompoz's, as the platform says (Metrics::titleBar)
     bool quit = false;
@@ -128,7 +128,7 @@ struct AppState {
     std::string dropText;
     kompoz::Offset dropAt;
     int damageFrames = 0, damageWrong = 0, keepFrames = 0, keepWrong = 0;
-    kompoz::detail::RecompositionStats traced;
+    kompoz::detail::RekompozitionStats traced;
 
     ~AppState() {
         stopImageLoader();  // its threads end before the rest goes
@@ -540,7 +540,7 @@ void handleEvent(App& app, const Event& e);
 
 std::string stepScript(App& app) {
     Script& s = app.script;
-    ComposeHost& host = *app.host;
+    KompozHost& host = *app.host;
     if (s.swipeStep < s.swipeFrames) {
         float t = float(++s.swipeStep) / float(s.swipeFrames);
         Offset p{lerp(s.swipeFrom.x, s.swipeTo.x, t), lerp(s.swipeFrom.y, s.swipeTo.y, t)};
@@ -606,7 +606,7 @@ std::string stepScript(App& app) {
             if (command == "fup") host.pointerUp({x, y}, s.clock, id);
         } else if (command == "drag" || command == "mdrag") {  // mdrag: with the mouse
             in >> x >> y >> x2 >> y2;
-            host.pointerDown({x, y}, -1, 0, command == "mdrag" ? ComposeHost::PointerType::Mouse : ComposeHost::PointerType::Touch);
+            host.pointerDown({x, y}, -1, 0, command == "mdrag" ? KompozHost::PointerType::Mouse : KompozHost::PointerType::Touch);
             for (int i = 1; i <= 10; ++i) host.pointerMove({lerp(x, x2, i / 10.f), lerp(y, y2, i / 10.f)});
             host.pointerUp({x2, y2});
         } else if (command == "swipe") {  // swipe x1 y1 x2 y2 frames
@@ -729,7 +729,7 @@ PointerButton otherButton(platform::MouseButton button) {
 
 void handleEvent(App& app, const platform::Event& e) {
     using platform::EventType;
-    ComposeHost& host = *app.host;
+    KompozHost& host = *app.host;
     bool window = e.type == EventType::FocusGained || e.type == EventType::FocusLost || e.type == EventType::Shown || e.type == EventType::Hidden ||
                   e.type == EventType::Minimized || e.type == EventType::Maximized || e.type == EventType::Restored || e.type == EventType::Exposed ||
                   e.type == EventType::Resized || e.type == EventType::MetricsChanged || e.type == EventType::PointerLeft;
@@ -863,7 +863,7 @@ void handleEvent(App& app, const platform::Event& e) {
     }
     case EventType::MouseDown:
         if (e.button == platform::MouseButton::Left) {
-            host.pointerDown(at, app.eventTime(e.time), 0, kompoz::ComposeHost::PointerType::Mouse);
+            host.pointerDown(at, app.eventTime(e.time), 0, kompoz::KompozHost::PointerType::Mouse);
         } else {
             host.mouseButton(at, otherButton(e.button), true);
             if (e.button == platform::MouseButton::Right) host.secondaryClick(at);  // context menus
@@ -956,7 +956,7 @@ bool startGpu(App& app, gpu::Backend backend) {
 
 AppCore::AppCore(Platform& platform) : app_(std::make_unique<AppState>(platform)) {}
 AppCore::~AppCore() = default;
-ComposeHost& AppCore::host() { return *app_->host; }
+KompozHost& AppCore::host() { return *app_->host; }
 
 bool AppCore::start(int argc, char** argv) {
     App& app = *app_;
@@ -1019,13 +1019,13 @@ bool AppCore::start(int argc, char** argv) {
     app.bitmaps = std::make_unique<AppBitmaps>(app);
     kompoz::detail::setBitmapRenderer(app.bitmaps.get());
     App* raw = &app;
-    app.host = std::make_unique<kompoz::ComposeHost>(*app.fonts, [raw] {
+    app.host = std::make_unique<kompoz::KompozHost>(*app.fonts, [raw] {
         WindowFrame(raw->titleBar.get(), raw->config.title,
                     [raw](WindowAction action, Offset at) { raw->platform.windowAction(action, at.x / raw->pointToDp, at.y / raw->pointToDp); },
                     raw->config.content);
     });
 
-    ComposeHost::Callbacks callbacks{
+    KompozHost::Callbacks callbacks{
         .loadImage = [](std::string_view path) { return loadImageFile(path); },
         .loadImageAsync = [](const std::string& model, kompoz::ImageRequestSize size, std::function<void(kompoz::ImageBitmap)> done) {
             loadImageAsync(model, size, std::move(done));

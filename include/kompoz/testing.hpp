@@ -2,7 +2,7 @@
 
 // Headless UI testing, in the spirit of Compose's createComposeRule():
 //
-//   ComposeTestRule rule([] { Counter(); });
+//   KompozTestRule rule([] { Counter(); });
 //   rule.onNodeWithText("+").performClick();
 //   rule.onNodeWithText("1").assertIsDisplayed();
 
@@ -384,7 +384,7 @@ private:
     std::vector<Offset> stack_;
 };
 
-class ComposeTestRule;
+class KompozTestRule;
 
 // A failed assertion (Compose's AssertionError): what was looked for, and what was found.
 class AssertionError : public std::runtime_error {
@@ -425,9 +425,9 @@ public:
     const NodeInteraction& performScrollTo() const;  // scrolls the scrollables around it to show it
 
 private:
-    friend class ComposeTestRule;
+    friend class KompozTestRule;
     friend class NodeCollection;
-    NodeInteraction(ComposeTestRule& rule, LayoutNode* node, std::string matcher)
+    NodeInteraction(KompozTestRule& rule, LayoutNode* node, std::string matcher)
         : rule_(&rule), node_(node), matcher_(std::move(matcher)) {}
     [[noreturn]] void fail(const std::string& what) const { throw AssertionError(what + " (node: " + matcher_ + ")"); }
     const LayoutNode& require(const char* assertion) const {
@@ -448,7 +448,7 @@ private:
         }
         return std::nullopt;
     }
-    ComposeTestRule* rule_;
+    KompozTestRule* rule_;
     LayoutNode* node_;
     std::string matcher_;
 };
@@ -466,24 +466,24 @@ public:
     }
 
 private:
-    friend class ComposeTestRule;
-    NodeCollection(ComposeTestRule& rule, std::vector<LayoutNode*> nodes, std::string matcher)
+    friend class KompozTestRule;
+    NodeCollection(KompozTestRule& rule, std::vector<LayoutNode*> nodes, std::string matcher)
         : rule_(&rule), nodes_(std::move(nodes)), matcher_(std::move(matcher)) {}
-    ComposeTestRule* rule_;
+    KompozTestRule* rule_;
     std::vector<LayoutNode*> nodes_;
     std::string matcher_;
 };
 
-class ComposeTestRule {
+class KompozTestRule {
 public:
-    explicit ComposeTestRule(Content content, Size viewport = {400, 800}) : host_(measurer_, std::move(content)) {
+    explicit KompozTestRule(Content content, Size viewport = {400, 800}) : host_(measurer_, std::move(content)) {
         host_.setViewportSize(viewport);
         waitForIdle(0);
     }
 
     // Compose's rule.mainClock.advanceTimeBy(ms): the virtual clock.
     struct MainClock {
-        ComposeTestRule& rule;
+        KompozTestRule& rule;
         void advanceTimeBy(int64_t millis) { rule.advanceTimeBy(millis); }
     };
     MainClock mainClock() { return {*this}; }
@@ -561,7 +561,7 @@ public:
         return canvas.texts;
     }
 
-    ComposeHost& host() { return host_; }
+    KompozHost& host() { return host_; }
 
 private:
     static std::string describe(const char* what, std::string_view value) { return std::string(what) + " \"" + std::string(value) + "\""; }
@@ -604,7 +604,7 @@ private:
     friend class NodeCollection;
 
     FakeTextMeasurer measurer_;
-    ComposeHost host_;
+    KompozHost host_;
     int64_t clock_ = 0;
 };
 

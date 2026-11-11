@@ -235,7 +235,7 @@ void pager(PagerState state, const Modifier& modifier, const std::function<void(
     PaddingValues contentPadding = options.contentPadding;
     float spacing = options.pageSpacing;
     float crossBias = vertical ? options.horizontalAlignment.bias : options.verticalAlignment.bias;
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = m;
@@ -303,7 +303,7 @@ void pager(PagerState state, const Modifier& modifier, const std::function<void(
         [&] {
             for (int page = first; page <= last; ++page)
                 key(options.key ? options.key(page) : size_t(page), [&] {
-                    detail::Composer::require().emit(
+                    detail::Kompozer::require().emit(
                         detail::keyOf(CallSite::current()),
                         [&](LayoutNode& pageNode) {
                             pageNode.modifier = Modifier().nestedScroll(pageConnection);
@@ -319,13 +319,13 @@ void pager(PagerState state, const Modifier& modifier, const std::function<void(
 
 void detail::HorizontalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
                      PagerOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     pager(std::move(state), modifier, content, options, false);
 }
 
 void detail::VerticalPager(PagerState state, const Modifier& modifier, const std::function<void(int page)>& content,
                    PagerOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     pager(std::move(state), modifier, content, options, true);
 }
 

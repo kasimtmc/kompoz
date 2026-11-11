@@ -9,7 +9,7 @@ Kompoz deklaratiftir: arayüzün mevcut veriye göre nasıl görünmesi gerekti�
 Kompoz'da veriyi arayüze çeviren fonksiyonlar yazarsınız. Veri değişince fonksiyonlar yeni veriyle yeniden çalışır ve ekranda neyin değiştiğini Kompoz kendisi bulur:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Inbox(unread: Int) {
     if (unread == 0) {
         Text("Yeni ileti yok")
@@ -23,7 +23,7 @@ Etiketi "güncelleyen" bir adım yoktur: fonksiyon her zaman sonucun tamamını 
 
 ## Composable fonksiyonlar
 
-Composable fonksiyon, başka composable'ları çağırarak arayüz üreten bir `@Composable fun`'dır:
+Composable fonksiyon, başka composable'ları çağırarak arayüz üreten bir `@Kompozable fun`'dır:
 
 - Gösterdiği veriyi parametre olarak alır.
 - Hiçbir şey döndürmez: `Text`, `Row`, `Button` gibi fonksiyonları çağırarak arayüz *üretir*.
@@ -32,7 +32,7 @@ Composable fonksiyon, başka composable'ları çağırarak arayüz üreten bir `
 ```kotlin
 data class Contact(val name: String, val phone: String)
 
-@Composable
+@Kompozable
 fun ContactList(contacts: List<Contact>) {
     Column {
         for (c in contacts) {
@@ -53,12 +53,12 @@ Veri değişince Kompoz ona bağlı composable'ları yeniden çalıştırır: bu
 - Bir ebeveyn yeniden çalıştığında, argümanları geçen seferkine eşit olan ve değişen hiçbir şeyi okumamış bir çocuk *atlanır*: çalışmaz, ekrandaki bölümü olduğu gibi kalır.
 
 ```kotlin
-@Composable
+@Kompozable
 fun NameTag(name: String) {  // `name` aynı kaldıkça atlanır
     Text("Merhaba, $name")
 }
 
-@Composable
+@Kompozable
 fun Screen() {
     var clicks by remember { mutableStateOf(0) }
     Column {
@@ -69,7 +69,7 @@ fun Screen() {
 }
 ```
 
-`Screen` `clicks`'i okudu, bu yüzden her tıklamada yeniden çalışır. `NameTag` kendi başına bir scope'tur ve argümanı değişmedi, bu yüzden Compose'daki gibi atlanır: her `@Composable fun` yeniden başlatılabilir ve atlanabilirdir. Scope'ların ve atlamanın nasıl işlediği için [Yaşam döngüsü ve kimlik](lifecycle.md) sayfasına bakın.
+`Screen` `clicks`'i okudu, bu yüzden her tıklamada yeniden çalışır. `NameTag` kendi başına bir scope'tur ve argümanı değişmedi, bu yüzden Compose'daki gibi atlanır: her `@Kompozable fun` yeniden başlatılabilir ve atlanabilirdir. Scope'ların ve atlamanın nasıl işlediği için [Yaşam döngüsü ve kimlik](lifecycle.md) sayfasına bakın.
 
 ## Bundan çıkan kurallar
 
@@ -84,7 +84,7 @@ Bir composable bir animasyonun her karesinde çalışabilir. Gövdesini hızlı 
 Bir composable'ı çalıştırmak yalnızca arayüzü tarif etmeli. Gövdesinin içinden dosya yazmak, istek göndermek ya da bir değişkeni değiştirmek her recomposition'da yeniden olur, üstelik sizin kontrol etmediğiniz bir sırayla.
 
 ```kotlin nocheck
-@Composable
+@Kompozable
 fun Bad(counter: MutableList<Int>) {
     counter.add(1)          // her recomposition'da çalışır: yapmayın
     Text("${counter.size}")
@@ -106,7 +106,7 @@ Her composable'ı, bir başkasının önce çalışmış olmasına bağlı olmay
 Arayüz verinin bir fonksiyonu olduğuna göre, arayüzü değiştirmek veriyi değiştirmek demektir. Kompoz *durumu*, yani `mutableStateOf` ve diğer durum tutucularla yapılan değerleri izler ve onları okuyanları yeniden kompoze eder:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Toggle() {
     var on by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {

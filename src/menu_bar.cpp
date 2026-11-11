@@ -98,7 +98,7 @@ std::string KeyShortcut::text() const {
 }
 
 void MenuBar(const std::vector<MenuBarMenu>& menus, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     auto open = remember([] { return mutableStateOf(-1); });  // the open menu
@@ -107,7 +107,7 @@ void MenuBar(const std::vector<MenuBarMenu>& menus, const Modifier& modifier, Ca
     // The shortcuts: the latest menus, kept for the window's key handler.
     auto latest = remember([] { return std::make_shared<std::vector<MenuBarMenu>>(); });
     *latest = menus;
-    ComposeHost* host = &detail::Composer::require().host();
+    KompozHost* host = &detail::Kompozer::require().host();
     DisposableEffect(0, [host, latest]() -> std::function<void()> {
         auto token = host->addKeyHandler([latest](const KeyEvent& e) {
             for (const MenuBarMenu& menu : *latest)

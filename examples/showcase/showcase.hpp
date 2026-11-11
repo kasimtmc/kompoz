@@ -5,7 +5,7 @@
 
 #include <kompoz/kompoz.hpp>
 // (A file still written in C++ includes <kompoz/blocks.hpp> itself, for the block form Column(…) { … };
-// one written in Compose's syntax through kompozc must not: the blocks are macros of those names.)
+// one written in Kotlin's syntax through kompozc must not: the blocks are macros of those names.)
 
 #include <algorithm>
 #include <array>
@@ -21,10 +21,10 @@
 
 using namespace kompoz;
 
-inline const CompositionLocal<bool> LocalShowRecompositions{false};
+inline const KompozitionLocal<bool> LocalShowRekompozitions{false};
 
 // Outlines a node with the recompose highlighter while the switch in the header is on.
-inline Modifier traced(Modifier m = {}) { return LocalShowRecompositions.current() ? m.recomposeHighlighter() : m; }
+inline Modifier traced(Modifier m = {}) { return LocalShowRekompozitions.current() ? m.rekompozHighlighter() : m; }
 
 // The screens, as type-safe routes (named, so the addresses read "item/42", "list/all").
 namespace routes {
@@ -72,45 +72,45 @@ inline constexpr bool kOnAndroid = true;
 inline constexpr bool kOnAndroid = false;
 #endif
 
-// common.cpp (Section and DesktopNote are @Composable there: the module declares them)
+// common.cpp (Section and DesktopNote are @Kompozable there: the module declares them)
 ColorScheme animateColorScheme(const ColorScheme& t, CallSite site = CallSite::current());
 Color hueColor(int i);
 
-// home/home.cpp: ScrollToTopButton and HomeScreen are @Composable there (the module declares them)
+// home/home.cpp: ScrollToTopButton and HomeScreen are @Kompozable there (the module declares them)
 
-// list/list.cpp: WindowClassLine, MediaLine, ListScreen and ItemScreen are @Composable there (the module declares them)
+// list/list.cpp: WindowClassLine, MediaLine, ListScreen and ItemScreen are @Kompozable there (the module declares them)
 
-// components/state.cpp: its sections are @Composable there (the module declares them)
+// components/state.cpp: its sections are @Kompozable there (the module declares them)
 
-// components/layout.cpp: its sections are @Composable there (the module declares them)
+// components/layout.cpp: its sections are @Kompozable there (the module declares them)
 
-// components/scroll.cpp: its sections are @Composable there (the module declares them)
+// components/scroll.cpp: its sections are @Kompozable there (the module declares them)
 
-// components/graphics.cpp: its sections are @Composable there (the module declares them)
+// components/graphics.cpp: its sections are @Kompozable there (the module declares them)
 
-// components/drawing.cpp: DrawingSection is @Composable there (the module declares it)
+// components/drawing.cpp: DrawingSection is @Kompozable there (the module declares it)
 
-// components/input.cpp: its sections and SelectableCard are @Composable there (the module declares them)
+// components/input.cpp: its sections and SelectableCard are @Kompozable there (the module declares them)
 
-// components/text.cpp: TextSection is @Composable there (the module declares it)
+// components/text.cpp: TextSection is @Kompozable there (the module declares it)
 
 // components/components.cpp
 
 // material/sections.cpp: its sections (SearchSection … InsetsSection), SwipeableTask, FocusPropertiesDemo and
-// DynamicColorSection are @Composable there (the module declares them).
+// DynamicColorSection are @Kompozable there (the module declares them).
 // Where the theme's colors come from: the app's own scheme, the system's accent color, or the
 // wallpaper. The library offers all three; the app (here its user) picks.
 enum class ColorSource { App, System, Wallpaper };
 
-// material/text_fields.cpp: TextFieldsSection is @Composable there (the module declares it)
+// material/text_fields.cpp: TextFieldsSection is @Kompozable there (the module declares it)
 
-// material/controls.cpp: ButtonsSection, ChipsSection and SelectionControlsSection are @Composable there (the module declares them)
+// material/controls.cpp: ButtonsSection, ChipsSection and SelectionControlsSection are @Kompozable there (the module declares them)
 
-// material/containers.cpp: AnimateItemSection, ListItemSection, DialogsSection and CardsSection are @Composable there
+// material/containers.cpp: AnimateItemSection, ListItemSection, DialogsSection and CardsSection are @Kompozable there
 // (the module declares them)
 
 // material/navigation.cpp: TabsSection, FabMenuSection, ShortNavigationBarSection, WideNavigationRailSection and
-// FloatingToolbarsSection are @Composable there (the module declares them)
+// FloatingToolbarsSection are @Kompozable there (the module declares them)
 
 // places/places.cpp
 

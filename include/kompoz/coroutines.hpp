@@ -209,10 +209,10 @@ private:
 template <class F>
 std::shared_ptr<JobState> launchIn(const std::shared_ptr<ScopeState>& scope, F&& coroutine, bool deferred = false, bool body = false);
 
-// Resumes coroutines on the UI thread: timers and frame waiters, driven by ComposeHost::frame.
+// Resumes coroutines on the UI thread: timers and frame waiters, driven by KompozHost::frame.
 class Dispatcher {
 public:
-    Composer* composer = nullptr;  // the host's, for coroutines that observe state (snapshotFlow)
+    Kompozer* kompozer = nullptr;  // the host's, for coroutines that observe state (snapshotFlow)
     int64_t now() const { return now_; }
     // Input events can be newer than the last frame (after idling): timeouts and delays
     // started by them must count from the event, not from that frame.
@@ -685,11 +685,11 @@ public:
         using T = std::decay_t<std::invoke_result_t<const F&>>;
         F block = block_;  // the coroutine outlives this object
         detail::JobState* job = co_await detail::currentJob();
-        detail::Composer* composer = job->dispatcher->composer;
+        detail::Kompozer* kompozer = job->dispatcher->kompozer;
         auto observer = std::make_shared<detail::SnapshotObserver>();
         observer->dispatcher = job->dispatcher;
-        if (composer) {
-            observer->scope = std::make_unique<detail::Scope>(*composer, nullptr);
+        if (kompozer) {
+            observer->scope = std::make_unique<detail::Scope>(*kompozer, nullptr);
             std::weak_ptr<detail::SnapshotObserver> weak = observer;
             observer->scope->onInvalidated = [weak] {
                 auto o = weak.lock();
@@ -700,15 +700,15 @@ public:
         }
         auto read = [&] {
             std::optional<T> value;
-            if (composer)
-                composer->observeReads(*observer->scope, [&] { value.emplace(block()); });
+            if (kompozer)
+                kompozer->observeReads(*observer->scope, [&] { value.emplace(block()); });
             else
                 value.emplace(block());
             return std::move(*value);
         };
         T last = read();
         onValue(last);
-        if (!composer) co_return;  // nothing to observe with
+        if (!kompozer) co_return;  // nothing to observe with
         while (true) {
             co_await detail::SnapshotChangeAwaiter{observer};
             T next = read();
@@ -731,7 +731,7 @@ SnapshotFlow<std::decay_t<F>> snapshotFlow(F&& block) {
 //   int progress = produceState(0, url, [url](MutableState<int> state) -> Task { ... state.set(n); });
 template <class T, class K, class F>
 T produceState(T initial, const K& key, F producer, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto state = remember([&] { return mutableStateOf(std::move(initial)); });
     LaunchedEffect(key, [state, producer]() -> Task { co_await producer(state); });
     return state.get();

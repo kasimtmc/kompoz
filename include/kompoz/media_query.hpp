@@ -32,7 +32,7 @@ enum class KeyboardKind { None, Virtual, Physical };
 // docked tablet), Far (TVs).
 enum class ViewingDistance { Near, Medium, Far };
 
-// What the platform knows of the device (ComposeHost::setMediaInfo).
+// What the platform knows of the device (KompozHost::setMediaInfo).
 struct MediaInfo {
     PointerPrecision pointerPrecision = PointerPrecision::None;
     bool physicalKeyboard = false, hasMicrophone = false, hasCamera = false;
@@ -82,7 +82,7 @@ private:
 };
 
 // Provided by the host at the root.
-inline const CompositionLocal<UiMediaScope> LocalUiMediaScope{UiMediaScope()};
+inline const KompozitionLocal<UiMediaScope> LocalUiMediaScope{UiMediaScope()};
 
 // `query` against the app's media now; recomposed when what it read changes.
 template <class F>
@@ -96,7 +96,7 @@ template <class F>
 auto derivedMediaQuery(F query, CallSite site = CallSite::current())
     -> DerivedState<std::decay_t<std::invoke_result_t<F&, const UiMediaScope&>>> {
     using T = std::decay_t<std::invoke_result_t<F&, const UiMediaScope&>>;
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     UiMediaScope media = LocalUiMediaScope.current();
     // The latest query (Compose's rememberUpdatedState), asked again when what it read changes.
     auto latest = remember([] { return std::make_shared<std::function<T(const UiMediaScope&)>>(); });

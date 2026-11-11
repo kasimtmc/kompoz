@@ -279,7 +279,7 @@ void carousel(const CarouselState& state, float itemWidth, Kind kind, const Modi
         return c.constrain({w, (h >= 0 ? h : tallest) + padding.top + padding.bottom});
     };
     Shape shape = options.itemShape;
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = m;
@@ -291,7 +291,7 @@ void carousel(const CarouselState& state, float itemWidth, Kind kind, const Modi
                 key(i, [&] {
                     auto info = remember([] { return std::make_shared<CarouselItemInfo::Data>(); });
                     // The item: masked to its size, its content at the large size around its middle.
-                    detail::Composer::require().emit(
+                    detail::Kompozer::require().emit(
                         detail::keyOf(CallSite::current()),
                         [&](LayoutNode& item) {
                             item.modifier = Modifier().clip(shape);
@@ -329,37 +329,37 @@ Modifier CarouselItemScope::maskBorder(const BorderStroke& border, Shape shape) 
 
 void detail::HorizontalMultiBrowseCarousel(const CarouselState& state, float preferredItemWidth, const Modifier& modifier, const CarouselOptions& options,
                                    const std::function<void(int item)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     carousel(state, preferredItemWidth, Kind::MultiBrowse, modifier, options, [&](const CarouselItemScope& item) { content(item.index); });
 }
 
 void detail::HorizontalMultiBrowseCarousel(const CarouselState& state, float preferredItemWidth, const Modifier& modifier, const CarouselOptions& options,
                                    const std::function<void(const CarouselItemScope& item)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     carousel(state, preferredItemWidth, Kind::MultiBrowse, modifier, options, content);
 }
 
 void detail::HorizontalUncontainedCarousel(const CarouselState& state, float itemWidth, const Modifier& modifier, const CarouselOptions& options,
                                    const std::function<void(int item)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     carousel(state, itemWidth, Kind::Uncontained, modifier, options, [&](const CarouselItemScope& item) { content(item.index); });
 }
 
 void detail::HorizontalUncontainedCarousel(const CarouselState& state, float itemWidth, const Modifier& modifier, const CarouselOptions& options,
                                    const std::function<void(const CarouselItemScope& item)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     carousel(state, itemWidth, Kind::Uncontained, modifier, options, content);
 }
 
 void detail::HorizontalCenteredHeroCarousel(const CarouselState& state, float maxItemWidth, const Modifier& modifier, const CarouselOptions& options,
                                     const std::function<void(int item)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     carousel(state, maxItemWidth, Kind::Hero, modifier, options, [&](const CarouselItemScope& item) { content(item.index); });
 }
 
 void detail::HorizontalCenteredHeroCarousel(const CarouselState& state, float maxItemWidth, const Modifier& modifier, const CarouselOptions& options,
                                     const std::function<void(const CarouselItemScope& item)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     carousel(state, maxItemWidth, Kind::Hero, modifier, options, content);
 }
 

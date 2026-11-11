@@ -1,6 +1,6 @@
 #pragma once
 
-// kompozc's parser: a @Composable function's Kotlin, from its @ to its closing brace.
+// kompozc's parser: a @Kompozable function's Kotlin, from its @ to its closing brace.
 
 #include "ast.hpp"
 
@@ -10,7 +10,7 @@ class Parser {
 public:
     Parser(std::string_view source, Pos start);
 
-    // [@Composable] [@Other...] [private] fun [Receiver.]name(params)[: Type] { body } (or = expression).
+    // [@Kompozable] [@Other...] [private] fun [Receiver.]name(params)[: Type] { body } (or = expression).
     Function function();
     // [@Serializable] data class Name(val a: T, var b: U = d)
     DataClass dataClass();

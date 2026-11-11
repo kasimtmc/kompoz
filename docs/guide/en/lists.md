@@ -21,7 +21,7 @@ It composes and lays out every child, whether it is on the screen or not. For lo
 ```kotlin
 data class Message(val id: Int, val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun Conversation(messages: List<Message>) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item { Text("Today", style = MaterialTheme.typography.labelLarge) }
@@ -104,7 +104,7 @@ LazyColumn(modifier = Modifier.fillMaxSize()) {
 `rememberLazyListState()` gives a `LazyListState` to pass as `state`. Read where the list is with `firstVisibleItemIndex` (observable) and `layoutInfo`; move it with `scrollToItem` or, in a coroutine, `animateScrollToItem`:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Messages(messages: List<String>) {
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -186,7 +186,7 @@ An item with `span = StaggeredGridItemSpan.FullLine` crosses all the lanes, belo
 `HorizontalPager` and `VerticalPager` show one page at a time and snap to pages as the user swipes, like Compose's pagers:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Onboarding() {
     val pager = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
@@ -252,7 +252,7 @@ Scaffold(
 To take part yourself, give `Modifier.nestedScroll` a connection, an object of your own as in Compose (kompozc makes `object : NestedScrollConnection { … }` a class of its own, holding the locals its functions use). Its `onPreScroll` sees each delta before the child scrolls and returns what it consumed; `onPostScroll` sees what the child left:
 
 ```kotlin
-@Composable
+@Kompozable
 fun CollapsingHeader() {
     var height by remember { mutableStateOf(160f) }
     val connection = remember {
@@ -282,7 +282,7 @@ fun CollapsingHeader() {
 
 ```kotlin
 #! suspend fun fetchNews(): List<String> = emptyList()
-@Composable
+@Kompozable
 fun News() {
     var news by remember { mutableStateOf(listOf("First")) }
     var refreshing by remember { mutableStateOf(false) }

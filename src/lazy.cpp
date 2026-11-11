@@ -53,7 +53,7 @@ struct LazyListState::Data {
     std::unordered_set<size_t> previousKeys;  // all keys before the last composition (to spot insertions)
     bool animatesItems = false;
     // Items whose data is gone, fading out where they were shown; their nodes are the children
-    // after the composed ones, kept as they were (Composer::keepGroup).
+    // after the composed ones, kept as they were (Kompozer::keepGroup).
     struct Leaving {
         size_t key;
         int64_t start;
@@ -132,13 +132,13 @@ struct LazyListState::Data {
     }
 
     // The item past those it composes the way it scrolls (one: not ever more ahead while it
-    // scrolls slowly), to compose in a pause between frames (ComposeHost::requestIdleWork),
+    // scrolls slowly), to compose in a pause between frames (KompozHost::requestIdleWork),
     // before it scrolls in.
     int nextAhead() const {
         auto [start, end] = naturalRange();
         return direction > 0 ? end : direction < 0 ? start - 1 : -1;
     }
-    void requestPrefetch(ComposeHost& host, const std::shared_ptr<Data>& self) {
+    void requestPrefetch(KompozHost& host, const std::shared_ptr<Data>& self) {
         int next = nextAhead();
         if (next < 0 || next >= count || next == prefetched) return;
         size_t type = size_t(next) < contentTypes.size() ? contentTypes[size_t(next)] : 0;
@@ -703,7 +703,7 @@ namespace {
 
 void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& given, const LazyListContent& content,
               const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     LazyListOptions options = given;
     if (options.arrangement) options.spacing = options.arrangement->spacing;
     LazyListState state = options.state ? *options.state : rememberLazyListState();
@@ -716,7 +716,7 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
     d.keys.resize(size_t(d.count));
     d.contentTypes.resize(size_t(d.count));
     for (int i = 0; i < d.count; ++i) d.keys[size_t(i)] = list.keyAt(i), d.contentTypes[size_t(i)] = list.contentTypeAt(i);
-    auto& composer = detail::Composer::require();
+    auto& kompozer = detail::Kompozer::require();
     if (d.animatesItems) {
         // Animated items shown last time whose data is gone start fading out; one that is back
         // (or done) is no longer leaving.
@@ -725,7 +725,7 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
         for (const auto& [key, a] : d.itemAnimations)
             if (a.index >= 0 && !now.count(key) &&
                 std::none_of(d.leaving.begin(), d.leaving.end(), [&](const LazyListState::Data::Leaving& l) { return l.key == key; }))
-                d.leaving.push_back({key, composer.frameTimeNanos(), a.shown});
+                d.leaving.push_back({key, kompozer.frameTimeNanos(), a.shown});
     }
     if (d.count > 0 && d.firstIndex.peek() >= d.count) d.setFirst(d.count - 1, 0);  // the list shrank
 
@@ -760,7 +760,7 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
     const uint64_t contentGroup = detail::keyOf(CallSite::current());
     auto item = [&](size_t itemKey, int index) {
         key(itemKey, [&] {
-            composer.emit(
+            kompozer.emit(
                 detail::keyOf(CallSite::current()),
                 [](LayoutNode& node) {
                     node.modifier = {};
@@ -768,14 +768,14 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
                     node.drawContent = {};
                 },
                 [&] {
-                    if (index < 0) return composer.keepGroup(contentGroup);
-                    composer.startGroup(contentGroup);
+                    if (index < 0) return kompozer.keepGroup(contentGroup);
+                    kompozer.startGroup(contentGroup);
                     saveable.SaveableStateProvider(std::to_string(itemKey), [&] { list.composeAt(index); });
-                    composer.endGroup();
+                    kompozer.endGroup();
                 });
         });
     };
-    composer.emit(
+    kompozer.emit(
         detail::keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = modifier.then(element);
@@ -938,7 +938,7 @@ void gridRow(const LazyGridScope& grid, int from, int to, int columns, float spa
         cells.push_back({column, span});
         column += span;
     }
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = vertical ? Modifier().fillMaxWidth() : Modifier().fillMaxHeight();
@@ -966,7 +966,7 @@ void gridRow(const LazyGridScope& grid, int from, int to, int columns, float spa
             for (int i = from; i < to; ++i)
                 key(grid.keyAt(i), [&] {
                     // One node per cell, whatever the item emits.
-                    detail::Composer::require().emit(
+                    detail::Kompozer::require().emit(
                         detail::keyOf(CallSite::current()),
                         [](LayoutNode& cellNode) {
                             cellNode.modifier = {};
@@ -1031,13 +1031,13 @@ void lazyGrid(GridCells cells, const Modifier& modifier, const LazyGridOptions& 
 
 void detail::LazyVerticalGrid(GridCells columns, const Modifier& modifier, const LazyGridOptions& options,
                       const std::function<void(LazyGridScope&)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     lazyGrid(columns, modifier, options, content, true);
 }
 
 void detail::LazyHorizontalGrid(GridCells rows, const Modifier& modifier, const LazyGridOptions& options,
                         const std::function<void(LazyGridScope&)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     lazyGrid(rows, modifier, options, content, false);
 }
 
@@ -1313,7 +1313,7 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
         return c.constrain(horizontal ? Size{total, across} : Size{across, total});
     };
     // The outer node learns the view's length for the scrolled one inside it.
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = modifier;
@@ -1346,7 +1346,7 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
             node.drawContent = {};
         },
         [&] {
-            detail::Composer::require().emit(
+            detail::Kompozer::require().emit(
                 detail::keyOf(CallSite::current()),
                 [&](LayoutNode& node) {
                     if (options.overscrollEffect)
@@ -1361,7 +1361,7 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
                 [&] {
                     for (int i = start; i < end; ++i)
                         key(grid.keyAt(i), [&] {
-                            detail::Composer::require().emit(
+                            detail::Kompozer::require().emit(
                                 detail::keyOf(CallSite::current()),
                                 [](LayoutNode& cell) {
                                     cell.modifier = {};
@@ -1378,13 +1378,13 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
 
 void detail::LazyVerticalStaggeredGrid(StaggeredGridCells columns, const Modifier& modifier, const LazyStaggeredGridOptions& options,
                                const std::function<void(LazyGridScope&)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     staggeredGrid(false, columns, modifier, options, content);
 }
 
 void detail::LazyHorizontalStaggeredGrid(StaggeredGridCells rows, const Modifier& modifier, const LazyStaggeredGridOptions& options,
                                  const std::function<void(LazyGridScope&)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     staggeredGrid(true, rows, modifier, options, content);
 }
 } // namespace kompoz

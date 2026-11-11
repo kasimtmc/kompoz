@@ -1,6 +1,6 @@
 #pragma once
 
-// ComposeHost ties a composition, its layout tree and input handling together.
+// KompozHost ties a composition, its layout tree and input handling together.
 // It knows nothing about windows or GPUs: a platform backend feeds it input events in dp,
 // calls frame() and draw(), and gets callbacks for the few things only it can do.
 // (Compose equivalents: ComposeScene on desktop, AndroidComposeView on Android.)
@@ -46,7 +46,7 @@ int keepCheckMismatches();
 int64_t frameTimeOnBeat(int64_t last, int64_t now, int64_t period);
 } // namespace detail
 
-class ComposeHost {
+class KompozHost {
 public:
     struct Callbacks {
         std::function<void()> wake;  // any thread: schedule a frame
@@ -90,10 +90,10 @@ public:
         std::function<std::vector<uint8_t>(std::string_view path)> readAsset;
     };
 
-    ComposeHost(TextMeasurer& measurer, Content content);
-    ~ComposeHost();
-    ComposeHost(const ComposeHost&) = delete;
-    ComposeHost& operator=(const ComposeHost&) = delete;
+    KompozHost(TextMeasurer& measurer, Content content);
+    ~KompozHost();
+    KompozHost(const KompozHost&) = delete;
+    KompozHost& operator=(const KompozHost&) = delete;
 
     void setCallbacks(Callbacks callbacks);
     void setViewportSize(Size size);
@@ -351,7 +351,7 @@ public:
     void recordDrawRead(const void* key, LayoutNode& node);
     void forgetDrawReads(LayoutNode& node);
     void invalidateDrawReaders(const void* key);
-    const detail::RecompositionStats& stats() const { return composer_.stats(); }
+    const detail::RekompozitionStats& stats() const { return kompozer_.stats(); }
     TextMeasurer& textMeasurer() { return measurer_; }
     // An image asset, decoded (imageResource): the same bitmap for the same path while it is among
     // those used last (up to kImageCacheBytes of pixels), as Android keeps its resources'.
@@ -459,7 +459,7 @@ private:
     TaskOf<Velocity> performFling(std::weak_ptr<LayoutNode*> node, int axis, Velocity velocity, int64_t time);
     void finishFling(float left);  // the fling ended with `left` (finger direction): performFling goes on
     struct FlingEnd {
-        ComposeHost* host;
+        KompozHost* host;
         bool await_ready() const noexcept { return false; }
         template <class P>
         void await_suspend(std::coroutine_handle<P> h) {
@@ -473,7 +473,7 @@ private:
     TextMeasurer& measurer_;
     Content content_;
     Callbacks callbacks_;
-    detail::Composer composer_;
+    detail::Kompozer kompozer_;
     std::unique_ptr<detail::Dispatcher> dispatcher_;
     std::unique_ptr<detail::Group> rootGroup_;  // owns the root node
     Size viewport_;
@@ -729,7 +729,7 @@ namespace detail {
 // A back handler with the host's callbacks as given (BackHandler, PredictiveBackHandler, and
 // components that follow the back gesture themselves); it belongs to the popup it is composed
 // in. The callbacks are the latest composition's.
-void backHandler(ComposeHost::BackCallback callbacks, CallSite site = CallSite::current());
+void backHandler(KompozHost::BackCallback callbacks, CallSite site = CallSite::current());
 } // namespace detail
 
 } // namespace kompoz

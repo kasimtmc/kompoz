@@ -2,7 +2,7 @@
 
 #include "showcase.hpp"
 
-@Composable
+@Kompozable
 fun IconGallery() {
     val icons = listOf("Add" to Icons.Filled.Add, "ArrowBack" to Icons.Filled.ArrowBack, "Check" to Icons.Filled.Check, "Close" to Icons.Filled.Close,
                        "Delete" to Icons.Filled.Delete, "Edit" to Icons.Filled.Edit, "Favorite" to Icons.Filled.Favorite, "FavoriteBorder" to Icons.Filled.FavoriteBorder,
@@ -27,7 +27,7 @@ fun IconGallery() {
     }
 }
 
-@Composable
+@Kompozable
 fun IconButtons() {
     var liked by remember { mutableStateOf(false) }
     Section("IconButton") {
@@ -112,7 +112,7 @@ private:
     std::shared_ptr<std::atomic<bool>> cancelled_ = std::make_shared<std::atomic<bool>>(false);
 };
 
-@Composable
+@Kompozable
 fun StateFlowSection() {
     val vm = viewModel<DownloadViewModel>()
     val progress by vm.progress.collectAsState()
@@ -166,7 +166,7 @@ class CitySearchViewModel(private val state: SavedStateHandle) : ViewModel() {
     }
 }
 
-@Composable
+@Kompozable
 fun FlowSearchSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -198,7 +198,7 @@ fun FlowSearchSection() {
 
 // movableContentOf: a card with a count and a running timer moves between a Row and a Column
 // without starting over.
-@Composable
+@Kompozable
 fun MovableContentSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -219,7 +219,7 @@ fun MovableContentSection() {
             }
         }
     }
-    val other: @Composable () -> Unit = {
+    val other: @Kompozable () -> Unit = {
         Box(modifier = Modifier.background(cs.surfaceContainerHighest, RoundedCornerShape(12.dp)).padding(12.dp)) {
             Text("Öbür içerik", color = cs.onSurfaceVariant, style = typography.bodyMedium)
         }
@@ -243,7 +243,7 @@ fun MovableContentSection() {
 
 // A Channel between a button and a slow kitchen: each order made once, in turn, at most three
 // waiting (trySend says no when it is full); produce counts down from a coroutine.
-@Composable
+@Kompozable
 fun ChannelSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -332,7 +332,7 @@ private:
     std::shared_ptr<void> watching_;
 };
 
-@Composable
+@Kompozable
 fun LifecycleSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -394,7 +394,7 @@ fun openingMessages(): List<ChatMessage> {
 
 // A chat: LazyColumn(reverseLayout) keeps the newest message (item 0) at the bottom; a new one
 // comes in there, and the list glides back down to it if it was scrolled up.
-@Composable
+@Kompozable
 fun ChatSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -463,7 +463,7 @@ TaskOf<PrimeCount> countPrimesInBackground(int limit) {
     co_return PrimeCount{count, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count()};
 }
 
-@Composable
+@Kompozable
 fun PlatformServicesSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography

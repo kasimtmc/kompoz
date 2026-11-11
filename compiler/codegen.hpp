@@ -1,6 +1,6 @@
 #pragma once
 
-// kompozc's C++ output: what each @Composable function becomes, in the C++ that the Kompoz
+// kompozc's C++ output: what each @Kompozable function becomes, in the C++ that the Kompoz
 // library is written in (the way Compose's compiler plugin rewrites Kotlin functions).
 
 #include "ast.hpp"
@@ -12,7 +12,7 @@
 
 namespace kompozc {
 
-// What kompozc knows of the code it translates: the @Composable functions (calls to them pass
+// What kompozc knows of the code it translates: the @Kompozable functions (calls to them pass
 // their arguments by position, named ones put in place and defaults filled in) and the data
 // classes (made with their fields in the order they are declared).
 struct Module {
@@ -67,9 +67,9 @@ void generateInterface(Output& out, const InterfaceDecl& i, const Module& module
 void declareInterface(Output& out, const InterfaceDecl& i);
 // A class: a C++ class with its constructor, members and functions.
 void generateClassDecl(Output& out, const ClassDecl& c, const Module& module);
-// Declarations: what every @Composable becomes before any is defined, defaults included.
+// Declarations: what every @Kompozable becomes before any is defined, defaults included.
 void generatePrototype(Output& out, const Function& f, const Module& module);
-// The definition: void name(params, CallSite site) { composable(site, params..., [=] { body }); }
+// The definition: void name(params, CallSite site) { kompozable(site, params..., [=] { body }); }
 void generateDefinition(Output& out, const Function& f, const Module& module);
 
 }  // namespace kompozc

@@ -70,7 +70,7 @@ Row(modifier = Modifier.clearAndSetSemantics { contentDescription = "Rating: 4 o
 Kendiniz çizdiğiniz bir kontrol ne olduğunu ve nasıl kullanılacağını söylemelidir. Bunu sizin yerinize yapan modifier'ları tercih edin: `clickable`, `toggleable(value, onChange, role)`, `selectable(selected, onClick, role)` ve `triStateToggleable` rolü, durumu ve eylemi ayarlar:
 
 ```kotlin
-@Composable
+@Kompozable
 fun StarToggle() {
     var starred by remember { mutableStateOf(false) }
     Icon(if (starred) Icons.Filled.Star else Icons.Filled.FavoriteBorder, contentDescription = "Starred",
@@ -81,7 +81,7 @@ fun StarToggle() {
 Tek bir kontrol gibi davranan bir satırda modifier'ı satıra koyun ve içindeki kontrole boş bir callback verin; böylece bütün satır tek bir dokunma hedefi ve tek bir öğe olur:
 
 ```kotlin
-@Composable
+@Kompozable
 fun WifiRow() {
     var on by remember { mutableStateOf(true) }
     Row(modifier = Modifier.fillMaxWidth().toggleable(value = on, onValueChange = { on = it }, role = Role.Switch).padding(16.dp),

@@ -257,9 +257,9 @@ ColorScheme ColorScheme::copy(A&&... args) const {
     return detail::withColors(*this, std::forward<A>(args)...);
 }
 
-inline const CompositionLocal<ColorScheme> LocalColorScheme{lightColorScheme()};
-inline const CompositionLocal<Typography> LocalTypography{Typography{}};
-inline const CompositionLocal<Font> LocalTextStyle{Font{}};
+inline const KompozitionLocal<ColorScheme> LocalColorScheme{lightColorScheme()};
+inline const KompozitionLocal<Typography> LocalTypography{Typography{}};
+inline const KompozitionLocal<Font> LocalTextStyle{Font{}};
 // What selected text looks like (Compose's TextSelectionColors): the handles' color and the
 // highlight behind the selection, in a SelectionContainer and in fields. MaterialTheme provides
 // its scheme's: primary, and primary at 40%; a field's TextFieldColors can have its own.
@@ -267,7 +267,7 @@ struct TextSelectionColors {
     Color handleColor, backgroundColor;
     friend constexpr bool operator==(const TextSelectionColors&, const TextSelectionColors&) = default;
 };
-inline const CompositionLocal<TextSelectionColors> LocalTextSelectionColors{
+inline const KompozitionLocal<TextSelectionColors> LocalTextSelectionColors{
     TextSelectionColors{lightColorScheme().primary, lightColorScheme().primary.copy(0.4f)}};
 
 // Material 3's motion (Compose's MotionScheme): springs for what moves (spatial: places, sizes,
@@ -287,7 +287,7 @@ struct MotionScheme {
     }
     friend bool operator==(const MotionScheme&, const MotionScheme&) = default;
 };
-inline const CompositionLocal<MotionScheme> LocalMotionScheme{MotionScheme::standard()};
+inline const KompozitionLocal<MotionScheme> LocalMotionScheme{MotionScheme::standard()};
 inline const MotionScheme& motionScheme() { return LocalMotionScheme.current(); }
 
 // Material 3's shape scale (Compose's Shapes), for the app's own components: shape =
@@ -313,7 +313,7 @@ struct Shapes {
     }
 };
 // (read as LocalShapes.current(): `shapes` is the buttons' named argument)
-inline const CompositionLocal<Shapes> LocalShapes{Shapes{}};
+inline const KompozitionLocal<Shapes> LocalShapes{Shapes{}};
 
 // MaterialTheme(colorScheme, motionScheme, content): the motion left out stays the one around it
 // (standard() at the top). Its content runs as a call's own, in its caller's scope.
@@ -334,11 +334,11 @@ struct MaterialThemeImpl {
         Content content = P::plainBlock(std::forward<A>(args)...);
         if constexpr (P::given<names::Typography, A...>()) {
             Typography typography = P::arg<names::Typography>(args...);
-            content = [typography, inner = std::move(content)] { CompositionLocalProvider({LocalTypography.provides(typography)}, inner); };
+            content = [typography, inner = std::move(content)] { KompozitionLocalProvider({LocalTypography.provides(typography)}, inner); };
         }
         if constexpr (P::given<names::Shapes, A...>()) {
             Shapes shapes = P::arg<names::Shapes>(args...);
-            content = [shapes, inner = std::move(content)] { CompositionLocalProvider({LocalShapes.provides(shapes)}, inner); };
+            content = [shapes, inner = std::move(content)] { KompozitionLocalProvider({LocalShapes.provides(shapes)}, inner); };
         }
         if constexpr (P::given<names::MotionScheme, A...>())
             MaterialTheme(colorScheme, P::get<names::MotionScheme>(MotionScheme::standard(), args...), content, site);
@@ -538,28 +538,28 @@ LayoutMeasurePolicy menuRows(float maxWidth);
 } // namespace detail
 
 // A layout that composes some of its content while it measures, from what it knows then
-// (Compose's SubcomposeLayout): subcompose(slotId, content) gives the slot's measurables — a
+// (Compose's SubcomposeLayout): subkompoz(slotId, content) gives the slot's measurables — a
 // slot that depends on another's size, or one picked by the constraints. A slot asked for the
 // first time (or whose `dependency` changed) is composed there and then, as Compose's is, its
 // measurables given to the same measure (the policy runs once more after, all of them composed);
 // one no longer asked for leaves after the measure. Its content may run again later, in a
 // composition: capture by value.
-//   SubcomposeLayout(Modifier(), [](SubcomposeMeasureScope& s, const Constraints& c) {
-//       auto main = s.subcompose("main", [] { Text("Başlık"); });
+//   SubkompozLayout(Modifier(), [](SubkompozMeasureScope& s, const Constraints& c) {
+//       auto main = s.subkompoz("main", [] { Text("Başlık"); });
 //       Size size = ...;  // measure and place them
-//       for (auto& m : s.subcompose("badge", size, [size] { Badge(size); })) ...
+//       for (auto& m : s.subkompoz("badge", size, [size] { Badge(size); })) ...
 //       return size;
 //   });
-class SubcomposeMeasureScope : public MeasureScope {  // (layout(w, h) { … } too)
+class SubkompozMeasureScope : public MeasureScope {  // (layout(w, h) { … } too)
 public:
     struct Data;
-    SubcomposeMeasureScope(Data& data, LayoutNode& node) : data_(&data), node_(&node) {}
+    SubkompozMeasureScope(Data& data, LayoutNode& node) : data_(&data), node_(&node) {}
     template <class K>
-    std::vector<Measurable> subcompose(const K& slotId, Content content) {
+    std::vector<Measurable> subkompoz(const K& slotId, Content content) {
         return slot(std::hash<K>{}(slotId), std::move(content), 0);
     }
     template <class K, class D>
-    std::vector<Measurable> subcompose(const K& slotId, const D& dependency, Content content) {
+    std::vector<Measurable> subkompoz(const K& slotId, const D& dependency, Content content) {
         return slot(std::hash<K>{}(slotId), std::move(content), std::hash<D>{}(dependency) | 1);
     }
 
@@ -568,22 +568,22 @@ private:
     Data* data_;
     LayoutNode* node_;
 };
-using SubcomposeMeasurePolicy = std::function<Size(SubcomposeMeasureScope& scope, const Constraints& constraints)>;
+using SubkompozMeasurePolicy = std::function<Size(SubkompozMeasureScope& scope, const Constraints& constraints)>;
 namespace detail {
-void SubcomposeLayout(const Modifier& modifier, SubcomposeMeasurePolicy measurePolicy, CallSite site);
-struct SubcomposeLayoutImpl {
-    using P = Params<names::Modifier, BlockWith<SubcomposeMeasureScope&, const Constraints&>>;
+void SubkompozLayout(const Modifier& modifier, SubkompozMeasurePolicy measurePolicy, CallSite site);
+struct SubkompozLayoutImpl {
+    using P = Params<names::Modifier, BlockWith<SubkompozMeasureScope&, const Constraints&>>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: SubcomposeLayout(modifier) { constraints -> … }");
+        static_assert(P::blockGiven<A...>(), "kompoz: SubkompozLayout(modifier) { constraints -> … }");
         auto&& policy = std::get<sizeof...(A) - 1>(std::forward_as_tuple(std::forward<A>(args)...));
-        SubcomposeLayout(P::get<names::Modifier>(Modifier{}, args...),
-                         [policy](SubcomposeMeasureScope& scope, const Constraints& c) mutable { return Size(policy(scope, c)); }, site);
+        SubkompozLayout(P::get<names::Modifier>(Modifier{}, args...),
+                         [policy](SubkompozMeasureScope& scope, const Constraints& c) mutable { return Size(policy(scope, c)); }, site);
     }
 };
 } // namespace detail
-inline constexpr Composable<detail::SubcomposeLayoutImpl> SubcomposeLayout;
+inline constexpr Composable<detail::SubkompozLayoutImpl> SubkompozLayout;
 
 // Rows (columns) that wrap to the next line when full, e.g. for chips.
 struct FlowStyle {
@@ -837,7 +837,7 @@ struct GridImpl {
 inline constexpr Composable<detail::GridImpl> Grid;
 
 // A Box whose content knows the constraints it is laid out with (to pick a layout by width): a
-// SubcomposeLayout, as Compose's, its content composed as it is measured, with the constraints it
+// SubkompozLayout, as Compose's, its content composed as it is measured, with the constraints it
 // gets (the first time too), and again when they change.
 // Compose's BoxWithConstraintsScope: what its content has as its receiver, the constraints and their
 // dp (if (maxWidth > 400.dp) …). A content taking the Constraints takes it too.
@@ -1123,7 +1123,7 @@ public:
     virtual void hide() = 0;
     virtual TextToolbarStatus status() const = 0;
 };
-inline const CompositionLocal<std::shared_ptr<TextToolbar>> LocalTextToolbar{nullptr};  // none: Kompoz's own
+inline const KompozitionLocal<std::shared_ptr<TextToolbar>> LocalTextToolbar{nullptr};  // none: Kompoz's own
 namespace detail {
 // A provided toolbar shown over the selection while composed: `selection` gives its rect (window
 // dp) from the anchor's bounds at layout; told again only when the rect or the actions change.

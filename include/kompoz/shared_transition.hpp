@@ -29,7 +29,7 @@
 
 namespace kompoz {
 
-class ComposeHost;
+class KompozHost;
 
 namespace detail {
 struct SharedRegistry;

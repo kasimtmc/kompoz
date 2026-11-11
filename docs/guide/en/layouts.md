@@ -21,7 +21,7 @@ The three basic layouts:
 - `Box` stacks them on top of each other.
 
 ```kotlin
-@Composable
+@Kompozable
 fun ProfileHeader(name: String, handle: String) {
     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
@@ -168,9 +168,9 @@ This composes every child. For long or endless content, use a lazy list instead:
 Lay out by the window's size class rather than by exact sizes. `currentWindowAdaptiveInfo()` gives the window's width and height classes, as Compose's adaptive library does: Compact (narrower than 600 dp), Medium (narrower than 840 dp) or Expanded.
 
 ```kotlin
-#! @Composable fun ListPane() {}
-#! @Composable fun DetailPane() {}
-@Composable
+#! @Kompozable fun ListPane() {}
+#! @Kompozable fun DetailPane() {}
+@Kompozable
 fun MailScreen() {
     val info = currentWindowAdaptiveInfo()
     if (info.windowSizeClass.windowWidthSizeClass == WindowWidthSizeClass.Expanded) {
@@ -191,9 +191,9 @@ It recomposes when the window changes class. `NavigationSuiteScaffold` uses it t
 `mediaQuery { … }` asks about what the app runs on, as Compose's: the window's size, the most precise pointer, whether there is a keyboard. `derivedMediaQuery { … }` gives a state that changes only when the answer does, which is what you want for the window's size, since that changes at every step of a resize:
 
 ```kotlin
-#! @Composable fun TwoPanes() {}
-#! @Composable fun OnePane() {}
-@Composable
+#! @Kompozable fun TwoPanes() {}
+#! @Kompozable fun OnePane() {}
+@Kompozable
 fun Adaptive() {
     val wide by derivedMediaQuery { windowWidth >= 600.dp }
     if (wide) TwoPanes() else OnePane()
@@ -215,14 +215,14 @@ BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
 }
 ```
 
-As Compose's, it is a `SubcomposeLayout`: its content is composed while the box is measured, with the constraints it gets (the first time too), and again when they change.
+As Compose's, it is a `SubkompozLayout`: its content is composed while the box is measured, with the constraints it gets (the first time too), and again when they change.
 
 ### Adaptive panes
 
 `ListDetailPaneScaffold` and `SupportingPaneScaffold` are Compose Material 3 Adaptive's: one pane at a time on a compact window (Back goes back), side by side on an expanded one. Their navigator says which pane shows and what it shows: `navigateTo(role, key)`, `navigateBack()`. With a `paneExpansionState`, `paneExpansionDragHandle = { state -> VerticalDragHandle(modifier = Modifier.paneExpansionDraggable(state)) }` lets the split be dragged.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Mail() {
     val navigator = rememberListDetailPaneScaffoldNavigator<Int>()
     val mails = listOf("Welcome", "Invoice", "Newsletter")
@@ -260,10 +260,10 @@ Scaffold { padding ->
 
 ## Right to left
 
-When the system language is written right to left (Arabic, Hebrew, Persian…), the layout direction is right to left: `Row`s start at the right, `start` and `end` padding swap, and horizontal lists scroll from the right. `CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }` changes it for part of the tree, and `KOMPOZ_LAYOUT_DIRECTION=rtl` for the whole app. Drawing, `absoluteOffset` and `absolutePadding` don't mirror.
+When the system language is written right to left (Arabic, Hebrew, Persian…), the layout direction is right to left: `Row`s start at the right, `start` and `end` padding swap, and horizontal lists scroll from the right. `KompozitionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }` changes it for part of the tree, and `KOMPOZ_LAYOUT_DIRECTION=rtl` for the whole app. Drawing, `absoluteOffset` and `absolutePadding` don't mirror.
 
 ## See also
 
 - [Modifiers](modifiers.md): size, padding and the scope modifiers.
-- [Custom layouts](custom-layouts.md): `Layout`, intrinsics and `SubcomposeLayout`.
+- [Custom layouts](custom-layouts.md): `Layout`, intrinsics and `SubkompozLayout`.
 - [Lists and grids](lists.md): lazy layouts for long content.

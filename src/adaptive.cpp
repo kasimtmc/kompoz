@@ -103,7 +103,7 @@ NavigationSuiteScaffoldState rememberNavigationSuiteScaffoldState(NavigationSuit
 void NavigationSuiteScaffoldLayout(const Content& navigationSuite, NavigationSuiteType navigationSuiteType, const Content& content,
                                    std::optional<NavigationSuiteScaffoldState> state, const Content& primaryActionContent,
                                    HorizontalAlignment primaryActionContentHorizontalAlignment, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     NavigationSuiteScaffoldState shown = state ? *state : rememberNavigationSuiteScaffoldState();
     bool bar = isBar(navigationSuiteType);
     // The content keeps its place in the composition whatever the navigation is in (a window
@@ -141,7 +141,7 @@ void NavigationSuiteScaffoldLayout(const Content& navigationSuite, NavigationSui
         }
         return Size{w, h};
     };
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = Modifier();
@@ -157,7 +157,7 @@ void NavigationSuiteScaffoldLayout(const Content& navigationSuite, NavigationSui
 
 void NavigationSuite(NavigationSuiteType navigationSuiteType, const Modifier& modifier, const Content& content,
                      const Content& primaryActionContent, Arrangement::Kind verticalArrangement, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // The items at the top, in the middle or at the bottom of a rail or drawer.
     auto arranged = [&] {
         if (verticalArrangement != Arrangement::Kind::Start) detail::Spacer(Modifier().weight(1));
@@ -190,7 +190,7 @@ void NavigationSuite(NavigationSuiteType navigationSuiteType, const Modifier& mo
 
 void detail::NavigationSuiteItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
                                  const NavigationSuiteItemOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     NavigationSuiteType type = options.navigationSuiteType.value_or(NavigationSuiteScaffoldDefaults::navigationSuiteType(currentWindowAdaptiveInfo()));
     Content badge = options.badge;
     Content picture = badge ? Content([&] { BadgedBox(badge, Modifier(), icon); }) : icon;
@@ -245,7 +245,7 @@ void suiteScaffold(NavigationSuiteType type, const Modifier& modifier, const Nav
     NavigationSuiteScaffoldState state = options.state ? *options.state : rememberNavigationSuiteScaffoldState();
     WindowInsets taken = suiteInsets(type, state);
     detail::Box(modifier.background(options.containerColor.value_or(cs.background)), [&] {
-        CompositionLocalProvider({LocalContentColor.provides(options.contentColor.value_or(cs.onBackground))}, [&] {
+        KompozitionLocalProvider({LocalContentColor.provides(options.contentColor.value_or(cs.onBackground))}, [&] {
             NavigationSuiteScaffoldLayout(suite, type, [&] { detail::Box(Modifier().fillMaxSize().consumeWindowInsets(taken), content); }, state,
                                           options.primaryActionContent, options.primaryActionContentHorizontalAlignment);
         });
@@ -256,7 +256,7 @@ void suiteScaffold(NavigationSuiteType type, const Modifier& modifier, const Nav
 
 void detail::NavigationSuiteScaffold(const std::function<void(NavigationSuiteScope&)>& navigationSuiteItems, const Modifier& modifier,
                                      const NavigationSuiteScaffoldOptions& options, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     NavigationSuiteScope nav;
     navigationSuiteItems(nav);
     NavigationSuiteType type = options.layoutType.value_or(NavigationSuiteScaffoldDefaults::calculateFromAdaptiveInfo(currentWindowAdaptiveInfo()));
@@ -312,7 +312,7 @@ void detail::NavigationSuiteScaffold(const std::function<void(NavigationSuiteSco
 
 void detail::NavigationSuiteScaffold(const Content& navigationItems, const Modifier& modifier, const NavigationSuiteScaffoldOptions& options,
                                      const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     NavigationSuiteType type = options.layoutType.value_or(NavigationSuiteScaffoldDefaults::navigationSuiteType(currentWindowAdaptiveInfo()));
     suiteScaffold(type, modifier, options,
                   [&] { NavigationSuite(type, Modifier(), navigationItems, options.primaryActionContent, options.navigationItemVerticalArrangement); },
@@ -409,7 +409,7 @@ std::optional<PaneExpansionState> Saver<PaneExpansionState>::restore(const Saved
 }
 
 PaneExpansionState rememberPaneExpansionState(std::vector<PaneExpansionAnchor> anchors, CallSite site) {
-    ComposableScope group(site);
+    KompozableScope group(site);
     auto scope = rememberCoroutineScope();
     auto& state = rememberSaveable([] { return PaneExpansionState(); });
     state.data_->anchors = std::move(anchors);

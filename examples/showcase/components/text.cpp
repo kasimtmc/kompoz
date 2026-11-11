@@ -5,7 +5,7 @@
 // FontVariation: one variable font file at three weights (here the system's Cantarell, where
 // there is one). Font files are the platform's: this part stays C++.
 void VariableFontSample(CallSite site = CallSite::current()) {
-    composable(site, [=] {
+    kompozable(site, [=] {
         static const char* const variable = "/usr/share/fonts/cantarell/Cantarell-VF.otf";
         static const bool hasVariable = [] {
             std::FILE* f = std::fopen(variable, "rb");
@@ -25,7 +25,7 @@ void VariableFontSample(CallSite site = CallSite::current()) {
 }
 
 // AnnotatedString (styles, a link), overflow and the system font scale.
-@Composable
+@Kompozable
 fun TextSection() {
     var linkClicks by remember { mutableStateOf(0) }
     val cs = MaterialTheme.colorScheme

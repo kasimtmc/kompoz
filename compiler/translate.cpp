@@ -144,7 +144,7 @@ bool startsObject(std::string_view src, size_t at) {
 }
 
 // What annotated Kotlin declaration starts at `at` (an '@'): 'd' a data class, 'o' an object, 'c' a class,
-// 'f' a function (@Preview @Composable fun, @Test fun), ' ' none (annotations in C++ don't exist).
+// 'f' a function (@Preview @Kompozable fun, @Test fun), ' ' none (annotations in C++ don't exist).
 char annotatedDeclaration(std::string_view src, size_t at) {
     size_t k = at;
     for (;;) {
@@ -209,7 +209,7 @@ bool startsVal(std::string_view src, size_t at) {
     return src.substr(k, 2) == "by" && (k + 2 >= src.size() || !identChar(src[k + 2]));
 }
 
-// Whether a plain (not @Composable) function starts at `at`: [private | internal | public | inline]...
+// Whether a plain (not @Kompozable) function starts at `at`: [private | internal | public | inline]...
 // fun name or fun Receiver.name (C++ has no `fun`).
 bool startsFun(std::string_view src, size_t at) {
     size_t k = at;
@@ -320,7 +320,7 @@ size_t guessedEnd(std::string_view src, size_t at) {
 }  // namespace
 
 // Walks the C++ around the functions: skips comments, strings, characters and raw strings, and
-// finds each @Composable.
+// finds each @Kompozable.
 std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries, std::vector<CompileError>* errors) {
     std::vector<Found> found;
     // The C++ namespaces around: each one's name ("" unnamed) and the brace depth inside it.
@@ -396,7 +396,7 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
                 f.qualifier = qualifier();
                 found.push_back(std::move(f));
                 i = f.end;
-            } else if (c == '@' && src.substr(i + 1, 10) == "Composable" && (i + 11 >= src.size() || !identChar(src[i + 11]))) {
+            } else if (c == '@' && src.substr(i + 1, 10) == "Kompozable" && (i + 11 >= src.size() || !identChar(src[i + 11]))) {
                 Parser parser(src, positionOf(src, i));
                 Function f = parser.function();
                 size_t end = f.end.offset;
@@ -785,7 +785,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     fs::path dir = source.parent_path();
     size_t done = 0;
     std::set<std::string, std::less<>> declared;  // the functions declared so far
-    // The @Composable functions a definition uses, declared before it (their prototypes), of this
+    // The @Kompozable functions a definition uses, declared before it (their prototypes), of this
     // file or another, as late as can be (a parameter's type may be a struct of the file's declared
     // above the function, not at its top).
     auto declare = [&](const std::set<std::string, std::less<>>& used) {
@@ -867,7 +867,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     // The module's functions, classes and vals that this file's C++ (not its Kotlin) names before
     // they are defined here (or defined in another file): declared where the statement using them
     // first begins, as a prototype of their own would be (after the file's own types, which a
-    // parameter may be of): a C++ file of the target calling Section(…), written in Compose's
+    // parameter may be of): a C++ file of the target calling Section(…), written in Kotlin's
     // syntax in another file.
     std::set<std::string, std::less<>> cppUsed;
     size_t declareAt = std::string::npos;

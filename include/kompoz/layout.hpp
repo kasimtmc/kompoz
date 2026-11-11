@@ -25,7 +25,7 @@
 
 namespace kompoz {
 
-class ComposeHost;
+class KompozHost;
 class LayoutNode;
 class DrawScope;
 class ContentDrawScope;
@@ -239,16 +239,16 @@ struct PointerIcon {
 };
 
 // Preferred color for content (text, pressed/hover overlays) in the current subtree.
-inline const CompositionLocal<Color> LocalContentColor{colors::Black};
+inline const KompozitionLocal<Color> LocalContentColor{colors::Black};
 
 // Which way layouts go (Compose's LocalLayoutDirection): in Rtl a Row starts at the right,
 // Start / End (alignments, padding, offset) mirror, horizontal scrolling starts at the right
 // and follows the finger the other way. Drawing, absoluteOffset/absolutePadding and the
 // window insets don't mirror.
-//   CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { ... });
-inline const CompositionLocal<LayoutDirection> LocalLayoutDirection{LayoutDirection::Ltr};
+//   KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { ... });
+inline const KompozitionLocal<LayoutDirection> LocalLayoutDirection{LayoutDirection::Ltr};
 // Whether a language is written right to left ("ar", "he-IL", "fa_IR", "ur"...): what the host
-// takes the app's direction from (ComposeHost::setLayoutDirection, the system's language).
+// takes the app's direction from (KompozHost::setLayoutDirection, the system's language).
 bool isRtlLanguage(std::string_view languageTag);
 
 // How a clickable shows that it is pressed, hovered or focused (Compose's Indication): a
@@ -273,7 +273,7 @@ class ContentDrawScope;
 //   struct ShrinkIndication final : IndicationNodeFactory {
 //       std::shared_ptr<IndicationNode> create() const override { return std::make_shared<Shrink>(); }
 //   };
-//   CompositionLocalProvider({LocalIndication.provides(Indication(std::make_shared<ShrinkIndication>()))}, [&] { Button(...); });
+//   KompozitionLocalProvider({LocalIndication.provides(Indication(std::make_shared<ShrinkIndication>()))}, [&] { Button(...); });
 class IndicationNode {
 public:
     virtual ~IndicationNode() = default;  // its coroutines go with it
@@ -283,7 +283,7 @@ public:
     const CoroutineScope& coroutineScope() const { return *scope_; }
 
 private:
-    friend class ComposeHost;
+    friend class KompozHost;
     std::optional<CoroutineScope> scope_;
 };
 class IndicationNodeFactory {
@@ -314,10 +314,10 @@ inline Indication ripple(bool bounded = true, float radius = 0, std::optional<Co
     return i;
 }
 // What clickables without their own indication use (the Material theme's ripple).
-inline const CompositionLocal<Indication> LocalIndication{Indication{}};
+inline const KompozitionLocal<Indication> LocalIndication{Indication{}};
 // The least room (dp) minimumInteractiveComponentSize keeps for something to touch (Compose's
 // LocalMinimumInteractiveComponentSize); 0 keeps none.
-inline const CompositionLocal<float> LocalMinimumInteractiveComponentSize{48};
+inline const KompozitionLocal<float> LocalMinimumInteractiveComponentSize{48};
 
 // Scroll position shared between the composition and the layout. Changing it only
 // re-runs layout and drawing, never composition.
@@ -506,11 +506,11 @@ struct SharedResizeMode {
 // Overscroll (Compose's OverscrollFactory): the stretch a scroll container shows when a finger
 // pulls it past an end. LocalOverscrollFactory = std::nullopt turns it off for the scroll
 // containers made inside (Compose's `LocalOverscrollFactory provides null`):
-//   CompositionLocalProvider({LocalOverscrollFactory.provides(std::nullopt)}, [&] { ... });
+//   KompozitionLocalProvider({LocalOverscrollFactory.provides(std::nullopt)}, [&] { ... });
 struct OverscrollFactory {
     friend constexpr bool operator==(const OverscrollFactory&, const OverscrollFactory&) = default;
 };
-inline const CompositionLocal<std::optional<OverscrollFactory>> LocalOverscrollFactory{OverscrollFactory{}};
+inline const KompozitionLocal<std::optional<OverscrollFactory>> LocalOverscrollFactory{OverscrollFactory{}};
 namespace detail {
 // Whether a scroll container made now stretches: LocalOverscrollFactory's (yes outside a composition).
 bool overscrollWanted();
@@ -524,7 +524,7 @@ class ContentDrawScope;
 // viewport's; it returns how far to scroll towards the end (negative: back; 0: leave it). Unset,
 // the default: just far enough that it shows, its start first if it is bigger than the viewport.
 // Provide one for the containers made inside, e.g. to keep the focused item a third of the way in:
-//   CompositionLocalProvider({LocalBringIntoViewSpec.provides(BringIntoViewSpec{
+//   KompozitionLocalProvider({LocalBringIntoViewSpec.provides(BringIntoViewSpec{
 //       [](float offset, float size, float container) { return offset - (container - size) * 0.3f; }})}, ...);
 struct BringIntoViewSpec {
     std::function<float(float offset, float size, float containerSize)> calculateScrollDistance;
@@ -537,7 +537,7 @@ struct BringIntoViewSpec {
         return trailing > containerSize ? std::min(trailing - containerSize, offset) : offset < 0 ? offset : 0.f;
     }
 };
-inline const CompositionLocal<BringIntoViewSpec> LocalBringIntoViewSpec{BringIntoViewSpec{}};
+inline const KompozitionLocal<BringIntoViewSpec> LocalBringIntoViewSpec{BringIntoViewSpec{}};
 namespace detail {
 BringIntoViewSpec currentBringIntoViewSpec();  // LocalBringIntoViewSpec's (the default outside a composition)
 } // namespace detail
@@ -879,7 +879,7 @@ public:
     friend bool operator==(const FocusRequester& a, const FocusRequester& b) { return a.data_ == b.data_; }
 
     struct Data {
-        ComposeHost* host = nullptr;  // set when attached
+        KompozHost* host = nullptr;  // set when attached
     };
     std::shared_ptr<Data> data_;
 };
@@ -1012,12 +1012,12 @@ struct BringIntoViewRequesterElement final : ModifierElement {
 enum class FocusDirection { Next, Previous, Up, Down, Left, Right };
 class FocusManager {
 public:
-    explicit FocusManager(ComposeHost* host) : host_(host) {}
+    explicit FocusManager(KompozHost* host) : host_(host) {}
     void clearFocus() const;
     bool moveFocus(FocusDirection direction) const;
 
 private:
-    ComposeHost* host_;
+    KompozHost* host_;
 };
 FocusManager focusManager();  // inside a composition
 
@@ -1442,11 +1442,11 @@ struct SystemInsets {
     PaddingValues imeAnimationSource, imeAnimationTarget;
     friend bool operator==(const SystemInsets&, const SystemInsets&) = default;
 };
-inline const CompositionLocal<SystemInsets> LocalSystemInsets{SystemInsets{}};
+inline const KompozitionLocal<SystemInsets> LocalSystemInsets{SystemInsets{}};
 // ...the union of the bars, the cutout and the keyboard (WindowInsets::safeDrawing())...
-inline const CompositionLocal<PaddingValues> LocalWindowInsets{PaddingValues{}};
+inline const KompozitionLocal<PaddingValues> LocalWindowInsets{PaddingValues{}};
 // ...and whether the system is in dark mode.
-inline const CompositionLocal<bool> LocalSystemDarkTheme{false};
+inline const KompozitionLocal<bool> LocalSystemDarkTheme{false};
 // Material's HCT color space (Material Color Utilities'): hue and chroma as CAM16 sees them
 // (under its default viewing conditions), tone as L* (0 black, 100 white). toColor() gives the
 // color of that hue and tone with as much of that chroma as sRGB has there.
@@ -1483,14 +1483,14 @@ std::vector<std::pair<Color, uint32_t>> quantizeColors(const ImageBitmap& image,
 // (its greys left out), the greyish (chroma below 5) and the rare (1% or less) not taken, then
 // picked as far apart in hue as `desired` of them can be. When none is left: Google blue alone.
 std::vector<Color> seedColors(const std::vector<std::pair<Color, uint32_t>>& colors, int desired = 4);
-inline const CompositionLocal<std::optional<TonalPalette>> LocalDynamicTonalPalette{std::nullopt};
+inline const KompozitionLocal<std::optional<TonalPalette>> LocalDynamicTonalPalette{std::nullopt};
 // The wallpaper's own palette, where the platform can read the wallpaper (TonalPalette::fromImage
 // of it; Android's wallpaper colors): read by wallpaperLightColorScheme() and
 // wallpaperDarkColorScheme(). Whether an app takes its colors from it, from the system's accent
 // (LocalDynamicTonalPalette) or from its own scheme is the app's choice, or its user's.
-inline const CompositionLocal<std::optional<TonalPalette>> LocalWallpaperTonalPalette{std::nullopt};
+inline const KompozitionLocal<std::optional<TonalPalette>> LocalWallpaperTonalPalette{std::nullopt};
 // The window's size in dp (pick a layout for phones, tablets and desktops).
-inline const CompositionLocal<Size> LocalWindowSize{Size{}};
+inline const KompozitionLocal<Size> LocalWindowSize{Size{}};
 // The window the composition is in (Compose's LocalWindowInfo): whether it has the input focus
 // (another window, a system dialog or the notification shade over it: not), and its size (dp
 // here; Compose's containerSize is in pixels).
@@ -1499,7 +1499,7 @@ struct WindowInfo {
     Size containerSize;
     friend bool operator==(const WindowInfo&, const WindowInfo&) = default;
 };
-inline const CompositionLocal<WindowInfo> LocalWindowInfo{WindowInfo{}};
+inline const KompozitionLocal<WindowInfo> LocalWindowInfo{WindowInfo{}};
 // The platform's thresholds for gestures (Compose's ViewConfiguration): how long a press takes
 // to become a long press, how soon a second tap makes a double tap (and how soon is too soon),
 // how far (dp) a pointer may move before a press turns into a drag, the smallest touch target,
@@ -1515,7 +1515,7 @@ struct ViewConfiguration {
     constexpr int64_t doubleTapMinTimeMillis() const { return doubleTapMinTime.count(); }
     friend bool operator==(const ViewConfiguration&, const ViewConfiguration&) = default;
 };
-inline const CompositionLocal<ViewConfiguration> LocalViewConfiguration{ViewConfiguration{}};
+inline const KompozitionLocal<ViewConfiguration> LocalViewConfiguration{ViewConfiguration{}};
 // A step of the system's back gesture (Compose's BackEventCompat; Android 14+): where the finger
 // is (dp, in the window), how far along the gesture is (0..1, as the system eases it) and the
 // edge it came from.
@@ -1573,7 +1573,7 @@ namespace detail {
 WindowInsets systemBarsForVisualComponents();
 } // namespace detail
 
-inline const CompositionLocal<Density> LocalDensity{Density{}};
+inline const KompozitionLocal<Density> LocalDensity{Density{}};
 
 class SharedContentState;
 class AnimatedVisibilityScope;
@@ -2468,9 +2468,9 @@ public:
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     Modifier dragAndDropTarget(A&&... args) const;
-    // From the android/snippets RecomposeHighlighter: a border that shows how often the
+    // From the android/snippets RekompozHighlighter: a border that shows how often the
     // composable emitting this node ran (blue once, green twice, then yellow to red, thicker).
-    Modifier recomposeHighlighter() const;
+    Modifier rekompozHighlighter() const;
 
     Modifier then(const Modifier& other) const;
     Modifier then(std::shared_ptr<const ModifierElement> element) const;
@@ -2496,7 +2496,7 @@ private:
 };
 
 // A popup root (Popup, Dialog, DropdownMenu): composed where it is called, so it keeps its
-// state and CompositionLocals, but laid out and drawn above everything else by the host.
+// state and KompozitionLocals, but laid out and drawn above everything else by the host.
 // Compose's PopupPositionProvider: where a popup goes, from its anchor's bounds (the node it was
 // composed in), the window's size and its own, in whole dp. Implement it (in Kotlin an object
 // expression) and give it to Popup(popupPositionProvider = …).
@@ -2559,9 +2559,9 @@ bool isMinIntrinsicWidth();
 // The node being measured, if any: a state read now is read by its layout.
 LayoutNode* measuringNode();
 // The node being drawn, if any: a state read now is read by its drawing, and a redraw asked for
-// now is its (ComposeHost::requestRedraw).
+// now is its (KompozHost::requestRedraw).
 LayoutNode* drawingNode();
-// What the node being drawn asks of the frames to come (ComposeHost::requestRedraw and
+// What the node being drawn asks of the frames to come (KompozHost::requestRedraw and
 // animateDrawingUntil, as it draws): asked of its host once it has drawn, if any of what it drew
 // can show (GraphicsContext::endedNodeShows). One out of view asks for no frames: it is drawn
 // again (and asks again) in the first frame there is, which has it in view if it has come in.
@@ -2622,7 +2622,7 @@ using DrawContent = std::function<void(GraphicsContext& canvas, const Rect& cont
 // their properties and child lists.
 class LayoutNode {
 public:
-    explicit LayoutNode(ComposeHost* host) : host_(host) {}
+    explicit LayoutNode(KompozHost* host) : host_(host) {}
     ~LayoutNode();
     LayoutNode(const LayoutNode&) = delete;
     LayoutNode& operator=(const LayoutNode&) = delete;
@@ -2706,7 +2706,7 @@ public:
     void drawAfter(GraphicsContext& canvas, const ModifierElement* element);
     std::optional<Rect> boundsOf(const ModifierElement* element) const;  // that element's layer rect
 
-    ComposeHost* host() const { return host_; }
+    KompozHost* host() const { return host_; }
     TextMeasurer& textMeasurer() const;
     // Outlives the node and reads null once it is gone (for objects that may outlive it).
     std::weak_ptr<LayoutNode*> handle();
@@ -2735,7 +2735,7 @@ private:
         Offset contentOffset;
         Rect bounds;
     };
-    ComposeHost* host_;
+    KompozHost* host_;
     std::shared_ptr<LayoutNode*> handle_;
     std::vector<Layer> layers_;
     Offset position_;
@@ -2760,7 +2760,7 @@ private:
     void checkReported();    // its elements found out again if they changed (host.cpp)
     bool scrollableAt(size_t index) const;  // its element `index` is a ScrollableElement (as found out; host.cpp)
     void setReports(bool on);
-    friend class ComposeHost;
+    friend class KompozHost;
 };
 
 namespace detail {

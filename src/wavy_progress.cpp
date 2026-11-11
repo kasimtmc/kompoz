@@ -57,7 +57,7 @@ void stroke(GraphicsContext& canvas, const Path& path, const Rect& b, Color colo
 }
 
 void progressNode(const CallSite& site, const Modifier& modifier, Size size, DrawContent draw, std::string semantics) {
-    detail::Composer::require().emit(detail::keyOf(site), [&](LayoutNode& node) {
+    detail::Kompozer::require().emit(detail::keyOf(site), [&](LayoutNode& node) {
         node.modifier = modifier;
         node.measurePolicy = [size](LayoutNode&, const Constraints& c) { return c.constrain(size); };
         node.drawContent = std::move(draw);
@@ -182,7 +182,7 @@ void drawCircular(GraphicsContext& canvas, const Rect& b, float start, float swe
 } // namespace
 
 void detail::LinearWavyProgressIndicator(float progress, const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
-    composable(site, progress, modifier, options, [=] {
+    kompozable(site, progress, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::LinearDeterminateWavelength);
         float p = std::clamp(progress, 0.f, 1.f);
         auto waves = determinateAmplitude(p, options);
@@ -200,7 +200,7 @@ void detail::LinearWavyProgressIndicator(float progress, const Modifier& modifie
 }
 
 void detail::LinearWavyProgressIndicator(const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
-    composable(site, modifier, options, [=] {
+    kompozable(site, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::LinearIndeterminateWavelength);
         float amplitude = std::clamp(options.indeterminateAmplitude, 0.f, 1.f);
         WaveShift shift = waveShift(amplitude > 0, r);
@@ -218,7 +218,7 @@ void detail::LinearWavyProgressIndicator(const Modifier& modifier, const WavyPro
 }
 
 void detail::CircularWavyProgressIndicator(float progress, const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
-    composable(site, progress, modifier, options, [=] {
+    kompozable(site, progress, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::CircularWavelength);
         float p = std::clamp(progress, 0.f, 1.f);
         auto waves = determinateAmplitude(p, options);
@@ -234,7 +234,7 @@ void detail::CircularWavyProgressIndicator(float progress, const Modifier& modif
 }
 
 void detail::CircularWavyProgressIndicator(const Modifier& modifier, const WavyProgressIndicatorOptions& options, CallSite site) {
-    composable(site, modifier, options, [=] {
+    kompozable(site, modifier, options, [=] {
         Resolved r = resolve(options, WavyProgressIndicatorDefaults::CircularWavelength);
         float amplitude = std::clamp(options.indeterminateAmplitude, 0.f, 1.f);
         WaveShift shift = waveShift(amplitude > 0, r);

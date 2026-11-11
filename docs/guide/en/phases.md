@@ -25,7 +25,7 @@ The later the phase that reads a changing value, the less work each change costs
 Reading an animated value in composition recomposes on every frame:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Pulse() {
     val pulse by rememberInfiniteTransition().animateFloat(
         initialValue = 0.8f,
@@ -46,7 +46,7 @@ The lambda form of `graphicsLayer` is evaluated while drawing, so the scale chan
 The same goes for moving something. `offset(x, y)` takes values read in composition; `offset { … }` takes a lambda read during layout:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DraggableBall() {
     var x by remember { mutableStateOf(0f) }
     Box(
@@ -83,7 +83,7 @@ Anything a composable computes runs again on each recomposition. Compute it once
 ```kotlin
 data class Contact(val name: String)
 
-@Composable
+@Kompozable
 fun Contacts(contacts: List<Contact>) {
     val sorted = remember(contacts) { contacts.sortedBy { it.name } }   // sorted again only when the contacts change
     LazyColumn(modifier = Modifier.fillMaxSize()) {

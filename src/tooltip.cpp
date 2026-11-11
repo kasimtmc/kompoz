@@ -21,7 +21,7 @@ struct Caret {
     enum class Side { Top, Bottom, Left, Right } side = Side::Bottom;  // the tooltip's side towards the anchor
     float height = 0;
 };
-const CompositionLocal<std::shared_ptr<Caret>> LocalTooltipCaret{nullptr};
+const KompozitionLocal<std::shared_ptr<Caret>> LocalTooltipCaret{nullptr};
 
 // The caret of a tooltip of `color`, on the side towards the anchor (none when `size` is empty),
 // with a shadow as the tooltip's `elevation` casts; it goes between the tooltip's shadow and its
@@ -124,12 +124,12 @@ void tooltipBox(const TooltipPosition& position, const std::shared_ptr<Caret>& c
     // Compose 1.4's: in and out growing from (shrinking to) 80% on the fast spatial spring and
     // fading on the fast effects one; shown until it has faded out.
     // Worked out here as it turns and gets there; on the way, read as it is drawn.
-    auto& composer = detail::Composer::require();
-    int64_t now = composer.frameTimeNanos();
+    auto& kompozer = detail::Kompozer::require();
+    int64_t now = kompozer.frameTimeNanos();
     auto clock = [&](float shown) {
         auto made = std::make_shared<detail::TransitionProgress>();
         made->from = made->to = shown;
-        made->host = &composer.host();
+        made->host = &kompozer.host();
         return made;
     };
     auto fade = remember([&] { return clock(visible ? 1.f : 0.f); });
@@ -139,8 +139,8 @@ void tooltipBox(const TooltipPosition& position, const std::shared_ptr<Caret>& c
     bool faded = false, grown = false;
     float alpha = animated ? fade->at(now, &faded) : float(visible), scale = animated ? grow->at(now, &grown) : 1.f;
     if (!animated) faded = grown = true;
-    if (!faded) composer.requestFrameAt(fade->end);
-    if (!grown) composer.requestFrameAt(grow->end);
+    if (!faded) kompozer.requestFrameAt(fade->end);
+    if (!grown) kompozer.requestFrameAt(grow->end);
     Modifier anchor = modifier;
     if (input) {
         auto trigger = std::make_shared<TooltipTriggerElement>();
@@ -162,7 +162,7 @@ void tooltipBox(const TooltipPosition& position, const std::shared_ptr<Caret>& c
                     detail::Box(Modifier().graphicsLayer({.scaleX = scale, .scaleY = scale, .alpha = alpha}), tooltip);
                 else tooltip();
             };
-            if (caretInfo) CompositionLocalProvider({LocalTooltipCaret.provides(caretInfo)}, shown);
+            if (caretInfo) KompozitionLocalProvider({LocalTooltipCaret.provides(caretInfo)}, shown);
             else shown();
         });
     });
@@ -171,19 +171,19 @@ void tooltipBox(const TooltipPosition& position, const std::shared_ptr<Caret>& c
 
 void BasicTooltipBox(const TooltipPosition& position, const Content& tooltip, const BasicTooltipState& state, const Modifier& modifier,
                      const Content& content, bool focusable, bool enableUserInput, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     tooltipBox(position, nullptr, tooltip, state, modifier, content, focusable, enableUserInput, false);
 }
 
 void detail::TooltipBox(const Content& tooltip, const TooltipState& state, const Modifier& modifier, const Content& content,
                 CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     TooltipBox(TooltipPositionProvider{}, tooltip, state, modifier, content);
 }
 
 void detail::TooltipBox(const TooltipPositionProvider& positionProvider, const Content& tooltip, const TooltipState& state,
                 const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto caretInfo = remember([] { return std::make_shared<Caret>(); });
     // Start and End as the layout goes.
     TooltipAnchorPosition side = positionProvider.positioning;
@@ -226,11 +226,11 @@ void detail::TooltipBox(const TooltipPositionProvider& positionProvider, const C
 void detail::PlainTooltip(const Content& content, const Modifier& modifier, CallSite site) { PlainTooltip(content, modifier, Size{}, site); }
 
 void detail::PlainTooltip(const Content& content, const Modifier& modifier, Size caretSize, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     detail::Box(modifier.heightIn(24).widthIn(40, 200).then(caret(caretSize, cs.inverseSurface)).background(cs.inverseSurface, 4).padding(8, 4),
         Alignment::CenterStart, [&] {
-        CompositionLocalProvider({LocalContentColor.provides(cs.inverseOnSurface), LocalTextStyle.provides(typography().bodySmall)},
+        KompozitionLocalProvider({LocalContentColor.provides(cs.inverseOnSurface), LocalTextStyle.provides(typography().bodySmall)},
                                  content);
     });
 }
@@ -238,7 +238,7 @@ void detail::PlainTooltip(const Content& content, const Modifier& modifier, Size
 void detail::RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, CallSite site) { RichTooltip(slots, modifier, Size{}, site); }
 
 void detail::RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier, Size caretSize, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     // Compose 1.4's: 3 dp up, 16 dp at the sides; the title's first baseline 28 dp down, the
@@ -249,17 +249,17 @@ void detail::RichTooltip(const RichTooltipSlots& slots, const Modifier& modifier
     detail::Column(card.background(cs.surfaceContainer, 12).padding(16, 0), [&] {
         if (slots.title)
             detail::Box(Modifier().paddingFromBaseline(28), [&] {
-                CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.titleSmall)},
+                KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.titleSmall)},
                                          slots.title);
             });
         if (slots.text)
             detail::Box(spaced ? Modifier().paddingFromBaseline(24).padding(0, 0, 0, 16) : Modifier().padding(0, 4), [&] {
-                CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.bodyMedium)},
+                KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant), LocalTextStyle.provides(t.bodyMedium)},
                                          slots.text);
             });
         if (slots.action)
             detail::Box(Modifier().requiredHeightIn(36).padding(0, 0, 0, 8), [&] {
-                CompositionLocalProvider({LocalContentColor.provides(cs.primary), LocalTextStyle.provides(t.labelLarge)}, slots.action);
+                KompozitionLocalProvider({LocalContentColor.provides(cs.primary), LocalTextStyle.provides(t.labelLarge)}, slots.action);
             });
     });
 }
@@ -270,7 +270,7 @@ void detail::TooltipArea(const Content& tooltip, const Modifier& modifier, const
 
 void detail::TooltipArea(const Content& tooltip, const Modifier& modifier, const TooltipAreaOptions& options, const Content& content,
                          CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto cursor = remember([] { return mutableStateOf(Offset{}); });  // in the area
     auto visible = remember([] { return mutableStateOf(false); });
     auto waiting = remember([] { return std::make_shared<int>(0); });  // the pending show's number (0: none)
@@ -348,7 +348,7 @@ void labelOver(bool visible, const Content& label, const Modifier& modifier, con
 
 void detail::Label(const Content& label, const Modifier& modifier, std::optional<MutableInteractionSource> interactionSource, bool isPersistent,
                    const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto own = remember([] { return MutableInteractionSource(); });
     MutableInteractionSource source = interactionSource.value_or(own);
     bool shown = source.collectIsPressedAsState() || source.collectIsDraggedAsState() || source.collectIsHoveredAsState();
@@ -357,7 +357,7 @@ void detail::Label(const Content& label, const Modifier& modifier, std::optional
 
 namespace SliderDefaults {
 void Label(const SliderState& state, const Content& label, const Content& content, bool isPersistent, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     labelOver(isPersistent || state.isPressed(), label, Modifier(), content);
 }
 } // namespace SliderDefaults

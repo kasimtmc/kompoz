@@ -5,7 +5,7 @@
 // ListDetailPaneScaffold: cities and the one picked — one pane at a time on a phone held
 // upright (Back goes back), side by side on an expanded window (a phone on its side, a desktop),
 // where the handle between them drags the split (settling on a third, half or two thirds).
-@Composable
+@Kompozable
 fun ListDetailSection() {
     val navigator = rememberListDetailPaneScaffoldNavigator<Int>()
     val expansion = rememberPaneExpansionState(listOf(PaneExpansionAnchor.Proportion(1 / 3f), PaneExpansionAnchor.Proportion(0.5f), PaneExpansionAnchor.Proportion(2 / 3f)))
@@ -50,7 +50,7 @@ fun ListDetailSection() {
 }
 
 // A main pane with a supporting one: side by side on a wide window, slid in on a narrow one.
-@Composable
+@Kompozable
 fun SupportingPaneSection() {
     val navigator = rememberSupportingPaneScaffoldNavigator<Int>()
     val cs = MaterialTheme.colorScheme
@@ -83,7 +83,7 @@ fun SupportingPaneSection() {
 // LazyListState.layoutInfo: the items in view. Near the end of the list, 20 more are loaded
 // (a pretend 700 ms fetch); derivedStateOf recomposes only when its answer changes, not on
 // every scrolled frame.
-@Composable
+@Kompozable
 fun LayoutInfoSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -139,7 +139,7 @@ fun LayoutInfoSection() {
 
 // rememberTextMeasurer + drawText: a bar chart whose labels are measured to sit centered over
 // their bars; onTextLayout: a paragraph that offers "devamını oku" only when it was cut off.
-@Composable
+@Kompozable
 fun TextMeasureSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -178,7 +178,7 @@ fun TextMeasureSection() {
 }
 
 // Where the card is, read here and not around the section: as it moves, only these lines are composed again.
-@Composable
+@Kompozable
 fun PositionLines(where: State<LayoutCoordinates>, placed: State<Int>, color: Color) {
     val c = where.value
     val shown = if (c.size.height > 0) c.boundsInRoot().height / c.size.height else 0f
@@ -189,7 +189,7 @@ fun PositionLines(where: State<LayoutCoordinates>, placed: State<Int>, color: Co
 
 // onGloballyPositioned: a card that knows where it is on the screen and how much of it shows,
 // as the page scrolls (onPlaced hears only of its size and place in its parent).
-@Composable
+@Kompozable
 fun PositionSection() {
     val cs = MaterialTheme.colorScheme
     val where = remember { mutableStateOf(LayoutCoordinates()) }
@@ -208,7 +208,7 @@ fun PositionSection() {
 
 // rememberSnapFlingBehavior: a row of cards that settles with one in the middle, however hard
 // it is flung (the one nearest to where the fling would have stopped).
-@Composable
+@Kompozable
 fun SnapRowSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -241,7 +241,7 @@ fun SnapRowSection() {
 
 // Carousels: a multi-browse one (large, medium and small items that grow and shrink as they
 // move, settling on an item) and an uncontained one (one width, free scrolling).
-@Composable
+@Kompozable
 fun CarouselSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -283,7 +283,7 @@ fun CarouselSection() {
 }
 
 // Three rows of tiles that scroll sideways, composed column by column.
-@Composable
+@Kompozable
 fun HorizontalGridSection() {
     Section("LazyHorizontalGrid · LazyHorizontalStaggeredGrid") {
         LazyHorizontalGrid(rows = GridCells.Fixed(3), modifier = Modifier.fillMaxWidth().height(180.dp),
@@ -304,7 +304,7 @@ fun HorizontalGridSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun PagerSection() {
     val pager = rememberPagerState(pageCount = { 5 })
     val cards = rememberPagerState(pageCount = { 10 })
@@ -382,7 +382,7 @@ fun PagerSection() {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("BoxWithConstraints: ${if (constraints.hasBoundedWidth) maxWidth.value.roundToInt() else 0} dp, ${if (wide) "yan yana" else "alt alta"}",
                      color = cs.onSurfaceVariant, style = typography.bodyMedium)
-                val tile: @Composable (String, Color) -> Unit = { label, color ->
+                val tile: @Kompozable (String, Color) -> Unit = { label, color ->
                     Box(modifier = Modifier.fillMaxWidth().height(48.dp).background(color, RoundedCornerShape(12.dp)).padding(12.dp, 0.dp), contentAlignment = Alignment.CenterStart) {
                         Text(label, color = Color.White)
                     }
@@ -403,7 +403,7 @@ fun PagerSection() {
 
 // Modifier.zIndex: overlapping cards stacked by zIndex; the one tapped goes to the top of the
 // stack, the others keep their order (drawn and touched in that order).
-@Composable
+@Kompozable
 fun ZIndexSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -435,7 +435,7 @@ fun ZIndexSection() {
 }
 
 // FlexBox (Compose 1.12): grow and shrink, wrapping, justifyContent and alignment picked here.
-@Composable
+@Kompozable
 fun FlexBoxSection() {
     var justify by remember { mutableStateOf(0) }
     var wrapping by remember { mutableStateOf(true) }
@@ -457,7 +457,7 @@ fun FlexBoxSection() {
                     alignItems(if (baseline) FlexAlignItems.Baseline else FlexAlignItems.Center)
                     gap(8.dp)
                 }) {
-            val tag: @Composable (String, TextUnit, Modifier) -> Unit = { text, size, modifier ->
+            val tag: @Kompozable (String, TextUnit, Modifier) -> Unit = { text, size, modifier ->
                 Box(modifier = modifier.background(cs.secondaryContainer, RoundedCornerShape(8.dp)).padding(10.dp, 6.dp)) { Text(text, fontSize = size, color = cs.onSecondaryContainer) }
             }
             tag("Kotlin", 14.sp, Modifier)
@@ -473,7 +473,7 @@ fun FlexBoxSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun GridSection() {
     var byColumn by remember { mutableStateOf(false) }
     var gaps by remember { mutableStateOf(true) }
@@ -494,7 +494,7 @@ fun GridSection() {
                  area("başlık", row = 1, column = 1, rowSpan = 1, columnSpan = 3)
                  area("yan", row = 2, column = 1, rowSpan = 2, columnSpan = 1)
              }) {
-            val tile: @Composable (String, Color, Color, Modifier) -> Unit = { text, background, color, modifier ->
+            val tile: @Kompozable (String, Color, Color, Modifier) -> Unit = { text, background, color, modifier ->
                 Box(modifier = modifier.background(background, RoundedCornerShape(8.dp)).padding(8.dp)) { Text(text, color = color, style = typography.labelLarge) }
             }
             tile("Başlık: alan, 3 sütun", cs.primaryContainer, cs.onPrimaryContainer, Modifier.fillMaxWidth().gridItem("başlık"))
@@ -508,15 +508,15 @@ fun GridSection() {
     }
 }
 
-@Composable
+@Kompozable
 fun LayoutSection() {
-    var extra by remember { mutableStateOf(0) }  // how much longer the SubcomposeLayout title is
+    var extra by remember { mutableStateOf(0) }  // how much longer the SubkompozLayout title is
     val selected = remember { mutableStateOf(0) }
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     Section("Layout · IntrinsicSize · FlowRow · updateTransition") {
         // Alignment lines: texts of different sizes and a button's label on one baseline.
-        val caption: @Composable (String) -> Unit = { text -> Text(text, color = cs.onSurfaceVariant, style = typography.bodyMedium) }
+        val caption: @Kompozable (String) -> Unit = { text -> Text(text, color = cs.onSurfaceVariant, style = typography.bodyMedium) }
         caption("alignByBaseline: farklı boyutlarda metinler ve düğme etiketi aynı taban çizgisinde.")
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Fiyat", modifier = Modifier.alignByBaseline(), style = typography.labelLarge)
@@ -554,18 +554,18 @@ fun LayoutSection() {
                 }
             }
         }
-        // SubcomposeLayout: the title measured first, then a line composed as wide as it is.
+        // SubkompozLayout: the title measured first, then a line composed as wide as it is.
         val word = "Kompoz" + "!".repeat(extra * 2)
         TextButton(onClick = { extra = (extra + 1) % 6 }) { Text("Başlığı uzat") }
-        SubcomposeLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
+        SubkompozLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
             val loose = constraints.copy(minWidth = 0, minHeight = 0)
-            val title = subcompose("başlık") { Text(word, style = typography.titleMedium) }.map { it.measure(loose) }
+            val title = subkompoz("başlık") { Text(word, style = typography.titleMedium) }.map { it.measure(loose) }
             val w = title.maxOf { it.width }
             val h = title.maxOf { it.height }
-            val line = subcompose("çizgi", w) {
+            val line = subkompoz("çizgi", w) {
                 Column {
                     Box(modifier = Modifier.width(w.dp).height(3.dp).background(cs.primary, RoundedCornerShape(2.dp)))
-                    Text("SubcomposeLayout: başlığın genişliği ${w.roundToInt()} dp", style = typography.bodySmall)
+                    Text("SubkompozLayout: başlığın genişliği ${w.roundToInt()} dp", style = typography.bodySmall)
                 }
             }.map { it.measure(loose) }
             layout(constraints.maxWidth, h + 2 + line.sumOf { it.height }) {

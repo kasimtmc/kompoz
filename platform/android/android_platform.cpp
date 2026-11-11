@@ -415,13 +415,13 @@ public:
         return {};
     }
 
-    void metricsUpdated(ComposeHost& h) override {
+    void metricsUpdated(KompozHost& h) override {
         h.setDynamicTonalPalette(android_ime::dynamicPalette());
         h.setWallpaperTonalPalette(android_ime::wallpaperPalette());
         if (auto config = android_ime::viewConfiguration(scale_)) h.setViewConfiguration(*config);
     }
 
-    void attach(ComposeHost& h, ComposeHost::Callbacks& callbacks) override {
+    void attach(KompozHost& h, KompozHost::Callbacks& callbacks) override {
         host_ = &h;
         AndroidPlatform* self = this;
         callbacks.wake = [fd = wakeFd_] {
@@ -476,7 +476,7 @@ public:
         callbacks.autofillDone = [](bool commit) { android_ime::autofillDone(commit); };
     }
 
-    void started(ComposeHost& h) override {
+    void started(KompozHost& h) override {
         AndroidPlatform* self = this;
         // Created again after Android ended the process: rememberSaveable values come back.
         if (std::vector<uint8_t> state = android_ime::takeRestoredState(); !state.empty()) h.restoreState(state);
@@ -515,7 +515,7 @@ public:
         android_ime::attach();
     }
 
-    void handled(ComposeHost& h, const Event& e) override {
+    void handled(KompozHost& h, const Event& e) override {
         switch (e.type) {
         case EventType::WillEnterBackground:  // between frames: Android may end the app from now on
             android_ime::setSavedState(h.saveState());
@@ -529,7 +529,7 @@ public:
         }
     }
 
-    void composed(ComposeHost& h, bool redraw, int64_t frameTime) override {
+    void composed(KompozHost& h, bool redraw, int64_t frameTime) override {
         if (bool on = h.keepScreenOn(); on != screenKeptOn_) {  // keepScreenOn: the window's KEEP_SCREEN_ON while it is laid out
             screenKeptOn_ = on;
             JNIEnv* e = env();
@@ -598,7 +598,7 @@ private:
     EGLContext context_ = EGL_NO_CONTEXT;
     EGLConfig config_ = nullptr;
     EGLSurface windowSurface_ = EGL_NO_SURFACE, pbuffer_ = EGL_NO_SURFACE;  // (the pbuffer current while there is no window)
-    ComposeHost* host_ = nullptr;
+    KompozHost* host_ = nullptr;
     int64_t lastSemantics_ = 0;
     bool semanticsDirty_ = true, wantsBack_ = false, screenKeptOn_ = false, sensitiveContent_ = false;
     float frameRate_ = 0;

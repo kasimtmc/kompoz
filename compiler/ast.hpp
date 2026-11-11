@@ -1,6 +1,6 @@
 #pragma once
 
-// kompozc's syntax tree: what the parser reads from a @Composable function's Kotlin.
+// kompozc's syntax tree: what the parser reads from a @Kompozable function's Kotlin.
 
 #include "lexer.hpp"
 
@@ -12,14 +12,14 @@
 
 namespace kompozc {
 
-// A type as written: Int, String?, List<Item>, (String) -> Unit, @Composable () -> Unit,
+// A type as written: Int, String?, List<Item>, (String) -> Unit, @Kompozable () -> Unit,
 // RowScope.() -> Unit.
 struct Type {
     std::string name;                  // dotted for qualified names; empty for a function type
     std::vector<Type> args;            // generic arguments
     bool nullable = false;
     bool function = false;
-    bool composable = false;           // @Composable function type
+    bool composable = false;           // @Kompozable function type
     std::vector<Type> params;          // a function type's
     std::unique_ptr<Type> result;      // a function type's
     std::unique_ptr<Type> receiver;    // RowScope.() -> Unit
@@ -104,7 +104,7 @@ struct Param {
     Pos pos;
 };
 
-// A function: [@Composable] fun [Receiver.]name(params): result { body }.
+// A function: [@Kompozable] fun [Receiver.]name(params): result { body }.
 struct Function {
     std::string name;
     bool composable = true;
@@ -117,9 +117,9 @@ struct Function {
     bool overrides = false;          // override fun (a class's)
     bool isSuspend = false;          // suspend fun: a coroutine (Task, TaskOf<T>)
     bool isAbstract = false;         // an interface's fun without a body
-    std::vector<std::string> annotations;  // besides @Composable (Preview, ...)
+    std::vector<std::string> annotations;  // besides @Kompozable (Preview, ...)
     std::map<std::string, std::string> annotationArgs;  // @Preview(widthDp = 400): "widthDp" -> "400" (the text of each)
-    Pos pos;                         // the @ of @Composable (or where it starts)
+    Pos pos;                         // the @ of @Kompozable (or where it starts)
     Pos end;                         // just past the closing brace
 };
 

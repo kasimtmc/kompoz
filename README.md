@@ -40,11 +40,11 @@ kompoz::Application kompoz::createApplication(int, char**) {
 ## What's in it
 
 - **Runtime**: composable functions with smart recomposition (only what read a changed state runs again;
-  unchanged children are skipped), `remember`/`rememberSaveable`, effects, `CompositionLocal`, C++20
+  unchanged children are skipped), `remember`/`rememberSaveable`, effects, `KompozitionLocal`, C++20
   coroutines (`LaunchedEffect`, `delay`, `Flow`/`StateFlow`), `ViewModel`, navigation with type-safe routes and
   deep links, lifecycle.
 - **Layout**: incremental (a node is measured again only when something in it changed), `Box`/`Row`/`Column`,
-  `FlowRow`, `FlexBox`, `Grid`, custom `Layout` and `SubcomposeLayout`, intrinsics, window insets, right to left.
+  `FlowRow`, `FlexBox`, `Grid`, custom `Layout` and `SubkompozLayout`, intrinsics, window insets, right to left.
 - **Lists and scrolling**: `LazyColumn`/`LazyRow`/lazy grids/staggered grids, pagers, carousels, nested scroll,
   Android's fling curve and overscroll stretch, snapping, the mouse wheel and touchpads.
 - **Material 3** (Compose Material 3 1.4, including the Expressive components): Scaffold and app bars,
@@ -63,7 +63,7 @@ kompoz::Application kompoz::createApplication(int, char**) {
   system's palette (the wallpaper's on Android 12+, the desktop's accent color on Linux and Windows) or the wallpaper itself (Linux
   desktops, Windows, Android 8.1+); system font scale; the system language (the library's own texts in English or
   Turkish, `LocalStrings`, and right-to-left layouts); clipboard, haptics, URIs, the IME.
-- **Tools**: headless UI tests (`ComposeTestRule`), previews (`KOMPOZ_PREVIEW`), rebuild-and-restart on save
+- **Tools**: headless UI tests (`KompozTestRule`), previews (`KOMPOZ_PREVIEW`), rebuild-and-restart on save
   that keeps the app's state (`scripts/dev.sh`), scripted screenshots, frame profiling, packaging for every
   platform (`scripts/package.sh`).
 
@@ -73,14 +73,14 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 
 | Compose | Kompoz |
 |---|---|
-| `@Composable` + compiler plugin | Every composable takes a default `CallSite site = CallSite::current()` parameter (`std::source_location`). The call site plus the order within the parent is the identity |
-| Restartable / skippable composable | `composable(site, args..., [=]{ ... })`: runs again on its own when a state it read changes; skipped when its arguments are equal |
-| Inline composable (`Column`, `Row`) | `ComposableScope scope(site);`: gives an identity without a scope of its own (for composables that take a content lambda) |
+| `@Kompozable` + compiler plugin | Every composable takes a default `CallSite site = CallSite::current()` parameter (`std::source_location`). The call site plus the order within the parent is the identity |
+| Restartable / skippable composable | `kompozable(site, args..., [=]{ ... })`: runs again on its own when a state it read changes; skipped when its arguments are equal |
+| Inline composable (`Column`, `Row`) | `KompozableScope scope(site);`: gives an identity without a scope of its own (for composables that take a content lambda) |
 | `remember { }`, `remember(key) { }` | `remember([]{...})`, `remember(key, []{...})` |
 | `mutableStateOf` | `mutableStateOf(x)` → `MutableState<T>` (a copyable handle; capture it by value in callbacks) |
 | `key(id) { }` | `key(id, [&]{...})` |
 | `DisposableEffect`, `SideEffect` | The same names |
-| `CompositionLocal` | `CompositionLocal<T>`, `CompositionLocalProvider({Local.provides(v)}, ...)` |
+| `KompozitionLocal` | `KompozitionLocal<T>`, `KompozitionLocalProvider({Local.provides(v)}, ...)` |
 | `animate*AsState` | `animateFloatAsState`, `animateColorAsState` (only their own scope runs each frame) |
 | `LaunchedEffect`, `rememberCoroutineScope`, `delay` | C++20 coroutines: `LaunchedEffect(key, [=]() -> Task { co_await delay(1s); ... })` |
 | `Animatable`, `tween`, `spring`, `infiniteRepeatable` | `co_await anim.animateTo(1.f, tween(300))`, the same spec names |
@@ -110,9 +110,9 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | `Brush.verticalGradient(...)`, `Path` | `Brush::verticalGradient({a, b})`, `background(brush, shape)`, `d.drawPath(path, brush, Stroke(3))` |
 | `Modifier.graphicsLayer { rotationZ = ... }` | `graphicsLayer({.rotationZ = 45})`, or a lambda read while drawing: `graphicsLayer([=](GraphicsLayerScope& l) { ... })` |
 | `TriStateCheckbox(state = ToggleableState.Indeterminate, onClick)`, `Text(…, autoSize = TextAutoSize.StepBased(12.sp, 48.sp))` | `TriStateCheckbox(ToggleableState::Indeterminate, onClick)`, `Text("…", maxLines = 1, autoSize = TextAutoSize::StepBased(12, 48))` |
-| `SubcomposeLayout { constraints -> val m = subcompose("main") { … }.map { it.measure(constraints) }; layout(w, h) { … } }` | `SubcomposeLayout(Modifier(), [](SubcomposeMeasureScope& s, const Constraints& c) { auto m = s.subcompose(std::string("main"), [] { … }); …; return Size{w, h}; })` |
+| `SubkompozLayout { constraints -> val m = subkompoz("main") { … }.map { it.measure(constraints) }; layout(w, h) { … } }` | `SubkompozLayout(Modifier(), [](SubkompozMeasureScope& s, const Constraints& c) { auto m = s.subkompoz(std::string("main"), [] { … }); …; return Size{w, h}; })` |
 | `Modifier.clickable(interactionSource = s, indication = null) { … }` + `Modifier.indication(s, ripple())` | `Modifier().clickable([] { … }, {.interactionSource = s, .indication = false})` + `Modifier().indication(s, ripple())` |
-| `Modifier.clickable(indication = ripple(bounded = false, radius = 24.dp)) { … }`, `CompositionLocalProvider(LocalIndication provides …)` | `Modifier().clickable([] { … }, {.indication = ripple(false, 24)})`, `CompositionLocalProvider({LocalIndication.provides(false)}, …)` (every clickable has Material's ripple by default) |
+| `Modifier.clickable(indication = ripple(bounded = false, radius = 24.dp)) { … }`, `KompozitionLocalProvider(LocalIndication provides …)` | `Modifier().clickable([] { … }, {.indication = ripple(false, 24)})`, `KompozitionLocalProvider({LocalIndication.provides(false)}, …)` (every clickable has Material's ripple by default) |
 | `val source = remember { MutableInteractionSource() }`, `val pressed by source.collectIsPressedAsState()`, `Modifier.clickable(source, indication = null) { … }` | `auto source = remember([] { return MutableInteractionSource(); });`, `bool pressed = source.collectIsPressedAsState();`, `Modifier().clickable([] { … }, {.interactionSource = source, .indication = false})` (`Button(…, interactionSource = source) { … };`, `Slider(v, set, interactionSource = source)`, `source.interactions().collect(…)`, `pagerState.interactionSource().collectIsDraggedAsState()`) |
 | `val state = remember { AnchoredDraggableState(DragValue.Start) }`, `state.updateAnchors(DraggableAnchors { Start at 0f; End at w })`, `Modifier.offset { IntOffset(state.requireOffset().roundToInt(), 0) }.anchoredDraggable(state, Orientation.Horizontal)` | `auto state = rememberAnchoredDraggableState(DragValue::Start);`, `state.updateAnchors({{DragValue::Start, 0}, {DragValue::End, w}});`, `Modifier().offset([state] { return Offset{state.requireOffset(), 0}; }).anchoredDraggable(state, Orientation::Horizontal)` (`anchored_draggable.hpp`) |
 | `val measurer = rememberTextMeasurer()`, `drawText(measurer.measure("%42", style), topLeft = …)`, `Text(text, onTextLayout = { r -> cut = r.hasVisualOverflow })` | `auto measurer = rememberTextMeasurer();`, `d.drawText(measurer.measure("%42", {.fontSize = 12}), {x, y})`, `Text(text, Modifier(), {.maxLines = 2}, [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); })` (`text_measure.hpp`) |
@@ -127,7 +127,7 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | `Modifier.pointerHoverIcon(PointerIcon.Hand)` | `Modifier().pointerHoverIcon(PointerIcon::Hand)` (`Cursor::Move`, `ResizeHorizontal`…) |
 | `CenterAlignedTopAppBar(title = { … })`, `Card(onClick = { … }) { … }`, `Scaffold(floatingActionButtonPosition = FabPosition.Center)` | `CenterAlignedTopAppBar(title = [] { … })`, `Card([] { … }) { … };`, `Scaffold(floatingActionButton = …, floatingActionButtonPosition = FabPosition::Center) [=](PaddingValues padding) { … };` |
 | `LazyRow(state = s, flingBehavior = rememberSnapFlingBehavior(s)) { … }` | `LazyRow(Modifier(), state = s, flingBehavior = rememberSnapFlingBehavior(s)) { … };` |
-| `CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }`, `Modifier.absoluteOffset(x)` | `CompositionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { … })`, `Modifier().absoluteOffset(x, 0)` |
+| `KompozitionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }`, `Modifier.absoluteOffset(x)` | `KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { … })`, `Modifier().absoluteOffset(x, 0)` |
 | `IconToggleButton(checked, onCheckedChange = { checked = it }) { Icon(…) }`, `OutlinedIconButton(onClick) { … }` | `IconToggleButton(checked.get(), [checked](bool on) { checked.set(on); }) { Icon(…); };` (`FilledIconToggleButton`, `FilledTonalIconToggleButton`, `OutlinedIconToggleButton`), `OutlinedIconButton([] { … }) { … };` |
 | `OutlinedTextField(value, onValueChange, label = { Text("Amount") }, prefix = { Text("$") }, suffix = { Text("kg") })` | `OutlinedTextField(value, set, label = "Amount", prefix = "$", suffix = "kg")` |
 | `Modifier.zIndex(1f)`, `placeable.place(x, y, zIndex)` | `Modifier().zIndex(1)`, `p.place(x, y, 1)` |
@@ -170,8 +170,8 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | `Modifier.padding(..).background(..)` | `Modifier().padding(..).background(..)` (the order matters, as in Compose) |
 | Named arguments | Named arguments: `Text("Title", fontSize = 24, color = ...)` (options structs for the components not yet converted) |
 | `@Preview` | `KOMPOZ_PREVIEW(Name, .width = 360, .height = 200) { ... }`, shown with `KOMPOZ_PREVIEW=Name` (see [Development](#development)) |
-| `createComposeRule()`, `onNodeWithText(..).assertIsDisplayed()` | `kompoz::testing::ComposeTestRule` (UI tests without a window): `rule.onNodeWithText("OK").assertIsDisplayed().performClick()`; a failure throws `testing::AssertionError` |
-| `Modifier.recomposeHighlighter()` (snippets) | `Modifier().recomposeHighlighter()`: a border showing how many times the composable that made the node ran |
+| `createComposeRule()`, `onNodeWithText(..).assertIsDisplayed()` | `kompoz::testing::KompozTestRule` (UI tests without a window): `rule.onNodeWithText("OK").assertIsDisplayed().performClick()`; a failure throws `testing::AssertionError` |
+| `Modifier.rekompozHighlighter()` (snippets) | `Modifier().rekompozHighlighter()`: a border showing how many times the composable that made the node ran |
 
 Which Compose APIs came first was decided by how often the android/snippets repository uses them; see
 [docs/components.md](docs/components.md).
@@ -180,19 +180,19 @@ Which Compose APIs came first was decided by how often the android/snippets repo
 
 It works as in Compose:
 
-- Every function written with `composable(...)` is a **scope**. Each `MutableState` and `CompositionLocal` its
+- Every function written with `kompozable(...)` is a **scope**. Each `MutableState` and `KompozitionLocal` its
   body reads while it runs is recorded.
 - When a state changes, **only the scopes that read it** run again; their parents don't.
 - When a parent runs, children whose arguments are **equal** to last time and that read nothing that changed are
   **skipped**: their slots and nodes stay as they are.
-- When a `CompositionLocalProvider` starts giving a different value, the scopes below it that read it run again
+- When a `KompozitionLocalProvider` starts giving a different value, the scopes below it that read it run again
   (whatever was skipped in between).
 - Animations run only their own scope each frame; values read while drawing or laying out (a `graphicsLayer`
   lambda, `Modifier.offset { }`, `InfiniteTransition::animateFloat`) don't recompose at all.
 
 ```cpp
 void TodoRow(const Todo& todo, MutableState<std::vector<Todo>> todos, CallSite site = CallSite::current()) {
-    composable(site, todo, todos, [=] {   // skipped while the list is redrawn, if todo and todos are the same
+    kompozable(site, todo, todos, [=] {   // skipped while the list is redrawn, if todo and todos are the same
         ...
     });
 }
@@ -223,7 +223,7 @@ changed while it was measured, is measured again.
  app code (composable functions)
         │
  ┌──────▼─────────────────────────────── kompoz_core (platform independent, no dependencies)
- │ runtime     slot table (a tree of groups), scopes and read tracking, remember, state, effects, CompositionLocal
+ │ runtime     slot table (a tree of groups), scopes and read tracking, remember, state, effects, KompozitionLocal
  │ state       derivedStateOf, mutableStateListOf, rememberUpdatedState
  │ coroutines  Task, Dispatcher (delay/awaitFrame on the frame clock), LaunchedEffect, CoroutineScope
  │ flow        Flow, StateFlow/SharedFlow (written from any thread), collect, collectAsState
@@ -233,7 +233,7 @@ changed while it was measured, is measured again.
  │ draw        DrawScope, Canvas, drawBehind/drawWithContent/drawWithCache, graphicsLayer
  │ text        AnnotatedString, multi-style line breaking, bidi (right-to-left text)
  │ gestures    pointerInput (a coroutine per node), detectTap/Drag/TransformGestures
- │ host        ComposeHost: composition + layout + popup layer + hit testing, focus, scrolling, flings (dp)
+ │ host        KompozHost: composition + layout + popup layer + hit testing, focus, scrolling, flings (dp)
  │ nested_scroll NestedScrollConnection/Dispatcher: scrolls and flings chained to the parents
  │ lazy, pager LazyColumn/LazyRow/grids (only what is in view, plus a margin), pagers, carousels
  │ animation   specs, Animatable, animate*AsState, transitions, animateContentSize;
@@ -252,7 +252,7 @@ changed while it was measured, is measured again.
 ```
 
 A new platform backend implements `GraphicsContext` and `TextMeasurer` (two functions, plus two optional calls for
-gradients and paths), gives input events to `ComposeHost`, and calls `frame()` and `draw()`; redrawing only what
+gradients and paths), gives input events to `KompozHost`, and calls `frame()` and `draw()`; redrawing only what
 changed through a `DisplayList` is optional. Kompoz's own platforms (`platform/`) are only the window system's side:
 the app core and the GPU renderer are the same on all of them.
 
@@ -383,7 +383,7 @@ inside it, `.background` a background; the text scale is the window's (`KOMPOZ_F
 
 ### Tests
 
-`kompoz::testing::ComposeTestRule` composes, lays out and draws without a window, with a virtual clock and a text
+`kompoz::testing::KompozTestRule` composes, lays out and draws without a window, with a virtual clock and a text
 measurer of fixed sizes; find nodes by text, tag or semantics, click, type, swipe, and check bounds, semantics and
 what was drawn. `./build/kompoz_tests` runs them all (`./build/kompoz_tests lazy` only those whose name contains
 "lazy"). Every incremental layout is checked against a full one while the tests run.

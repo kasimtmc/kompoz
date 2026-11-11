@@ -1,7 +1,7 @@
 #pragma once
 
 // Screen readers (Orca) and other assistive technologies on Linux read the app through AT-SPI: its
-// semantics tree (ComposeHost::semanticsTree), served on the accessibility bus over D-Bus (libdbus,
+// semantics tree (KompozHost::semanticsTree), served on the accessibility bus over D-Bus (libdbus,
 // loaded at run time) on a thread of its own, the app registered with the AT-SPI registry. It
 // starts when the desktop's accessibility is on (org.a11y.Status IsEnabled or ScreenReaderEnabled,
 // also once it is turned on later); KOMPOZ_ATSPI=1 starts it anyway, KOMPOZ_ATSPI=0 never. What an assistive technology asks the

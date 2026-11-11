@@ -11,7 +11,7 @@ When Kompoz first runs your UI, it records every composable that was called in a
 3. **It leaves the composition** when it is no longer called: an `if` became false, a list item went away, the screen was navigated away from. Its remembered values are forgotten, its `DisposableEffect` clean-ups run, its coroutines are cancelled.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Details(show: Boolean) {
     if (show) {
         // Enters when show becomes true, leaves when it becomes false.
@@ -36,7 +36,7 @@ struct Connection : RememberObserver {
     void onForgotten() override { disconnect(); }
 };
 
-@Composable
+@Kompozable
 fun Chat() {
     remember { Connection() }  // connected while Chat is in the composition
     Text("Chat")
@@ -49,7 +49,7 @@ A composable that leaves and comes back starts fresh: `remember` runs its lambda
 
 To know which remembered values belong to which call, Kompoz needs to identify each call across recompositions. Compose's compiler plugin gives each call a key from where it is in the source; kompozc does the same through C++'s `std::source_location`:
 
-- Every `@Composable fun` becomes a C++ function with a last parameter `CallSite site = CallSite::current()`. The default is evaluated where the composable is *called*, so `site` is the file, line and column of the call; kompozc's `#line` keeps them your source's.
+- Every `@Kompozable fun` becomes a C++ function with a last parameter `CallSite site = CallSite::current()`. The default is evaluated where the composable is *called*, so `site` is the file, line and column of the call; kompozc's `#line` keeps them your source's.
 - Inside a parent, calls from the same site are told apart by their order: the first call from a site, the second call from it, and so on.
 - `remember` takes a `CallSite` the same way, so two `remember` calls in different places are different values.
 
@@ -57,16 +57,16 @@ You never pass `site` yourself. Calling a composable from C++, the default does 
 
 ## Scopes
 
-A Unit `@Composable fun` is a *restartable* and *skippable* scope, as in Compose:
+A Unit `@Kompozable fun` is a *restartable* and *skippable* scope, as in Compose:
 
 - **Restartable**: when a state the function read changes, only it runs again, not its parent.
 - **Skippable**: when its parent runs and its arguments compare equal to last time, it doesn't run.
 
-A composable lambda is a scope of its own too: the content of `Box`, `Column`, `Row`, a `Scaffold`'s slots, your own `content: @Composable () -> Unit`. When only what the lambda read changes, the lambda alone runs again. Because it can run on its own later, it captures what it uses by value, as Kotlin's lambdas do.
+A composable lambda is a scope of its own too: the content of `Box`, `Column`, `Row`, a `Scaffold`'s slots, your own `content: @Kompozable () -> Unit`. When only what the lambda read changes, the lambda alone runs again. Because it can run on its own later, it captures what it uses by value, as Kotlin's lambdas do.
 
 ```kotlin
-@Composable
-fun Section(title: String, content: @Composable () -> Unit) {
+@Kompozable
+fun Section(title: String, content: @Kompozable () -> Unit) {
     Column(modifier = Modifier.padding(16.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         content()
@@ -74,7 +74,7 @@ fun Section(title: String, content: @Composable () -> Unit) {
 }
 ```
 
-A `@Composable fun` that returns a value (`rememberSomething(): T`) is not a scope, as in Compose: what it reads belongs to its caller.
+A `@Kompozable fun` that returns a value (`rememberSomething(): T`) is not a scope, as in Compose: what it reads belongs to its caller.
 
 ## Skipping
 
@@ -88,7 +88,7 @@ A scope is skipped when its parent runs, its arguments compare equal to the prev
 ```kotlin
 data class Todo(val id: Int, val title: String, val done: Boolean = false)
 
-@Composable
+@Kompozable
 fun TodoRow(todo: Todo, todos: MutableState<List<Todo>>) {  // skipped while todo and todos are the same
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = todo.done, onCheckedChange = { done ->
@@ -118,12 +118,12 @@ for (todo in todos.value) {
 ```kotlin
 data class Todo(val id: Int, val title: String, val done: Boolean = false)
 
-@Composable
+@Kompozable
 fun TodoRow(todo: Todo, todos: MutableState<List<Todo>>) {
     Text(todo.title)
 }
 
-@Composable
+@Kompozable
 fun TodoList(todos: MutableState<List<Todo>>) {
     Column {
         for (todo in todos.value) {
@@ -140,7 +140,7 @@ Now each row's remembered values, effects and nodes follow its `id`. Lazy lists 
 Calling the same composable from a different place in the tree is a different call: its state starts over. `movableContentOf` makes content whose state moves with it, as in Compose:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Player(wide: Boolean) {
     val video = remember {
         movableContentOf {
@@ -164,4 +164,4 @@ When `wide` changes, the content's remembered values, nodes and running effects 
 - [State](state.md): `remember`, `rememberSaveable` and state holders.
 - [Side effects](side-effects.md): effects that start when a composable enters and stop when it leaves.
 - [Phases](phases.md): what happens after composition.
-- [Writing in C++](cpp.md): `composable(site, …)` and `ComposableScope`, the scopes kompozc writes, in C++ itself.
+- [Writing in C++](cpp.md): `kompozable(site, …)` and `KompozableScope`, the scopes kompozc writes, in C++ itself.

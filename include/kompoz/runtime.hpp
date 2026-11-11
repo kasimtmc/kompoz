@@ -3,12 +3,12 @@
 // The composition runtime: slot table, state, remember, effects, composition locals and
 // smart recomposition.
 //
-// Compose relies on a Kotlin compiler plugin to give every @Composable call a stable
+// Compose relies on a Kotlin compiler plugin to give every @Kompozable call a stable
 // identity. Kompoz gets the same "positional memoization" at runtime: each composable
 // takes a defaulted `CallSite site = CallSite::current()` parameter, so the call site
 // (file, line, column) plus a per-parent occurrence counter identifies the call.
 //
-// Smart recomposition works like Compose's: a composable written with composable(...) is a
+// Smart recomposition works like Compose's: a composable written with kompozable(...) is a
 // *scope*. While its body runs, every state and composition local it reads is recorded.
 // When one of them changes, only the scopes that read it run again, and a scope whose
 // arguments compare equal to last time is skipped when its parent runs.
@@ -41,7 +41,7 @@ using Content = std::function<void()>;
 using CallSite = std::source_location;
 
 class LayoutNode;
-class ComposeHost;
+class KompozHost;
 
 // What remember() keeps, told when it enters the composition and when it leaves it, as Compose's
 // RememberObserver: a remembered value whose type derives from it. Both are called after the
@@ -135,7 +135,7 @@ struct Args final : ArgsBase {
     }
 };
 
-// A value given to a CompositionLocal by CompositionLocalProvider.
+// A value given to a KompozitionLocal by KompozitionLocalProvider.
 struct Group;
 // A value read where it is used (an animation's, a state-provided local's: while laying out or
 // drawing), or one as it is (`read` empty: `value`). Readings are the same when they read the
@@ -163,7 +163,7 @@ struct Provided {
     const void* (*read)(const void* value) = nullptr;
 };
 
-class Composer;
+class Kompozer;
 struct Group;
 
 // A restartable composable: its body (with the arguments captured by value), what the
@@ -171,12 +171,12 @@ struct Group;
 // reads for something else (a derived state): when one of them changes it calls
 // `onInvalidated` instead of recomposing.
 struct Scope {
-    Scope(Composer& c, Group* g) : composer(c), group(g) {}
+    Scope(Kompozer& c, Group* g) : kompozer(c), group(g) {}
     ~Scope();
     Scope(const Scope&) = delete;
     Scope& operator=(const Scope&) = delete;
 
-    Composer& composer;
+    Kompozer& kompozer;
     Group* group;
     std::function<void()> onInvalidated;
     std::function<void()> body;
@@ -216,7 +216,7 @@ struct Group {
     const std::type_info* slotType = nullptr;
     std::unique_ptr<LayoutNode> node;                     // node emitted by a layout composable
     std::unique_ptr<Scope> scope;                         // set for restartable composables
-    std::vector<Provided> provided;                       // set for CompositionLocalProvider
+    std::vector<Provided> provided;                       // set for KompozitionLocalProvider
     std::function<void()> onForget;                       // cleanup registered by DisposableEffect
     uint64_t seq = 0;                                      // when it was last called, among the calls of its parent
     std::shared_ptr<MovableData> movable;                  // set for a movable content's group
@@ -224,18 +224,18 @@ struct Group {
     bool visited = false;
 };
 
-struct RecompositionStats {
+struct RekompozitionStats {
     uint64_t recompositions = 0;  // frames that recomposed anything
     uint64_t scopesRun = 0;
     uint64_t scopesSkipped = 0;
 };
 
-class Composer {
+class Kompozer {
 public:
-    explicit Composer(ComposeHost& host) : host_(host) {}
+    explicit Kompozer(KompozHost& host) : host_(host) {}
 
-    static Composer* current();
-    static Composer& require();
+    static Kompozer* current();
+    static Kompozer& require();
 
     // `root` must have a node; `content` becomes the root scope's body.
     void setRoot(Group& root, std::function<void()> content);
@@ -246,7 +246,7 @@ public:
     void invalidateReaders(const void* key);
     bool recording() const { return currentScope_ != nullptr; }  // reads now are a scope's
     Scope* currentScope() const { return currentScope_; }       // the scope whose body is running
-    // Runs `scope` now, on its own, outside the frame's composition (a SubcomposeLayout's slot
+    // Runs `scope` now, on its own, outside the frame's composition (a SubkompozLayout's slot
     // asked for while it measures, composed for that measure, as Compose's subcompose does): in a
     // snapshot of its own, applied; then what left forgotten, effects and side effects, as recompose
     // does. False if a composition is running already.
@@ -254,7 +254,7 @@ public:
     void invalidateScope(Scope& scope);
     void invalidateFrameScopes(int64_t frameTimeNanos);  // scopes that asked for this frame (the next, or one by now)
     bool hasFrameScopes() const { return !frameScopes_.empty() || !timedScopes_.empty(); }
-    const RecompositionStats& stats() const { return stats_; }
+    const RekompozitionStats& stats() const { return stats_; }
 
     // ---- Used by composables ----
     void startGroup(uint64_t key);
@@ -268,7 +268,7 @@ public:
     LayoutNode& emit(uint64_t key, const std::function<void(LayoutNode&)>& update, const Content& content);
     // Composes a movable content here: its group (state, nodes, effects) comes along from where
     // it was composed last, unless that place called it already in this composition.
-    void composeMovable(const std::shared_ptr<MovableData>& data);
+    void kompozMovable(const std::shared_ptr<MovableData>& data);
 
     template <class... Ts, class Body>
     void restartable(uint64_t key, std::tuple<Ts...> args, Body&& body);
@@ -309,7 +309,7 @@ public:
     // The running scope composed again at the frame at `frameTimeNanos` (or the first after),
     // not on those before: an animation read elsewhere telling its scope when it is done.
     void requestFrameAt(int64_t frameTimeNanos);
-    ComposeHost& host() { return host_; }
+    KompozHost& host() { return host_; }
 
     void forget(Scope& scope);  // a scope left the composition
 
@@ -325,7 +325,7 @@ private:
     void clearReads(Scope& scope);
     std::vector<Provided> localsAbove(const Group& g) const;
 
-    ComposeHost& host_;
+    KompozHost& host_;
     Group* root_ = nullptr;
     std::vector<Group*> groups_;
     std::vector<Provided> locals_;
@@ -345,11 +345,11 @@ private:
     std::vector<std::unique_ptr<Group>> parked_;
     uint64_t pass_ = 0;  // which composition this is
     int64_t frameTime_ = 0;
-    RecompositionStats stats_;
+    RekompozitionStats stats_;
 };
 
 template <class... Ts, class Body>
-void Composer::restartable(uint64_t key, std::tuple<Ts...> args, Body&& body) {
+void Kompozer::restartable(uint64_t key, std::tuple<Ts...> args, Body&& body) {
     Group& g = beginGroup(key);
     auto next = std::make_unique<Args<Ts...>>(std::move(args));
     Scope* s = g.scope.get();
@@ -378,10 +378,10 @@ void requestDraw();
 
 } // namespace detail
 
-// A restartable, skippable composable: what a plain @Composable function is in Kotlin.
+// A restartable, skippable composable: what a plain @Kompozable function is in Kotlin.
 //
 //   void Greeting(std::string name, CallSite site = CallSite::current()) {
-//       composable(site, name, [=] {
+//       kompozable(site, name, [=] {
 //           Text("Merhaba " + name);
 //       });
 //   }
@@ -392,25 +392,25 @@ void requestDraw();
 // not run and its UI stays as it is. Arguments that can't be compared (std::function, ...)
 // make the composable restartable but never skipped.
 template <class... T>
-void composable(const CallSite& site, T&&... argsAndBody) {
-    static_assert(sizeof...(T) >= 1, "composable() needs a body");
+void kompozable(const CallSite& site, T&&... argsAndBody) {
+    static_assert(sizeof...(T) >= 1, "kompozable() needs a body");
     constexpr size_t n = sizeof...(T) - 1;
     auto all = std::forward_as_tuple(std::forward<T>(argsAndBody)...);
     auto args = [&]<size_t... I>(std::index_sequence<I...>) {
         return std::tuple<std::decay_t<std::tuple_element_t<I, decltype(all)>>...>(std::get<I>(all)...);
     }(std::make_index_sequence<n>{});
-    detail::Composer::require().restartable(detail::keyOf(site), std::move(args), std::get<n>(all));
+    detail::Kompozer::require().restartable(detail::keyOf(site), std::move(args), std::get<n>(all));
 }
 
 // Gives a composable its own identity without making it a scope. Use it for composables
 // that take content lambdas (which capture by reference and can't be re-run on their own),
 // the way Column and Row are inline functions in Compose.
-class ComposableScope {
+class KompozableScope {
 public:
-    explicit ComposableScope(const CallSite& site) { detail::Composer::require().startGroup(detail::keyOf(site)); }
-    ~ComposableScope() { detail::Composer::require().endGroup(); }
-    ComposableScope(const ComposableScope&) = delete;
-    ComposableScope& operator=(const ComposableScope&) = delete;
+    explicit KompozableScope(const CallSite& site) { detail::Kompozer::require().startGroup(detail::keyOf(site)); }
+    ~KompozableScope() { detail::Kompozer::require().endGroup(); }
+    KompozableScope(const KompozableScope&) = delete;
+    KompozableScope& operator=(const KompozableScope&) = delete;
 };
 
 // When a new value counts as the one a state has (Compose's SnapshotMutationPolicy): setting a
@@ -574,7 +574,7 @@ inline MutableState<double> mutableDoubleStateOf(double initial) { return mutabl
 template <class F>
 auto remember(F&& init, CallSite site = CallSite::current()) -> std::decay_t<std::invoke_result_t<F&>>& {
     using T = std::decay_t<std::invoke_result_t<F&>>;
-    auto& c = detail::Composer::require();
+    auto& c = detail::Kompozer::require();
     c.startGroup(detail::keyOf(site));
     T& value = c.rememberSlot<T>(init);
     c.endGroup();
@@ -587,12 +587,12 @@ auto remember(const K& key, F&& init, CallSite site = CallSite::current())
     -> std::decay_t<std::invoke_result_t<F&>>& {
     using T = std::decay_t<std::invoke_result_t<F&>>;
     using Keyed = detail::Keyed<K, T>;
-    auto& c = detail::Composer::require();
+    auto& c = detail::Kompozer::require();
     c.startGroup(detail::keyOf(site));
     auto make = [&] { return Keyed{key, init()}; };
     Keyed* slot = &c.rememberSlot<Keyed>(make);
     if (!(slot->key == key)) {
-        detail::Composer::forgetSlot(c.group());
+        detail::Kompozer::forgetSlot(c.group());
         slot = &c.rememberSlot<Keyed>(make);
     }
     c.endGroup();
@@ -617,7 +617,7 @@ auto remember(const K1& key1, const K2& key2, const K3& key3, F&& init, CallSite
 // Gives `content` an explicit identity, e.g. for list items that can move or be removed.
 template <class K>
 void key(const K& id, const Content& content, CallSite site = CallSite::current()) {
-    auto& c = detail::Composer::require();
+    auto& c = detail::Kompozer::require();
     c.startGroup(detail::mixKey(detail::keyOf(site), std::hash<K>{}(id)));
     content();
     c.endGroup();
@@ -632,7 +632,7 @@ void key(const K& id, const Content& content, CallSite site = CallSite::current(
 class MovableContent {
 public:
     explicit MovableContent(Content content) : data_(std::make_shared<detail::MovableData>()) { data_->content = std::move(content); }
-    void operator()() const { detail::Composer::require().composeMovable(data_); }
+    void operator()() const { detail::Kompozer::require().kompozMovable(data_); }
     friend bool operator==(const MovableContent& a, const MovableContent& b) { return a.data_ == b.data_; }
 
 private:
@@ -658,7 +658,7 @@ public:
     }
     void operator()(P... args) const {
         *args_ = std::tuple<P...>(std::move(args)...);  // the latest ones: what it composes with here
-        detail::Composer::require().composeMovable(data_);
+        detail::Kompozer::require().kompozMovable(data_);
     }
     friend bool operator==(const MovableContentOf& a, const MovableContentOf& b) { return a.data_ == b.data_; }
 
@@ -692,7 +692,7 @@ MovableContentWithReceiverOf<R, P...> movableContentWithReceiverOf(std::type_ide
 // Runs after every successful composition of the enclosing scope (after what entered the
 // composition was told so).
 inline void SideEffect(std::function<void()> effect) {
-    detail::Composer::require().sideEffect(std::move(effect));
+    detail::Kompozer::require().sideEffect(std::move(effect));
 }
 
 // Runs `effect` after composition when it enters the composition or when `key` changes.
@@ -704,7 +704,7 @@ void DisposableEffect(const K& key, std::function<std::function<void()>()> effec
         K key;
         bool pending = true;
     };
-    auto& c = detail::Composer::require();
+    auto& c = detail::Kompozer::require();
     c.startGroup(detail::keyOf(site));
     detail::Group* g = &c.group();
     auto init = [&] { return State{key}; };
@@ -734,24 +734,24 @@ void DisposableEffect(const K1& key1, const K2& key2, const K3& key3, std::funct
 
 // A value handed down the composition (Compose's CompositionLocal): what the nearest provider
 // above gives, else its default. Known by its address: define it once, as a global.
-//   inline const CompositionLocal<Color> LocalAccent{colors::Blue};
-//   CompositionLocalProvider({LocalAccent.provides(cs.tertiary)}, [&] { Box(Modifier().background(LocalAccent.current())); });
+//   inline const KompozitionLocal<Color> LocalAccent{colors::Blue};
+//   KompozitionLocalProvider({LocalAccent.provides(cs.tertiary)}, [&] { Box(Modifier().background(LocalAccent.current())); });
 template <class T>
-class CompositionLocal {
+class KompozitionLocal {
 public:
-    explicit CompositionLocal(T defaultValue) : default_(std::move(defaultValue)) {}
+    explicit KompozitionLocal(T defaultValue) : default_(std::move(defaultValue)) {}
     // Its default made when first needed (Compose's compositionLocalOf { … }): it may throw for
     // a local that must be provided.
     template <class F>
         requires std::invocable<F&> && std::convertible_to<std::invoke_result_t<F&>, T>
-    explicit CompositionLocal(F defaultFactory) : factory_(std::move(defaultFactory)) {}
-    CompositionLocal(const CompositionLocal&) = delete;  // its address is who it is
-    CompositionLocal& operator=(const CompositionLocal&) = delete;
+    explicit KompozitionLocal(F defaultFactory) : factory_(std::move(defaultFactory)) {}
+    KompozitionLocal(const KompozitionLocal&) = delete;  // its address is who it is
+    KompozitionLocal& operator=(const KompozitionLocal&) = delete;
 
     // Reading a local subscribes the running scope: it recomposes when a provider above it
     // starts providing a different value.
     const T& current() const {
-        if (auto* c = detail::Composer::current())
+        if (auto* c = detail::Kompozer::current())
             if (auto* v = c->readLocal(this)) return *static_cast<const T*>(v);
         if (!default_) default_.emplace(factory_());
         return *default_;
@@ -761,7 +761,7 @@ public:
     // from a state is read then (and follows it), not here; a plain one is the value. As
     // current(), this reader is composed again when the provider gives another.
     detail::Live<T> currentLive() const {
-        if (auto* c = detail::Composer::current())
+        if (auto* c = detail::Kompozer::current())
             if (const detail::Provided* p = c->readProvided(this)) {
                 if (!p->read) return {{}, nullptr, *static_cast<const T*>(p->value.get())};
                 return {[value = p->value, read = p->read] { return *static_cast<const T*>(read(value.get())); }, p->value.get()};
@@ -780,7 +780,7 @@ public:
     // A state's value (an animation's: animateColorAsState): read where the local is read, so as
     // it changes only the readers follow it, not the provider (which doesn't read it).
     //   auto color = animateColorAsState(selected ? cs.primary : cs.onSurface);
-    //   CompositionLocalProvider({LocalContentColor.provides(color)}, content);
+    //   KompozitionLocalProvider({LocalContentColor.provides(color)}, content);
     template <class S>
         requires(!std::same_as<std::remove_cvref_t<S>, T>) && requires(const S& s) {
             { s.value() } -> std::convertible_to<T>;
@@ -813,63 +813,63 @@ private:
     std::function<T()> factory_;
 };
 
-// Compose's compositionLocalOf { default } and staticCompositionLocalOf { default }: a local
+// Compose's compositionLocalOf { default } and staticKompozitionLocalOf { default }: a local
 // whose default is made when first read without a provider (here both recompose only the
 // scopes that read it when a provider gives another value).
-//   inline const auto LocalUser = compositionLocalOf<User>([]() -> User { throw std::logic_error("LocalUser verilmedi"); });
+//   inline const auto LocalUser = kompozitionLocalOf<User>([]() -> User { throw std::logic_error("LocalUser verilmedi"); });
 template <class T>
-CompositionLocal<T> compositionLocalOf(std::function<T()> defaultFactory) {
-    return CompositionLocal<T>(std::move(defaultFactory));
+KompozitionLocal<T> kompozitionLocalOf(std::function<T()> defaultFactory) {
+    return KompozitionLocal<T>(std::move(defaultFactory));
 }
 template <class F>
     requires std::invocable<F&>
-CompositionLocal<std::decay_t<std::invoke_result_t<F&>>> compositionLocalOf(F defaultFactory) {
-    return CompositionLocal<std::decay_t<std::invoke_result_t<F&>>>(std::function<std::decay_t<std::invoke_result_t<F&>>()>(std::move(defaultFactory)));
+KompozitionLocal<std::decay_t<std::invoke_result_t<F&>>> kompozitionLocalOf(F defaultFactory) {
+    return KompozitionLocal<std::decay_t<std::invoke_result_t<F&>>>(std::function<std::decay_t<std::invoke_result_t<F&>>()>(std::move(defaultFactory)));
 }
 template <class T>
-CompositionLocal<T> staticCompositionLocalOf(std::function<T()> defaultFactory) {
-    return CompositionLocal<T>(std::move(defaultFactory));
+KompozitionLocal<T> staticKompozitionLocalOf(std::function<T()> defaultFactory) {
+    return KompozitionLocal<T>(std::move(defaultFactory));
 }
 template <class F>
     requires std::invocable<F&>
-CompositionLocal<std::decay_t<std::invoke_result_t<F&>>> staticCompositionLocalOf(F defaultFactory) {
-    return compositionLocalOf(std::move(defaultFactory));
+KompozitionLocal<std::decay_t<std::invoke_result_t<F&>>> staticKompozitionLocalOf(F defaultFactory) {
+    return kompozitionLocalOf(std::move(defaultFactory));
 }
 
-inline void CompositionLocalProvider(std::initializer_list<detail::Provided> values, const Content& content,
+inline void KompozitionLocalProvider(std::initializer_list<detail::Provided> values, const Content& content,
                                      CallSite site = CallSite::current()) {
-    detail::Composer::require().provide(detail::keyOf(site), std::vector<detail::Provided>(values), content);
+    detail::Kompozer::require().provide(detail::keyOf(site), std::vector<detail::Provided>(values), content);
 }
 
 // Compose's CompositionLocalProvider(LocalX provides x, LocalY provides y) { … }: one to three of them.
-inline void CompositionLocalProvider(const detail::Provided& a, const Content& content, CallSite site = CallSite::current()) {
-    CompositionLocalProvider({a}, content, site);
+inline void KompozitionLocalProvider(const detail::Provided& a, const Content& content, CallSite site = CallSite::current()) {
+    KompozitionLocalProvider({a}, content, site);
 }
-inline void CompositionLocalProvider(const detail::Provided& a, const detail::Provided& b, const Content& content,
+inline void KompozitionLocalProvider(const detail::Provided& a, const detail::Provided& b, const Content& content,
                                      CallSite site = CallSite::current()) {
-    CompositionLocalProvider({a, b}, content, site);
+    KompozitionLocalProvider({a, b}, content, site);
 }
-inline void CompositionLocalProvider(const detail::Provided& a, const detail::Provided& b, const detail::Provided& c,
+inline void KompozitionLocalProvider(const detail::Provided& a, const detail::Provided& b, const detail::Provided& c,
                                      const Content& content, CallSite site = CallSite::current()) {
-    CompositionLocalProvider({a, b, c}, content, site);
+    KompozitionLocalProvider({a, b, c}, content, site);
 }
 
 // Every local provided where it is read (Compose's CompositionLocalContext), to provide them all
 // again somewhere else — content composed elsewhere (another window, a host of its own) that
 // should see the same theme and values:
-//   CompositionLocalContext here = currentCompositionLocalContext();
-//   ... CompositionLocalProvider(here, [&] { Text("Aynı tema"); });
-struct CompositionLocalContext {
+//   KompozitionLocalContext here = currentKompozitionLocalContext();
+//   ... KompozitionLocalProvider(here, [&] { Text("Aynı tema"); });
+struct KompozitionLocalContext {
     std::vector<detail::Provided> values;
 };
 // Reading it subscribes to them all.
-inline CompositionLocalContext currentCompositionLocalContext() {
-    auto& c = detail::Composer::require();
+inline KompozitionLocalContext currentKompozitionLocalContext() {
+    auto& c = detail::Kompozer::require();
     for (const detail::Provided& p : c.locals()) (void)c.readLocal(p.key);
     return {c.locals()};
 }
-inline void CompositionLocalProvider(const CompositionLocalContext& context, const Content& content, CallSite site = CallSite::current()) {
-    detail::Composer::require().provide(detail::keyOf(site), context.values, content);
+inline void KompozitionLocalProvider(const KompozitionLocalContext& context, const Content& content, CallSite site = CallSite::current()) {
+    detail::Kompozer::require().provide(detail::keyOf(site), context.values, content);
 }
 
 // ---- Saveable state ----------------------------------------------------------------------
@@ -877,7 +877,7 @@ inline void CompositionLocalProvider(const CompositionLocalContext& context, con
 // rememberSaveable keeps its value while the composable is away from the composition, inside a
 // SaveableStateHolder's provider: a navigation entry on the back stack, a tab that isn't shown.
 // Values of saveable types (see saved_value.hpp) are also written out with the host's state
-// (ComposeHost::saveState), which Android keeps while it ends the app in the background, and
+// (KompozHost::saveState), which Android keeps while it ends the app in the background, and
 // come back with it. Outside any provider a value goes when its composable leaves.
 
 namespace detail {
@@ -902,7 +902,7 @@ struct SaveableRegistry {
 void noteLeaving(const std::shared_ptr<SaveableRegistry>& registry, uint64_t key);
 // After a composition: the values that left with their composables, not their providers, gone.
 void settleSaveables();
-extern const CompositionLocal<std::shared_ptr<SaveableRegistry>> LocalSaveableRegistry;
+extern const KompozitionLocal<std::shared_ptr<SaveableRegistry>> LocalSaveableRegistry;
 // The current group's position below `boundary`: the keys of the groups in between.
 uint64_t keyBelow(const Group* boundary);
 
@@ -932,10 +932,10 @@ namespace detail {
 template <class T, class F, class Save, class Restore>
 T& rememberSaveableWith(F& init, const Save& save, const Restore& restore, CallSite site, bool reset = false) {
     constexpr bool saveable = !std::is_same_v<Save, std::nullptr_t>;
-    auto& c = detail::Composer::require();
+    auto& c = detail::Kompozer::require();
     std::shared_ptr<detail::SaveableRegistry> registry = detail::LocalSaveableRegistry.current();
     c.startGroup(detail::keyOf(site));
-    if (reset) Composer::forgetSlot(c.group());  // (its registry entry dropped, or noted as leaving: made anew below)
+    if (reset) Kompozer::forgetSlot(c.group());  // (its registry entry dropped, or noted as leaving: made anew below)
     auto make = [&]() -> detail::SaveableSlot<T> {
         if (!registry) return {std::make_shared<T>(init()), {}, 0};
         uint64_t key = detail::keyBelow(registry->boundary);
@@ -970,7 +970,7 @@ T& rememberSaveableWith(F& init, const Save& save, const Restore& restore, CallS
 // Whether `inputs` differ from those of the last call here (not on the first).
 template <class K>
 bool inputsChanged(const K& inputs, CallSite site = CallSite::current()) {
-    auto& c = Composer::require();
+    auto& c = Kompozer::require();
     c.startGroup(keyOf(site));
     auto make = [&] { return inputs; };
     K& last = c.rememberSlot<K>(make);
@@ -1020,7 +1020,7 @@ template <class K, class F>
     requires std::invocable<F&>
 auto rememberSaveable(const K& inputs, F&& init, CallSite site = CallSite::current()) -> std::decay_t<std::invoke_result_t<F&>>& {
     using T = std::decay_t<std::invoke_result_t<F&>>;
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     bool changed = detail::inputsChanged(inputs);
     if constexpr (HasSaver<T>)
         return detail::rememberSaveableWith<T>(init, &Saver<T>::save, &Saver<T>::restore, CallSite::current(), changed);
@@ -1030,7 +1030,7 @@ auto rememberSaveable(const K& inputs, F&& init, CallSite site = CallSite::curre
 template <class K, class S, class F>
 auto rememberSaveable(const K& inputs, const CustomSaver<S>& saver, F&& init, CallSite site = CallSite::current())
     -> std::decay_t<std::invoke_result_t<F&>>& {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     bool changed = detail::inputsChanged(inputs);
     return detail::rememberSaveableBy<std::decay_t<std::invoke_result_t<F&>>>(saver, init, CallSite::current(), changed);
 }

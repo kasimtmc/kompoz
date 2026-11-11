@@ -274,7 +274,7 @@ public:
         return info;
     }
 
-    void attach(ComposeHost&, ComposeHost::Callbacks& callbacks) override {
+    void attach(KompozHost&, KompozHost::Callbacks& callbacks) override {
         WebPlatform* self = this;
         callbacks.wake = [self] { self->wake(); };
         callbacks.textInput = [self](bool active, Rect area, const TextEditState&, const ImeOptions& options) {
@@ -309,14 +309,14 @@ public:
         };
     }
 
-    void started(ComposeHost& h) override {
+    void started(KompozHost& h) override {
         if (char* hash = web_take_hash()) {  // the address's #fragment: a deep link
             h.openDeepLink(hash);
             std::free(hash);
         }
     }
 
-    void composed(ComposeHost& h, bool, int64_t) override {
+    void composed(KompozHost& h, bool, int64_t) override {
         if (bool on = h.keepScreenOn(); on != keptOn_) {  // keepScreenOn: a screen wake lock while it is laid out
             keptOn_ = on;
             web_keep_on(on);

@@ -11,7 +11,7 @@ Kompoz arayüzünüzü ilk kez çalıştırdığında, çağrılan her composabl
 3. Artık çağrılmadığında **kompozisyondan çıkar**: bir `if` yanlış oldu, bir liste öğesi gitti, ekrandan başka bir ekrana geçildi. Hatırlanan değerleri unutulur, `DisposableEffect` temizlikleri çalışır, coroutine'leri iptal edilir.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Details(show: Boolean) {
     if (show) {
         // show doğru olunca girer, yanlış olunca çıkar.
@@ -36,7 +36,7 @@ struct Connection : RememberObserver {
     void onForgotten() override { disconnect(); }
 };
 
-@Composable
+@Kompozable
 fun Chat() {
     remember { Connection() }  // Chat kompozisyondayken bağlı
     Text("Sohbet")
@@ -49,7 +49,7 @@ fun Chat() {
 
 Hangi hatırlanan değerin hangi çağrıya ait olduğunu bilmek için Kompoz her çağrıyı recomposition'lar boyunca tanımak zorundadır. Compose'un derleyici eklentisi her çağrıya kaynaktaki yerinden bir anahtar verir; kompozc da aynısını C++'ın `std::source_location`'ı ile yapar:
 
-- Her `@Composable fun`, son parametresi `CallSite site = CallSite::current()` olan bir C++ fonksiyonuna dönüşür. Varsayılan, composable'ın *çağrıldığı* yerde değerlendirilir, yani `site` çağrının dosyası, satırı ve sütunudur; kompozc'nin `#line`'ı onları sizin kaynağınızınkiler olarak tutar.
+- Her `@Kompozable fun`, son parametresi `CallSite site = CallSite::current()` olan bir C++ fonksiyonuna dönüşür. Varsayılan, composable'ın *çağrıldığı* yerde değerlendirilir, yani `site` çağrının dosyası, satırı ve sütunudur; kompozc'nin `#line`'ı onları sizin kaynağınızınkiler olarak tutar.
 - Bir ebeveynin içinde aynı yerden yapılan çağrılar sıralarıyla ayırt edilir: o yerden yapılan ilk çağrı, ikinci çağrı ve böyle devam eder.
 - `remember` de aynı şekilde bir `CallSite` alır; bu yüzden farklı yerlerdeki iki `remember` çağrısı farklı değerlerdir.
 
@@ -57,16 +57,16 @@ Hangi hatırlanan değerin hangi çağrıya ait olduğunu bilmek için Kompoz he
 
 ## Scope'lar
 
-Unit dönen bir `@Composable fun`, Compose'daki gibi *yeniden başlatılabilir* ve *atlanabilir* bir scope'tur:
+Unit dönen bir `@Kompozable fun`, Compose'daki gibi *yeniden başlatılabilir* ve *atlanabilir* bir scope'tur:
 
 - **Yeniden başlatılabilir** (restartable): okuduğu bir durum değişince ebeveyni değil, yalnız kendisi yeniden çalışır.
 - **Atlanabilir** (skippable): ebeveyni çalıştığında argümanları geçen seferkine eşitse çalışmaz.
 
-Bir composable lambda da kendine ait bir scope'tur: `Box`, `Column`, `Row`'un içeriği, bir `Scaffold`'un yuvaları, sizin `content: @Composable () -> Unit`'ınız. Yalnız lambdanın okuduğu değişince lambda tek başına yeniden çalışır. Daha sonra tek başına çalışabileceği için kullandığını Kotlin'in lambdaları gibi değerle yakalar.
+Bir composable lambda da kendine ait bir scope'tur: `Box`, `Column`, `Row`'un içeriği, bir `Scaffold`'un yuvaları, sizin `content: @Kompozable () -> Unit`'ınız. Yalnız lambdanın okuduğu değişince lambda tek başına yeniden çalışır. Daha sonra tek başına çalışabileceği için kullandığını Kotlin'in lambdaları gibi değerle yakalar.
 
 ```kotlin
-@Composable
-fun Section(title: String, content: @Composable () -> Unit) {
+@Kompozable
+fun Section(title: String, content: @Kompozable () -> Unit) {
     Column(modifier = Modifier.padding(16.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         content()
@@ -74,7 +74,7 @@ fun Section(title: String, content: @Composable () -> Unit) {
 }
 ```
 
-Bir değer döndüren `@Composable fun` (`rememberSomething(): T`), Compose'daki gibi bir scope değildir: okudukları onu çağırana aittir.
+Bir değer döndüren `@Kompozable fun` (`rememberSomething(): T`), Compose'daki gibi bir scope değildir: okudukları onu çağırana aittir.
 
 ## Atlamak
 
@@ -88,7 +88,7 @@ Bir scope; ebeveyni çalıştığında, argümanları önceki çağrıya eşitse
 ```kotlin
 data class Todo(val id: Int, val title: String, val done: Boolean = false)
 
-@Composable
+@Kompozable
 fun TodoRow(todo: Todo, todos: MutableState<List<Todo>>) {  // todo ve todos aynı kaldıkça atlanır
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = todo.done, onCheckedChange = { done ->
@@ -118,12 +118,12 @@ for (todo in todos.value) {
 ```kotlin
 data class Todo(val id: Int, val title: String, val done: Boolean = false)
 
-@Composable
+@Kompozable
 fun TodoRow(todo: Todo, todos: MutableState<List<Todo>>) {
     Text(todo.title)
 }
 
-@Composable
+@Kompozable
 fun TodoList(todos: MutableState<List<Todo>>) {
     Column {
         for (todo in todos.value) {
@@ -140,7 +140,7 @@ Artık her satırın hatırlanan değerleri, efektleri ve düğümleri onun `id`
 Aynı composable'ı ağaçta başka bir yerden çağırmak başka bir çağrıdır: durumu baştan başlar. `movableContentOf`, Compose'daki gibi durumu kendisiyle birlikte taşınan içerik yapar:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Player(wide: Boolean) {
     val video = remember {
         movableContentOf {
@@ -164,4 +164,4 @@ fun Player(wide: Boolean) {
 - [Durum](state.md): `remember`, `rememberSaveable` ve durum tutucular.
 - [Yan etkiler](side-effects.md): bir composable girince başlayan ve çıkınca duran efektler.
 - [Aşamalar](phases.md): kompozisyondan sonra ne olur.
-- [C++ ile yazmak](cpp.md): kompozc'nin yazdığı scope'lar, `composable(site, …)` ve `ComposableScope`, doğrudan C++ ile.
+- [C++ ile yazmak](cpp.md): kompozc'nin yazdığı scope'lar, `kompozable(site, …)` ve `KompozableScope`, doğrudan C++ ile.

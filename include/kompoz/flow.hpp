@@ -308,7 +308,7 @@ public:
     // In a composable: the latest value, `initial` until the first, recomposing the caller.
     // Make the flow once (in a ViewModel, or remember it): a new one starts over.
     T collectAsState(T initial, CallSite site = CallSite::current()) const {
-        ComposableScope scope(site);
+        KompozableScope scope(site);
         Flow flow = *this;
         auto state = remember(flow, [&] { return mutableStateOf(std::move(initial)); });
         LaunchedEffect(flow, [flow, state]() -> Task {
@@ -426,7 +426,7 @@ public:
     // In a composable: the value, recomposing the caller when it changes (Compose's
     // collectAsState()). Collects while the caller is in the composition.
     T collectAsState(CallSite site = CallSite::current()) const {
-        ComposableScope scope(site);
+        KompozableScope scope(site);
         StateFlow flow = *this;
         auto state = remember(flow, [&] { return mutableStateOf(flow.value()); });
         LaunchedEffect(flow, [flow, state]() -> Task {

@@ -1,7 +1,7 @@
 #pragma once
 
 // Screen readers (Narrator, NVDA) and other UI Automation clients on Windows read the app through
-// providers of its semantics tree (ComposeHost::semanticsTree): the window answers WM_GETOBJECT
+// providers of its semantics tree (KompozHost::semanticsTree): the window answers WM_GETOBJECT
 // with the root, its nodes are the fragments under it. UI Automation calls them on threads of its
 // own; they answer from the tree last published. What a client asks the app to do (invoke, toggle,
 // select, set a value, focus, scroll) is notified (Notifier); what changes in the tree (focus,

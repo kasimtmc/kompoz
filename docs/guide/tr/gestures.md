@@ -21,7 +21,7 @@ Kaydırılan içerik için kaydırma modifier'larını ya da bir tembel listeyi 
 `Modifier.draggable(state, orientation)` tek eksen boyunca sürüklemeleri dp cinsinden farklar olarak bildirir. Kendisi hiçbir şeyi taşımaz: istediğinizi, genellikle yerleşim sırasında okunan bir offset ile siz taşırsınız:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Slider1D() {
     var x by remember { mutableStateOf(0f) }
     Box(modifier = Modifier.fillMaxWidth().height(56.dp)) {
@@ -43,7 +43,7 @@ fun Slider1D() {
 ```kotlin
 enum class DragValue { Start, End }
 
-@Composable
+@Kompozable
 fun Toggle() {
     val state = rememberAnchoredDraggableState(DragValue.Start)
     state.updateAnchors(DraggableAnchors {
@@ -67,7 +67,7 @@ fun Toggle() {
 `transformable`, çoklu dokunma hareketlerini yakınlaştırma, kaydırma ve döndürme değişikliklerine çevirir. Ctrl+tekerlek ve dokunmatik yüzeyde kıstırma da yakınlaştırır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ZoomableImage() {
     var scale by remember { mutableStateOf(1f) }
     val state = rememberTransformableState { zoom, _, _ -> scale = (scale * zoom).coerceIn(1f, 5f) }
@@ -83,7 +83,7 @@ fun ZoomableImage() {
 Kendi hareketleriniz için `Modifier.pointerInput(key) { }`, düğümün işaretçi olaylarını alan bir coroutine çalıştırır. Hareket algılayıcıları bunun içinde çalışır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun TapTarget() {
     var last by remember { mutableStateOf("Nothing yet") }
     Box(modifier = Modifier.size(200.dp).background(MaterialTheme.colorScheme.secondaryContainer)
@@ -105,7 +105,7 @@ fun TapTarget() {
 Blok `key` değiştiğinde yeniden başlar; bu yüzden ona bağlı olduğu şeyi yakalayan bir anahtar verin. Daha alt düzey işler için `awaitPointerEvent()` (blokta: Compose'un `awaitPointerEventScope { }`'u burada örtük) her olayı her işaretçinin değişikliğiyle birlikte verir; bir değişikliği tüketin (`change.consume()`) ki çevresindeki kaydırma ve tıklamalar ona dokunmasın. `awaitEachGesture` ve `waitForUpOrCancellation` bir hareketi yapılandırmaya yardım eder; `VelocityTracker` ise bir fırlatma için parmağın kalktığı anda ne kadar hızlı hareket ettiğini ölçer.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Drawing() {
     val points = remember { mutableStateListOf<Offset>() }
     val ink = MaterialTheme.colorScheme.onSurface
@@ -150,7 +150,7 @@ Klavye odağı, Compose Material 3'teki gibi bileşenin odak durum katmanıyla g
 ## Üzerine gelme ve fare
 
 ```kotlin
-@Composable
+@Kompozable
 fun HoverCard() {
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
@@ -165,7 +165,7 @@ fun HoverCard() {
 Compose Multiplatform'un masaüstü API'leri adlarıyla burada: farenin girip çıkması, hareketi, basması ve tekerleği için `onPointerEvent(type) { event -> }` (`event.changes.first().consume()` tekerleğin sayfayı kaydırmasını önler), düğmeye ya da basılı tuşlara göre tıklamalar için `onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) { }` ve `onClick(keyboardModifiers = { it.isCtrlPressed }) { }`, sağ tıklamada kendi menünüz için `ContextMenuArea`, fareyi izleyen bir ipucu için `TooltipArea`:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DesktopMouse() {
     var last by remember { mutableStateOf("-") }
     Column {
@@ -183,7 +183,7 @@ fun DesktopMouse() {
 Bir pencerenin menüleri Compose Multiplatform'un `MenuBar { Menu("…") { … } }`'ıdır, içeriğin üstünde bir şerit olarak çizilir: `Item`, `CheckboxItem`, `RadioButtonItem`, `Separator` ve alt menüler, her biri pencere tuşları alırken çalışan bir `KeyShortcut` ile (tuş adları Compose'unki gibi: `Key.DirectionLeft`):
 
 ```kotlin
-@Composable
+@Kompozable
 fun Menus() {
     var dark by remember { mutableStateOf(false) }
     var size by remember { mutableStateOf(1) }
@@ -210,7 +210,7 @@ fun Menus() {
 Bir `MutableInteractionSource`'a, verildiği bileşenlerin basmaları, üzerine gelmeleri, odakları ve sürüklemeleri bildirilir. Birinin sürüp sürmediğini `collectIsPressedAsState()`, `collectIsHoveredAsState()`, `collectIsFocusedAsState()` ve `collectIsDraggedAsState()` (`by` ile okunur) ile okuyun; bunlar değiştiğinde yeniden kompoze ederler.
 
 ```kotlin
-@Composable
+@Kompozable
 fun PressToRecord() {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
@@ -225,7 +225,7 @@ fun PressToRecord() {
 `dragAndDropSource` verilerle bir sürükleme başlatır; `dragAndDropTarget` uygulamanın içinden gelen bırakmaları ya da masaüstünde dışarıdan gelen dosyaları kabul eder:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DropZone() {
     var dropped by remember { mutableStateOf("Drop text here") }
     Column {

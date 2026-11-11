@@ -143,7 +143,7 @@ public:
 };
 
 namespace detail {
-extern const CompositionLocal<std::shared_ptr<ViewModelStore>> LocalViewModelStore;
+extern const KompozitionLocal<std::shared_ptr<ViewModelStore>> LocalViewModelStore;
 std::shared_ptr<ViewModelStore> currentViewModelStore();  // the provided one, else the host's
 
 template <class T, class F>

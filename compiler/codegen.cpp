@@ -44,12 +44,12 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "maxOfOrNull", "minOfOrNull",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
-    "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "compositionLocalOf",
+    "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "kompozitionLocalOf",
     "slideInVertically", "slideInHorizontally", "slideOutVertically", "slideOutHorizontally", "animateFloat", "animateDp", "animateColor",
     "dragAndDropSource", "update", "LifecycleResumeEffect", "LifecycleStartEffect", "flatMapLatest", "mapLatest", "flatMapConcat",
     "removeIf", "removeAll", "ifEmpty", "ifBlank", "byValue", "rememberScrollableState", "rememberScrollable2DState",
-    "staticCompositionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
-    "derivedMediaQuery", "SubcomposeLayout", "rememberPagerState", "rememberCarouselState"};
+    "staticKompozitionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
+    "derivedMediaQuery", "SubkompozLayout", "rememberPagerState", "rememberCarouselState"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -58,7 +58,7 @@ const std::map<std::string, std::string, std::less<>> kTypes = {
     {"Char", "char32_t"},        {"Unit", "void"},         {"UInt", "unsigned"},      {"ULong", "unsigned long long"},
     {"Exception", "std::exception"}, {"Throwable", "std::exception"}, {"RuntimeException", "std::runtime_error"},
     {"IllegalStateException", "std::logic_error"}, {"IllegalArgumentException", "std::invalid_argument"},
-    {"ComposeTestRule", "::kompoz::testing::ComposeTestRule"}, {"AssertionError", "::kompoz::testing::AssertionError"},
+    {"KompozTestRule", "::kompoz::testing::KompozTestRule"}, {"AssertionError", "::kompoz::testing::AssertionError"},
     {"Dp", "float"},             {"List", "std::vector"},  {"MutableList", "std::vector"}, {"ArrayList", "std::vector"},
     {"Set", "std::set"},         {"MutableSet", "std::set"}, {"Map", "std::map"},    {"MutableMap", "std::map"},
     {"Pair", "std::pair"},       {"LocalDate", "std::chrono::year_month_day"}, {"Any", "std::any"}};
@@ -99,9 +99,9 @@ const std::map<std::string, std::string, std::less<>> kObjectProperties = {
     {"Float.NaN", "std::numeric_limits<float>::quiet_NaN()"},
 };
 
-// Compose's @Composable properties read by a name alone: calls here.
+// Compose's @Composable properties (Kompoz's @Kompozable ones) read by a name alone: calls here.
 const std::map<std::string, std::string, std::less<>> kComposableProperties = {
-    {"currentCompositionLocalContext", "::kompoz::currentCompositionLocalContext()"}};
+    {"currentKompozitionLocalContext", "::kompoz::currentKompozitionLocalContext()"}};
 
 // Named arguments whose lambda gives a value: items(list, key = { it.id }, contentType = { … }).
 const std::set<std::string, std::less<>> kValueArguments = {"key", "contentType", "selector", "comparator", "span", "pageCount", "confirmValueChange",
@@ -163,7 +163,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"flex", "FlexConfigScope"},             {"BoxWithConstraints", "BoxWithConstraintsScope"},
     // ("const ": a receiver only read)
     {"mediaQuery", "const UiMediaScope"},    {"derivedMediaQuery", "const UiMediaScope"},
-    {"SubcomposeLayout", "SubcomposeMeasureScope"},
+    {"SubkompozLayout", "SubkompozMeasureScope"},
     {"ButtonGroup", "ButtonGroupScope"},  // (its items: clickableItem(…); its buttons' Modifier.animateWidth(source))
     {"FloatingActionButtonMenu", "const FloatingActionButtonMenuScope"}, {"ToggleFloatingActionButton", "const ToggleFloatingActionButtonScope"},
     {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"}, {"OutputTransformation", "TextFieldBuffer"},
@@ -1203,8 +1203,8 @@ public:
         scopes_.emplace_back();
         for (const Param& p : f.params) declare(p.name, Local);
         if (unit) {
-            // Restartable and skippable, as Compose's compiler makes a Unit @Composable function.
-            out_.text(" ::kompoz::composable(site, ");
+            // Restartable and skippable, as Compose's compiler makes a Unit @Kompozable function.
+            out_.text(" ::kompoz::kompozable(site, ");
             for (const Param& p : f.params) out_.text(cppName(p.name) + ", ");
             out_.text("[=] {");
             statements(*f.body, false);
@@ -1212,7 +1212,7 @@ public:
         } else {
             // Not restartable (what it reads is its caller's), but a group of its own: what it
             // remembers is its, however many times its caller calls it from one place.
-            out_.text(" ::kompoz::ComposableScope kompoz_scope(site);");
+            out_.text(" ::kompoz::KompozableScope kompoz_scope(site);");
             statements(*f.body, true);
         }
         scopes_.pop_back();
@@ -2037,12 +2037,12 @@ private:
                 return arguments(c, calleeName, false);
             }
         }
-        // A @Composable kompozc translates: arguments by position, defaults filled in.
+        // A @Kompozable kompozc translates: arguments by position, defaults filled in.
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return moduleCall(c, *f->second);
             if (auto k = module_.classes.find(callee.text); k != module_.classes.end()) return construct(c, *k->second);
             if (auto k = module_.classDecls.find(callee.text); k != module_.classDecls.end() && named(c)) return constructClass(c, *k->second);
-            if (auto t = kTypes.find(callee.text); t != kTypes.end() && t->second.starts_with("::")) {  // a type named in full (ComposeTestRule { })
+            if (auto t = kTypes.find(callee.text); t != kTypes.end() && t->second.starts_with("::")) {  // a type named in full (KompozTestRule { })
                 out_.text(t->second);
                 return arguments(c, calleeName, false);
             }

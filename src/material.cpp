@@ -15,7 +15,7 @@ namespace kompoz {
 
 void detail::Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, const std::function<void(PaddingValues)>& content,
               CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     WindowInsets insets = slots.contentWindowInsets.value_or(detail::systemBarsForVisualComponents());
     // The content's padding comes from the measured bars: layout writes it before measuring the
@@ -52,8 +52,8 @@ void detail::Scaffold(const Modifier& modifier, const ScaffoldSlots& slots, cons
         return Size{w, h};
     };
 
-    CompositionLocalProvider({LocalContentColor.provides(cs.onBackground)}, [&] {
-        detail::Composer::require().emit(
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onBackground)}, [&] {
+        detail::Kompozer::require().emit(
             detail::keyOf(CallSite::current()),
             [&](LayoutNode& node) {
                 node.modifier = modifier.background(container);
@@ -211,7 +211,7 @@ struct ExitUntilCollapsedConnection final : AppBarConnection {
 
 template <class C>
 TopAppBarScrollBehavior makeScrollBehavior(const TopAppBarState* given, bool pinned, CallSite site) {
-    ComposableScope group(site);
+    KompozableScope group(site);
     TopAppBarState state = given ? *given : rememberTopAppBarState();
     auto scope = rememberCoroutineScope();
     auto& connection = remember([&] { return std::make_shared<C>(state, scope); });
@@ -261,7 +261,7 @@ AppBarColors appBarColors(const TopAppBarSlots& slots) {
             slots.actionIconContentColor.value_or(cs.onSurfaceVariant), slots.subtitleContentColor.value_or(cs.onSurfaceVariant)};
 }
 void tinted(Color color, const Content& content) {
-    if (content) CompositionLocalProvider({LocalContentColor.provides(color)}, content);
+    if (content) KompozitionLocalProvider({LocalContentColor.provides(color)}, content);
 }
 
 // The container color: the scrolled one once content is under the bar (recomposes only when
@@ -287,9 +287,9 @@ void titles(const TopAppBarSlots& slots, const Content& title, const Content& su
             const Font& titleFont, const Font& subtitleFont) {
     AppBarColors colors = appBarColors(slots);
     detail::Column(Modifier(), {.horizontalAlignment = alignment}, [&] {
-        CompositionLocalProvider({LocalTextStyle.provides(titleFont)}, [&] { tinted(colors.title, title); });
+        KompozitionLocalProvider({LocalTextStyle.provides(titleFont)}, [&] { tinted(colors.title, title); });
         if (subtitle)
-            CompositionLocalProvider({LocalTextStyle.provides(subtitleFont), LocalContentColor.provides(colors.subtitle)}, subtitle);
+            KompozitionLocalProvider({LocalTextStyle.provides(subtitleFont), LocalContentColor.provides(colors.subtitle)}, subtitle);
     });
 }
 
@@ -370,7 +370,7 @@ void twoRowsTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, flo
             l.alpha = in ? std::clamp((f - 0.5f) * 2, 0.f, 1.f) : 1 - f;
         });
     };
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
         detail::Column(detail::animatedBackground(modifier.fillMaxWidth(), container).padding(insets.start, insets.top, insets.end, 0), [&] {
             Content smallSubtitle;
             if (slots.subtitle) smallSubtitle = [&] { detail::Box(fade(true), slots.subtitle); };
@@ -411,7 +411,7 @@ void singleRowTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, b
         else
             appBarRow(slots, Modifier(), slots.title, slots.subtitle, height);
     };
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
         detail::Box(detail::animatedBackground(modifier.fillMaxWidth(), container).padding(insets.start, insets.top, insets.end, 0), [&] {
             if (behavior && !behavior->isPinned)
                 detail::Box(collapsing(Modifier().fillMaxWidth(), behavior->state, height, true), row);
@@ -424,13 +424,13 @@ void singleRowTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, b
 } // namespace
 
 void detail::TopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     singleRowTopAppBar(slots, modifier, false);
 }
 
 void detail::AppBarWithSearch(const SearchBarState& state, const Content& inputField, const Modifier& modifier, const AppBarWithSearchSlots& slots,
                       CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     constexpr float kHeight = 72;
     PaddingValues insets = WindowInsets::safeDrawing().only(WindowInsetsSides::Horizontal | WindowInsetsSides::Top).asPaddingValues();
@@ -444,7 +444,7 @@ void detail::AppBarWithSearch(const SearchBarState& state, const Content& inputF
                 if (slots.actions) detail::Row(Modifier(), {.verticalAlignment = Alignment::CenterVertically}, slots.actions);
             });
     };
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
         detail::Box(modifier.fillMaxWidth().background(cs.surface).padding(insets.start, insets.top, insets.end, 0), [&] {
             if (behavior && !behavior->isPinned)
                 detail::Box(collapsing(Modifier().fillMaxWidth(), behavior->state, kHeight, false), row);  // slides up, under the status bar
@@ -456,7 +456,7 @@ void detail::AppBarWithSearch(const SearchBarState& state, const Content& inputF
 
 void TopSearchBar(const SearchBarState& state, const Content& inputField, const Modifier& modifier,
                   std::optional<TopAppBarScrollBehavior> scrollBehavior, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     constexpr float kPadding = 8, kHeight = 56 + 2 * kPadding;
     PaddingValues insets = WindowInsets::safeDrawing().only(WindowInsetsSides::Horizontal | WindowInsetsSides::Top).asPaddingValues();
     if (scrollBehavior) scrollBehavior->state.setHeightOffsetLimit(-kHeight);
@@ -477,28 +477,28 @@ TopAppBarScrollBehavior SearchBarDefaults::enterAlwaysSearchBarScrollBehavior(Ca
 }
 
 void detail::CenterAlignedTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     singleRowTopAppBar(slots, modifier, true);
 }
 
 void detail::MediumTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     twoRowsTopAppBar(slots, modifier, TopAppBarDefaults::MediumAppBarExpandedHeight, typography().headlineSmall, typography().labelLarge);
 }
 
 void detail::MediumFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     twoRowsTopAppBar(slots, modifier, 112, typography().headlineMedium, typography().labelLarge, 24, 24);
 }
 
 void detail::LargeFlexibleTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     twoRowsTopAppBar(slots, modifier, 120, typography().displaySmall, typography().titleMedium, 32, 28);
 }
 
 void detail::TwoRowsTopAppBar(const std::function<void(bool expanded)>& title, const TopAppBarSlots& slots, const Modifier& modifier,
                       const std::function<void(bool expanded)>& subtitle, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     TopAppBarSlots small = slots;
     small.title = [&] { title(false); };
     small.subtitle = subtitle ? Content([&] { subtitle(false); }) : Content();
@@ -508,12 +508,12 @@ void detail::TwoRowsTopAppBar(const std::function<void(bool expanded)>& title, c
 }
 
 void detail::LargeTopAppBar(const TopAppBarSlots& slots, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     twoRowsTopAppBar(slots, modifier, TopAppBarDefaults::LargeAppBarExpandedHeight, typography().headlineMedium, typography().titleMedium);
 }
 
 void detail::NavigationBar(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // The keyboard covers it rather than lifting it.
     PaddingValues insets = detail::systemBarsForVisualComponents().only(WindowInsetsSides::Horizontal | WindowInsetsSides::Bottom).asPaddingValues();
@@ -522,7 +522,7 @@ void detail::NavigationBar(const Modifier& modifier, const Content& content, Cal
 }
 
 MutableInteractionSource detail::mappedInteractionSource(const MutableInteractionSource& from, std::shared_ptr<Offset> shift, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto to = remember([] { return MutableInteractionSource(); });
     LaunchedEffect(from.data_.get(), [from, to, shift]() -> Task {
         co_await from.interactions().collect([to, shift](const Interaction& i) {
@@ -562,16 +562,16 @@ void detail::indicatorNavigationItem(bool selected, std::function<void()> onClic
                 return Size{w, h};
             });
             detail::Box(detail::animatedAlpha(grows, alpha).background(cs.secondaryContainer, CircleShape));
-            detail::Box(Modifier().offset(0, top + 4), [&] { CompositionLocalProvider({tinted(iconColor)}, icon); });
+            detail::Box(Modifier().offset(0, top + 4), [&] { KompozitionLocalProvider({tinted(iconColor)}, icon); });
             detail::Box(Modifier().offset(0, top + 32 + 4), [&] {
-                CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
+                KompozitionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
             });
         });
 }
 
 void detail::NavigationBarItem(bool selected, std::function<void()> onClick, const ImageVector& icon, std::string label,
                        CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // Compose 1.4's: 80 dp tall, the 64 dp wide indicator 12 dp down.
     detail::indicatorNavigationItem(selected, std::move(onClick), [icon] { detail::Icon(icon, ""); }, [label] { detail::Text(label); },  // (the label says it)
                                     Modifier().weight(1).height(80), 64, 12, true, std::nullopt);
@@ -579,7 +579,7 @@ void detail::NavigationBarItem(bool selected, std::function<void()> onClick, con
 
 void detail::NavigationBarItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, bool enabled,
                                CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     (void)enabled;  // (Kompoz's indicator item has no disabled look yet)
     detail::indicatorNavigationItem(selected, std::move(onClick), icon, label, Modifier().weight(1).height(80), 64, 12, true, std::nullopt);
 }
@@ -588,7 +588,7 @@ namespace {
 // A FAB's container (Compose 1.4's): primaryContainer, 6 dp up, 8 while hovered (6 again while
 // pressed), eased in 120 ms and out 150 as the buttons' elevations.
 Modifier fab(const Modifier& m, Shape shape, std::function<void()> onClick, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto source = remember([] { return MutableInteractionSource(); });
     bool hovered = source.collectIsHoveredAsState() && !source.collectIsPressedAsState();
     auto elevation = animateFloatAsState(hovered ? 8.f : 6.f, hovered ? tween(120) : tween(150, 0, Easing{0.4f, 0, 0.6f, 1}));
@@ -597,36 +597,36 @@ Modifier fab(const Modifier& m, Shape shape, std::function<void()> onClick, Call
 } // namespace
 
 void detail::SmallFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
         detail::Box(fab(modifier.minimumInteractiveComponentSize().size(40), RoundedCornerShape(12), std::move(onClick)), Alignment::Center, content);
     });
 }
 
 void detail::LargeFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
         detail::Box(fab(modifier.size(96), RoundedCornerShape(28), std::move(onClick)), Alignment::Center, content);
     });
 }
 
 void detail::FloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier,
                           CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
         detail::Box(fab(modifier.size(56), RoundedCornerShape(16), std::move(onClick)), Alignment::Center, content);
     });
 }
 
 void detail::ExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text,
                                   const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // 16 dp before the icon, 12 between, 20 after the label; at least 80 wide.
-    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
         detail::Row(fab(modifier.heightIn(56).widthIn(80), RoundedCornerShape(16), std::move(onClick)).padding(16, 0, 20, 0),
             {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
             [&] {
@@ -638,9 +638,9 @@ void detail::ExtendedFloatingActionButton(std::function<void()> onClick, const I
 // Compose's slots: icon = { Icon(…) }, text = { Text("…") } (the text in labelLarge).
 void detail::ExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text,
                                   const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer), LocalTextStyle.provides(typography().labelLarge)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer), LocalTextStyle.provides(typography().labelLarge)}, [&] {
         detail::Row(fab(modifier.heightIn(56).widthIn(80), RoundedCornerShape(16), std::move(onClick)).padding(16, 0, 20, 0),
             {.horizontalArrangement = Arrangement::spacedBy(12), .verticalAlignment = Alignment::CenterVertically},
             [&] {
@@ -653,7 +653,7 @@ void detail::ExtendedFloatingActionButton(std::function<void()> onClick, const C
 void detail::ToggleFloatingActionButton(bool checked, std::function<void(bool)> onCheckedChange,
                                         const std::function<void(const ToggleFloatingActionButtonScope&)>& content, const Modifier& modifier,
                                 const ToggleFloatingActionButtonOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // Its size, corners and colors along the progress, read as it is laid out and drawn.
     auto progress = animateFloatAsState(checked ? 1.f : 0.f, motionScheme().fastSpatialSpec);
@@ -679,7 +679,7 @@ void detail::ToggleFloatingActionButton(bool checked, std::function<void(bool)> 
     });
     float outer = std::max(options.containerSize, options.checkedContainerSize);
     detail::Box(modifier.size(outer), options.contentAlignment, [&] {
-        CompositionLocalProvider({LocalContentColor.provides(ContentColor{progress, cs.onPrimaryContainer, cs.onPrimary})}, [&] {
+        KompozitionLocalProvider({LocalContentColor.provides(ContentColor{progress, cs.onPrimaryContainer, cs.onPrimary})}, [&] {
             detail::Box(detail::animatedBackground(sized.shadow(6, shape), container, shape).toggleable(checked, std::move(onCheckedChange)),
                 Alignment::Center, [&] { content(ToggleFloatingActionButtonScope(progress)); });
         });
@@ -694,7 +694,7 @@ struct FloatingActionButtonMenuScope::Data {
 
 void detail::FloatingActionButtonMenu(bool expanded, const Content& button, const std::function<void(const FloatingActionButtonMenuScope&)>& content,
                                       const Modifier& modifier, HorizontalAlignment horizontalAlignment, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto data = remember([] { return std::make_shared<FloatingActionButtonMenuScope::Data>(); });
     data->expanded = expanded;
     data->index = 0;
@@ -708,7 +708,7 @@ void detail::FloatingActionButtonMenu(bool expanded, const Content& button, cons
 
 void FloatingActionButtonMenuItem(const FloatingActionButtonMenuScope& menu, std::function<void()> onClick, const Content& text,
                                   const Content& icon, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto& d = *menu.data();
     int i = d.index++, n = std::max(d.count, d.index);
     // One after another: opening from the bottom (next to the button), closing from the top.
@@ -717,20 +717,20 @@ void FloatingActionButtonMenuItem(const FloatingActionButtonMenuScope& menu, std
     const ColorScheme& cs = colorScheme();
     AnimatedVisibility(d.expanded, Modifier(), fadeIn(0, tween(200, opening)) + expandVertically(tween(200, opening)),
                        fadeOut(0, tween(150, closing)) + shrinkVertically(tween(150, closing)), [&] {
-                           CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
+                           KompozitionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
                                detail::Row(modifier.height(56).background(cs.primaryContainer, CircleShape).clickable(std::move(onClick)).padding(24, 0),
                                    {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically}, [&] {
                                        icon();
-                                       CompositionLocalProvider({LocalTextStyle.provides(typography().titleMedium)}, text);
+                                       KompozitionLocalProvider({LocalTextStyle.provides(typography().titleMedium)}, text);
                                    });
                            });
                        });
 }
 
 void detail::MediumFloatingActionButton(std::function<void()> onClick, const Content& content, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer)}, [&] {
         detail::Box(fab(modifier.size(80), RoundedCornerShape(20), std::move(onClick)), Alignment::Center, content);
     });
 }
@@ -749,7 +749,7 @@ void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, con
                  const std::string& description, bool expanded, const Modifier& modifier) {
     const ColorScheme& cs = colorScheme();
     auto p = animateFloatAsState(expanded ? 1.f : 0.f, spring(1, 700));  // read as it is laid out and drawn
-    CompositionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer), LocalTextStyle.provides(size.label)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onPrimaryContainer), LocalTextStyle.provides(size.label)}, [&] {
         Layout(fab(modifier.height(size.height), RoundedCornerShape(size.radius), std::move(onClick))
                    .semantics({.contentDescription = description})
                    .clipToBounds(),
@@ -784,34 +784,34 @@ void extendedFab(const ExtendedFabSize& size, std::function<void()> onClick, con
 
 void detail::SmallExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
                                        const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     extendedFab({56, 16, 24, 16, 8, typography().titleMedium}, std::move(onClick), icon, text, expanded, modifier);
 }
 void detail::SmallExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded,
                                        const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     extendedFab({56, 16, 24, 16, 8, typography().titleMedium}, std::move(onClick), icon, text, "", expanded, modifier);
 }
 
 void detail::MediumExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
                                         const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     extendedFab({80, 20, 28, 26, 12, typography().titleLarge}, std::move(onClick), icon, text, expanded, modifier);
 }
 void detail::MediumExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded,
                                         const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     extendedFab({80, 20, 28, 26, 12, typography().titleLarge}, std::move(onClick), icon, text, "", expanded, modifier);
 }
 
 void detail::LargeExtendedFloatingActionButton(std::function<void()> onClick, const ImageVector& icon, std::string text, bool expanded,
                                        const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     extendedFab({96, 28, 36, 28, 16, typography().headlineSmall}, std::move(onClick), icon, text, expanded, modifier);
 }
 void detail::LargeExtendedFloatingActionButton(std::function<void()> onClick, const Content& icon, const Content& text, bool expanded,
                                        const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     extendedFab({96, 28, 36, 28, 16, typography().headlineSmall}, std::move(onClick), icon, text, "", expanded, modifier);
 }
 
@@ -971,22 +971,22 @@ void appBarItems(bool vertical, std::function<void(AppBarScope&)> content, const
 }  // namespace
 
 void detail::AppBarRow(std::function<void(AppBarScope&)> content, const Modifier& modifier, AppBarRowOptions o, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     appBarItems(false, std::move(content), modifier, o);
 }
 
 void detail::AppBarColumn(std::function<void(AppBarScope&)> content, const Modifier& modifier, AppBarRowOptions o, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     appBarItems(true, std::move(content), modifier, o);
 }
 
 void detail::SnackbarHost(SnackbarHostState state, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::SnackbarHost(state, modifier, [](const SnackbarData& data) { detail::Snackbar(data); });
 }
 
 void detail::SnackbarHost(SnackbarHostState state, const Modifier& modifier, std::function<void(const SnackbarData&)> snackbar, CallSite site) {
-    composable(site, state, modifier, [=] {
+    kompozable(site, state, modifier, [=] {
         std::optional<SnackbarData> current = state.current();
         auto& shown = remember([] { return std::optional<SnackbarData>(); });  // kept for the exit animation
         if (current) shown = current;
@@ -1054,18 +1054,18 @@ Size oneRowSnackbar(const std::vector<Measurable>& children, const Constraints& 
 } // namespace
 
 void detail::Snackbar(const Content& content, const Modifier& modifier, const SnackbarOptions& o, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     Shape shape = o.shape.value_or(RoundedCornerShape(4));
     Color container = o.containerColor.value_or(cs.inverseSurface), contentColor = o.contentColor.value_or(cs.inverseOnSurface);
     Color actionColor = o.actionContentColor.value_or(cs.inversePrimary);
     Color dismissColor = o.dismissActionContentColor.value_or(cs.inverseOnSurface);
     auto action = [&] {
-        CompositionLocalProvider({LocalContentColor.provides(actionColor), LocalTextStyle.provides(typography().labelLarge)}, o.action);
+        KompozitionLocalProvider({LocalContentColor.provides(actionColor), LocalTextStyle.provides(typography().labelLarge)}, o.action);
     };
-    auto dismiss = [&] { CompositionLocalProvider({LocalContentColor.provides(dismissColor)}, o.dismissAction); };
+    auto dismiss = [&] { KompozitionLocalProvider({LocalContentColor.provides(dismissColor)}, o.dismissAction); };
     detail::Box(modifier.shadow(6, shape).background(container, shape).clip(shape), [&] {
-        CompositionLocalProvider({LocalContentColor.provides(contentColor), LocalTextStyle.provides(typography().bodyMedium)}, [&] {
+        KompozitionLocalProvider({LocalContentColor.provides(contentColor), LocalTextStyle.provides(typography().bodyMedium)}, [&] {
             if (o.actionOnNewLine && o.action) {  // the text, then the buttons under it at the end
                 detail::Column(Modifier().widthIn(0, kSnackbarMaxWidth).fillMaxWidth().padding(kSnackbarStart, 0, 0, 2), [&] {
                     detail::Box(Modifier().paddingFromBaseline(30, 12).padding(0, 0, kSnackbarButtonSide, 0), content);
@@ -1088,7 +1088,7 @@ void detail::Snackbar(const Content& content, const Modifier& modifier, const Sn
 }
 
 void detail::Snackbar(const SnackbarData& data, const Modifier& modifier, SnackbarOptions o, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     if (!data.actionLabel.empty())
         o.action = [&data, color = o.actionColor.value_or(cs.inversePrimary)] {

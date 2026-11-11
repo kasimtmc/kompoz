@@ -7,8 +7,8 @@
 Wrap your app's content in `MaterialTheme`, usually once at the top:
 
 ```kotlin
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun ThemedApp() {
     val dark = isSystemInDarkTheme()
     MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
@@ -24,7 +24,7 @@ kompoz::Application kompoz::createApplication(int, char**) {
 Components read the theme through composition locals. Read it yourself with `MaterialTheme.colorScheme`, `MaterialTheme.typography` and `MaterialTheme.motionScheme`:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Tag(text: String) {
     Text(
         text,
@@ -60,8 +60,8 @@ fun brandColors(dark: Boolean): ColorScheme =
 ```kotlin
 val BrandPalette = TonalPalette.fromSeed(Color(0xFF00796B))
 
-@Composable
-fun BrandTheme(content: @Composable () -> Unit) {
+@Kompozable
+fun BrandTheme(content: @Kompozable () -> Unit) {
     val dark = isSystemInDarkTheme()
     MaterialTheme(colorScheme = if (dark) dynamicDarkColorScheme(BrandPalette) else dynamicLightColorScheme(BrandPalette), content = content)
 }
@@ -76,8 +76,8 @@ This is the easiest way to a complete, consistent scheme from a brand color. `Hc
 On Android, tell the system bars whether to draw light or dark icons with `SystemBarsAppearance`: dark icons over a light theme.
 
 ```kotlin
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun Root() {
     val dark = isSystemInDarkTheme()
     SystemBarsAppearance(!dark)
@@ -88,10 +88,10 @@ fun Root() {
 To let the user choose, keep the choice in state and fall back to the system's:
 
 ```kotlin
-#! @Composable fun App() {}
+#! @Kompozable fun App() {}
 enum class ThemeChoice { System, Light, Dark }
 
-@Composable
+@Kompozable
 fun Root(choice: ThemeChoice) {
     val dark = when (choice) {
         ThemeChoice.System -> isSystemInDarkTheme()
@@ -120,10 +120,10 @@ The system's palette follows what the user chose in the system's settings, so an
 Let the user choose, and keep the choice:
 
 ```kotlin
-#! @Composable fun App() {}
+#! @Kompozable fun App() {}
 enum class ColorSource { App, System, Wallpaper }
 
-@Composable
+@Kompozable
 fun Root(source: ColorSource) {
     val dark = isSystemInDarkTheme()
     val scheme = when {
@@ -142,8 +142,8 @@ The showcase asks this way, in its View menu and on its Material screen.
 `TonalPalette.fromImage(bitmap)` makes Material You's palettes from any picture, as the wallpaper's are made: an album's cover, a profile photo. It does what Android does with a wallpaper: the picture scaled to at most 112 × 112 of area without filtering, as `WallpaperColors` scales it; `quantizeColors(bitmap)` finds the colors it is made of and how much of each (the Celebi quantizer Android and Material Color Utilities use); `seedColors(colors)` ranks those that would make good theme seeds as Android's System UI ranks a wallpaper's, up to four, so you can offer the user a choice of seeds as Android's wallpaper picker does:
 
 ```kotlin
-@Composable
-fun CoverTheme(cover: ImageBitmap, content: @Composable () -> Unit) {
+@Kompozable
+fun CoverTheme(cover: ImageBitmap, content: @Kompozable () -> Unit) {
     val palette = remember(cover) { TonalPalette.fromImage(cover) }   // once per picture
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) dynamicDarkColorScheme(palette) else dynamicLightColorScheme(palette), content = content)
 }
@@ -153,14 +153,14 @@ fun CoverTheme(cover: ImageBitmap, content: @Composable () -> Unit) {
 
 ## Animating a theme change
 
-`ColorScheme.map` applies a function to every color. With `animateColorAsState`, each color animates to its new value when the scheme changes (a `@Composable fun` that returns a value is a group of its own, as in Compose, so its animations keep their identity):
+`ColorScheme.map` applies a function to every color. With `animateColorAsState`, each color animates to its new value when the scheme changes (a `@Kompozable fun` that returns a value is a group of its own, as in Compose, so its animations keep their identity):
 
 ```kotlin
-#! @Composable fun App() {}
-@Composable
+#! @Kompozable fun App() {}
+@Kompozable
 fun animateColorScheme(target: ColorScheme): ColorScheme = target.map { animateColorAsState(it, 400) }
 
-@Composable
+@Kompozable
 fun Root(dark: Boolean) {
     MaterialTheme(colorScheme = animateColorScheme(if (dark) darkColorScheme() else lightColorScheme())) { App() }
 }
@@ -182,8 +182,8 @@ To change the type scale, provide your own `Typography` through `LocalTypography
 ```kotlin
 val Lora = FontFamily.fromFiles(listOf(FontFile("fonts/Lora-Regular.ttf"), FontFile("fonts/Lora-Bold.ttf", FontWeight.Bold)))
 
-@Composable
-fun BrandTypography(content: @Composable () -> Unit) {
+@Kompozable
+fun BrandTypography(content: @Kompozable () -> Unit) {
     val base = MaterialTheme.typography
     val type = base.copy(
         displayLarge = base.displayLarge.copy(fontFamily = Lora),
@@ -202,19 +202,19 @@ Components have Material's shapes built in: a button's full rounding, a card's 1
 
 ## A design system of your own
 
-When your app doesn't follow Material, build your own theme the same way `MaterialTheme` is built: put the tokens in a data class, provide it through a `CompositionLocal`, and read it where it is needed:
+When your app doesn't follow Material, build your own theme the same way `MaterialTheme` is built: put the tokens in a data class, provide it through a `KompozitionLocal`, and read it where it is needed:
 
 ```kotlin
 data class BrandColors(val accent: Color, val background: Color, val text: Color)
 
-val LocalBrandColors = staticCompositionLocalOf { BrandColors(Color(0xFFFF5722), Color.White, Color(0xFF212121)) }
+val LocalBrandColors = staticKompozitionLocalOf { BrandColors(Color(0xFFFF5722), Color.White, Color(0xFF212121)) }
 
-@Composable
-fun BrandTheme(colors: BrandColors, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalBrandColors provides colors, LocalContentColor provides colors.text, content = content)
+@Kompozable
+fun BrandTheme(colors: BrandColors, content: @Kompozable () -> Unit) {
+    KompozitionLocalProvider(LocalBrandColors provides colors, LocalContentColor provides colors.text, content = content)
 }
 
-@Composable
+@Kompozable
 fun BrandButton(label: String, onClick: () -> Unit) {
     val brand = LocalBrandColors.current
     Box(modifier = Modifier.clickable { onClick() }.background(brand.accent, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -227,6 +227,6 @@ You can mix both: keep `MaterialTheme` for Material components and add your own 
 
 ## See also
 
-- [CompositionLocal](composition-local.md): how themes reach components.
+- [KompozitionLocal](kompozition-local.md): how themes reach components.
 - [Material components](material.md): what the theme styles.
 - [Text](text.md): fonts and text styles.

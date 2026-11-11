@@ -6,7 +6,7 @@ data class Todo(val id: Int, val title: String, val done: Boolean = false)
 
 // Seconds since start, counted by a coroutine: LaunchedEffect starts it, leaving the
 // composition cancels it. Only this scope recomposes every second.
-@Composable
+@Kompozable
 fun Uptime() {
     var seconds by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
@@ -19,7 +19,7 @@ fun Uptime() {
          color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
 }
 
-@Composable
+@Kompozable
 fun CounterCard() {
     var count by remember { mutableStateOf(0) }
     val progress by animateFloatAsState(count.coerceIn(0, 10) / 10f)
@@ -42,7 +42,7 @@ fun CounterCard() {
 }
 
 // Skipped whenever the list recomposes but this item is unchanged.
-@Composable
+@Kompozable
 fun TodoRow(todo: Todo, todos: SnapshotStateList<Todo>) {
     val id = todo.id
     val setDone: (Boolean) -> Unit = { done ->
@@ -61,7 +61,7 @@ fun TodoRow(todo: Todo, todos: SnapshotStateList<Todo>) {
     }
 }
 
-@Composable
+@Kompozable
 fun TodoCard() {
     val todos = remember {
         mutableStateListOf(Todo(1, "Compose runtime'ını incele", true), Todo(2, "Slot table yaz"), Todo(3, "Android'de çalıştır"))
@@ -104,7 +104,7 @@ fun TodoCard() {
 
 // The list screen's FAB. derivedStateOf: this scope recomposes only when "scrolled or not"
 // flips, not on every item that scrolls by.
-@Composable
+@Kompozable
 fun ScrollToTopButton(state: LazyListState) {
     val scrolled by remember { derivedStateOf { state.firstVisibleItemIndex > 0 } }
     val scope = rememberCoroutineScope()
@@ -113,7 +113,7 @@ fun ScrollToTopButton(state: LazyListState) {
     }
 }
 
-@Composable
+@Kompozable
 fun HomeScreen(modifier: Modifier) {
     val scroll = rememberScrollState()
     Column(modifier = modifier.verticalScroll(scroll).padding(20.dp, 8.dp, 20.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -137,7 +137,7 @@ fun HomeScreen(modifier: Modifier) {
 
 // Previews (KOMPOZ_PREVIEW=CounterCardPreview ./build/showcase, or =* for all of them).
 @Preview(widthDp = 400, heightDp = 220)
-@Composable
+@Kompozable
 fun CounterCardPreview() {
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) { Box(modifier = Modifier.padding(16.dp)) { CounterCard() } }
@@ -145,7 +145,7 @@ fun CounterCardPreview() {
 }
 
 @Preview(widthDp = 400, heightDp = 360, uiMode = Configuration.UI_MODE_NIGHT_YES)
-@Composable
+@Kompozable
 fun TodoCardDarkPreview() {
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) { Box(modifier = Modifier.padding(16.dp)) { TodoCard() } }

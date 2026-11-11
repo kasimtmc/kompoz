@@ -99,7 +99,7 @@ struct Dial {
 };
 
 void ClockFace(const TimePickerState& state, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     TimePickerSelectionMode mode = state.selection();
@@ -240,7 +240,7 @@ void ClockFace(const TimePickerState& state, CallSite site = CallSite::current()
 
 void TimeSelector(const TimePickerState& state, TimePickerSelectionMode mode, const std::string& label,
                   CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     bool selected = state.selection() == mode;
     int value = mode == TimePickerSelectionMode::Hour ? hourForDisplay(state) : state.minute();
@@ -256,14 +256,14 @@ void TimeSelector(const TimePickerState& state, TimePickerSelectionMode mode, co
 }
 
 void Separator(float height, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::Box(Modifier().size(24, height), Alignment::Center, [&] { detail::Text(":", {.font = typography().displayLarge, .color = colorScheme().onSurface}); });
 }
 
 // AM / PM, stacked beside the time or in a row below it.
 void PeriodToggle(const TimePickerState& state, const TimePickerOptions& o, bool vertical, Size size,
                   CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto item = [&](bool pm) {
         bool selected = state.isAfternoon() == pm;
@@ -295,7 +295,7 @@ void PeriodToggle(const TimePickerState& state, const TimePickerOptions& o, bool
 }
 
 void ClockDisplay(const TimePickerState& state, const TimePickerOptions& o, bool horizontal, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto time = [&] {
         TimeSelector(state, TimePickerSelectionMode::Hour, o.hourLabel.value_or(LocalStrings.current().hour));
         Separator(80);
@@ -323,7 +323,7 @@ void ClockDisplay(const TimePickerState& state, const TimePickerOptions& o, bool
 // One of TimeInput's fields: up to two digits, kept when they make a valid value.
 void TimeField(MutableState<std::string> text, std::function<int()> current, std::function<bool(int)> accept,
                const std::string& label, ImeAction imeAction, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     auto focused = remember([] { return mutableStateOf(false); });
@@ -372,7 +372,7 @@ void TimeField(MutableState<std::string> text, std::function<int()> current, std
 } // namespace
 
 void detail::TimePicker(const TimePickerState& state, const Modifier& modifier, TimePickerOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Size window = LocalWindowSize.current();
     TimePickerLayoutType layout = options.layoutType.value_or(window.width > window.height ? TimePickerLayoutType::Horizontal
                                                                                            : TimePickerLayoutType::Vertical);
@@ -393,7 +393,7 @@ void detail::TimePicker(const TimePickerState& state, const Modifier& modifier, 
 }
 
 void detail::TimeInput(const TimePickerState& state, const Modifier& modifier, TimePickerOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto hourText = remember([&] { return mutableStateOf(twoDigits(hourForDisplay(state))); });
     auto minuteText = remember([&] { return mutableStateOf(twoDigits(state.minute())); });
     detail::Row(modifier.padding(0, 0, 0, 24), [&] {
@@ -423,14 +423,14 @@ void detail::TimeInput(const TimePickerState& state, const Modifier& modifier, T
 
 void detail::TimePickerDialog(std::function<void()> onDismissRequest, const TimePickerDialogSlots& slots, const Content& content,
                       CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     detail::Dialog(std::move(onDismissRequest), [&] {
         detail::Column(Modifier().background(cs.surfaceContainerHigh, 28).padding(24), {.horizontalAlignment = Alignment::CenterHorizontally},
                [&] {
                    if (slots.title)
                        detail::Box(Modifier().fillMaxWidth().padding(0, 0, 0, 20), [&] {
-                           CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant),
+                           KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant),
                                                      LocalTextStyle.provides(typography().labelMedium)},
                                                     slots.title);
                        });

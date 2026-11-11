@@ -1,6 +1,6 @@
 # Custom layouts
 
-When `Row`, `Column`, `Box` and the other layouts don't fit, measure and place children yourself with `Layout`. This page also covers the layout modifier, intrinsic sizes, `SubcomposeLayout` and animating layout changes.
+When `Row`, `Column`, `Box` and the other layouts don't fit, measure and place children yourself with `Layout`. This page also covers the layout modifier, intrinsic sizes, `SubkompozLayout` and animating layout changes.
 
 ## Constraints
 
@@ -22,8 +22,8 @@ They are in dp, and floats: where Compose's are whole pixels (`indent.roundToPx(
 
 ```kotlin
 // Children one under another, each pushed right by `indent` more than the one before.
-@Composable
-fun Staircase(indent: Dp, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+@Kompozable
+fun Staircase(indent: Dp, modifier: Modifier = Modifier, content: @Kompozable () -> Unit) {
     Layout(content = content, modifier = modifier) { measurables, constraints ->
         val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
         var width = 0f
@@ -42,7 +42,7 @@ fun Staircase(indent: Dp, modifier: Modifier = Modifier, content: @Composable ()
     }
 }
 
-@Composable
+@Kompozable
 fun Steps() {
     Staircase(24.dp) {
         Text("Wake up")
@@ -64,7 +64,7 @@ The policy runs during layout, not composition. A state it reads lays the layout
 A policy sees its children in order. To tell them apart by role, tag them with `Modifier.layoutId("name")` and read `layoutId`:
 
 ```kotlin
-@Composable
+@Kompozable
 fun LabeledValue(label: String, value: String) {
     Layout(
         content = {
@@ -122,21 +122,21 @@ Row(modifier = Modifier.height(IntrinsicSize.Min)) {
 
 > **Note:** Kompoz's intrinsics are an approximation of Compose's: both `Min` and `Max` measure the content with that axis unbounded, and a `Layout` can't override how its intrinsic sizes are computed. For a min intrinsic width, text breaks at every space, so it comes out as wide as its widest word.
 
-## SubcomposeLayout
+## SubkompozLayout
 
-Sometimes what to compose depends on a measurement: a header sized to match a body, a different layout for narrow constraints, a badge sized by the text it decorates. `SubcomposeLayout` composes parts of its content *while* it measures:
+Sometimes what to compose depends on a measurement: a header sized to match a body, a different layout for narrow constraints, a badge sized by the text it decorates. `SubkompozLayout` composes parts of its content *while* it measures:
 
 ```kotlin
 // The content, with a line under it exactly as wide as the content turned out to be.
-@Composable
-fun Underlined(content: @Composable () -> Unit) {
-    SubcomposeLayout { constraints ->
+@Kompozable
+fun Underlined(content: @Kompozable () -> Unit) {
+    SubkompozLayout { constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val main = subcompose("main", content).map { it.measure(loose) }
+        val main = subkompoz("main", content).map { it.measure(loose) }
         val width = main.maxOf { it.width }
         val height = main.sumOf { it.height }
         // Composed with the width it has to match; composed again when that changes.
-        val line = subcompose("line", width) {
+        val line = subkompoz("line", width) {
             Box(modifier = Modifier.size(width, 2.dp).background(MaterialTheme.colorScheme.primary))
         }.map { it.measure(loose) }
         layout(width, height + line.sumOf { it.height }) {
@@ -148,11 +148,11 @@ fun Underlined(content: @Composable () -> Unit) {
 }
 ```
 
-- `subcompose(slotId, content)` composes a slot and returns its measurables: the first time it is asked for, it is composed there and then, as Compose's is.
-- `subcompose(slotId, dependency, content)`, Kompoz's, composes the slot again when `dependency` changes (Compose's composes a slot again whenever it is given new content).
+- `subkompoz(slotId, content)` composes a slot and returns its measurables: the first time it is asked for, it is composed there and then, as Compose's is.
+- `subkompoz(slotId, dependency, content)`, Kompoz's, composes the slot again when `dependency` changes (Compose's composes a slot again whenever it is given new content).
 - The content runs later, during composition; it captures what it uses by value, as every lambda here does.
 
-`SubcomposeLayout` costs more than `Layout`; use it only when composition really depends on measurement. `BoxWithConstraints` is the common case of it, ready-made.
+`SubkompozLayout` costs more than `Layout`; use it only when composition really depends on measurement. `BoxWithConstraints` is the common case of it, ready-made.
 
 ## Animating layout changes
 
@@ -161,7 +161,7 @@ fun Underlined(content: @Composable () -> Unit) {
 For a node that moves or resizes because the layout around it changed, `Modifier.animateBounds()` makes it glide from where it was drawn to where it is now, as Compose's `animateBounds`. Its position is measured from the nearest `LookaheadScope` (Compose's names it, `animateBounds(this@LookaheadScope)`):
 
 ```kotlin
-@Composable
+@Kompozable
 fun Chips(wide: Boolean) {
     LookaheadScope(modifier = Modifier.fillMaxWidth()) {
         FlowRow(

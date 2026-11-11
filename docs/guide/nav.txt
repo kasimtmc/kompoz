@@ -14,7 +14,7 @@ Foundation | Temeller
     lifecycle
     side-effects
     phases
-    composition-local
+    kompozition-local
 
 Design | Tasarım
     modifiers

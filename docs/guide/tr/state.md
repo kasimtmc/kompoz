@@ -22,7 +22,7 @@ Button(onClick = { name.value = "Grace" }) { Text("Yeniden adlandır") }   // ya
 Bir durum paylaşılır: kopyaları aynı değeri görür; bu yüzden onu yakalayan bir lambda (burada her lambda gibi değerle) aynı durumu okur ve yazar:
 
 ```kotlin
-@Composable
+@Kompozable
 fun NameField() {
     var name by remember { mutableStateOf("") }
     OutlinedTextField(value = name, onValueChange = { name = it })
@@ -32,7 +32,7 @@ fun NameField() {
 Bir durumu yalnızca okuyan bir composable, Compose'un salt okunur `State`'i olan bir `State<T>` alabilir: bir `MutableState<T>` ya da türetilmiş bir durum (`derivedStateOf`) ona dönüşür. `value`'su ve `peek()`'i vardır ama ona yazılamaz; hangi durum olduğuna göre karşılaştırılır, bu yüzden composable aynısı yeniden verildiğinde atlanır:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Progress(fraction: State<Float>) {
     LinearProgressIndicator(fraction.value)
 }
@@ -43,7 +43,7 @@ fun Progress(fraction: State<Float>) {
 Bir composable'ın gövdesi her recomposition'da çalışır, yani içinde oluşturulan bir durum her seferinde baştan başlar. `remember` bir değeri recomposition'lar boyunca korur:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }   // bir kez yapılır
     Button(onClick = { count++ }) { Text("$count") }
@@ -61,7 +61,7 @@ Lambda, composable ilk kez kompoze edildiğinde çalışır; ondan sonra `rememb
 ```kotlin
 data class User(val first: String, val last: String)
 
-@Composable
+@Kompozable
 fun Greeting(user: User) {
     val fullName = remember(user.first, user.last) { "Sayın ${user.first} ${user.last}" }
     Text(fullName)
@@ -103,7 +103,7 @@ struct kompoz::Saver<Point> {
     }
 };
 
-@Composable
+@Kompozable
 fun Pin() {
     val where by rememberSaveable { mutableStateOf(Point()) }
     Text("${where.x}")
@@ -124,7 +124,7 @@ const auto citySaver = mapSaver<City>(
         return name && country ? std::optional(City{*name, *country}) : std::nullopt;
     });
 
-@Composable
+@Kompozable
 fun CityScreen() {
     val city by rememberSaveable(saver = citySaver) { mutableStateOf(City("Madrid", "Spain")) }
     Text(city.name)
@@ -140,7 +140,7 @@ Kaydedilebilir olmayan bir değeri de bir `SaveableStateHolder` korur, ama süre
 Bir durum başkalarından hesaplanıyorsa ve onlardan daha seyrek değişiyorsa, hesabı `derivedStateOf` ile sarın. Okuyanları girdilerinin her değişiminde değil, yalnız sonuç değişince yeniden kompoze edilir:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ScrollToTop() {
     val list = rememberLazyListState()
     val showButton by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
@@ -180,7 +180,7 @@ Arayüz iş parçacığında durumlar serbestçe okunur ve yazılır. Başka bir
 `mutableStateListOf` ve `mutableStateMapOf`, Compose'un `SnapshotStateList` ve `SnapshotStateMap`'i gibi izlenebilir kapsayıcılardır. Birini okumak abone yapar; öğe eklemek, kaldırmak ya da değiştirmek okuyanları yeniden kompoze eder:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Tags() {
     val tags = remember { mutableStateListOf("kırmızı", "yeşil") }
     Column {
@@ -206,13 +206,13 @@ Kendi durumunu tutan bir composable'ı kullanmak kolaydır ama dışarıdan kont
 
 ```kotlin
 // Durumsuz: `name`'i gösterir, düzenlemeleri bildirir. Yeniden kullanmak, önizlemek ve sınamak kolay.
-@Composable
+@Kompozable
 fun NameInput(name: String, onNameChange: (String) -> Unit) {
     OutlinedTextField(value = name, onValueChange = onNameChange, singleLine = true)
 }
 
 // Durumlu: durumun sahibidir ve onu aşağı verir.
-@Composable
+@Kompozable
 fun Profile() {
     var name by rememberSaveable { mutableStateOf("") }
     Column {
@@ -243,7 +243,7 @@ class SearchState {
     }
 }
 
-@Composable
+@Kompozable
 fun SearchScreen() {
     val search = remember { SearchState() }
     Text(search.query)

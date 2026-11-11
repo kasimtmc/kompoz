@@ -286,7 +286,7 @@ private:
 };
 
 void grid(const CallSite& site, const Modifier& modifier, std::function<GridConfig(const Constraints&)> config, const Content& content) {
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(site),
         [&](LayoutNode& node) {
             node.modifier = modifier;

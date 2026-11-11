@@ -134,7 +134,7 @@ struct PointerInputElement final : ModifierElement {
 };
 
 // transformable()'s part for the mouse and touchpads: Ctrl+wheel and touchpad pinches zoom it,
-// Ctrl+Shift+wheel turns it (ComposeHost::zoom). It also marks a two-finger target: a second
+// Ctrl+Shift+wheel turns it (KompozHost::zoom). It also marks a two-finger target: a second
 // finger landing just after the first one started scrolling the page hands the gesture over.
 struct ZoomElement final : ModifierElement {
     std::function<void(float zoom, float rotation, Offset centroid)> onZoom;  // centroid local to the element

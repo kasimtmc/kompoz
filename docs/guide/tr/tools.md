@@ -4,13 +4,13 @@ Editörler, önizlemeler, kaydedince yeniden derleme, betikle ekran görüntüle
 
 ## Editörler
 
-Compose söz dizimiyle `@Composable` işlevler içeren bir `.cpp` dosyası hem C++ hem Kotlin'dir; yalnız C++ bilen bir editör onu bozuk C++ diye okur. `kompozc --lsp` böyle dosyalar için bir dil sunucusudur: editörler onu clangd'yi başlatacakları yerde başlatır, o da clangd'yi kendi arkasında başlatır.
+Compose söz dizimiyle `@Kompozable` işlevler içeren bir `.cpp` dosyası hem C++ hem Kotlin'dir; yalnız C++ bilen bir editör onu bozuk C++ diye okur. `kompozc --lsp` böyle dosyalar için bir dil sunucusudur: editörler onu clangd'yi başlatacakları yerde başlatır, o da clangd'yi kendi arkasında başlatır.
 
 - Kotlin'in çevresindeki C++'ta her şey clangd'nindir: tamamlama, üzerine gelince bilgi, tanıma gitme, tanılar.
 - Kotlin'de tanılar kompozc'nin (bir söz dizimi hatası, yerini bulamadığı bir ad) ve çeviri üzerinde C++ derleyicisinindir; her biri geldiği Kotlin satırında görünür. clangd'nin tamamlaması ve bilgi kutusu orada verilmez, biçimlendirme de böyle bir dosyaya dokunmaz.
 - Kotlin içermeyen dosyalar clangd'ye oldukları gibi gider.
 
-Derlemeyi, `kompoz_compose` kullanan bir CMake derlemesinin yazdığı `compile_commands.json` ve `kompozc_commands.json` dosyalarından bulur (Kompoz `CMAKE_EXPORT_COMPILE_COMMANDS`'ı açar; kendi projenizde de açın): dosyanın dizininde ya da üstündekilerden birinde, ya da oradaki `build/` veya CLion'un `cmake-build-debug/`'ı gibi bir dizinde. Tanımadığı argümanlar clangd'nindir; `--clangd YOL` başlatılacak clangd'yi söyler. clangd olmadan da kompozc'nin kendi tanılarını verir.
+Derlemeyi, `kompozable` kullanan bir CMake derlemesinin yazdığı `compile_commands.json` ve `kompozc_commands.json` dosyalarından bulur (Kompoz `CMAKE_EXPORT_COMPILE_COMMANDS`'ı açar; kendi projenizde de açın): dosyanın dizininde ya da üstündekilerden birinde, ya da oradaki `build/` veya CLion'un `cmake-build-debug/`'ı gibi bir dizinde. Tanımadığı argümanlar clangd'nindir; `--clangd YOL` başlatılacak clangd'yi söyler. clangd olmadan da kompozc'nin kendi tanılarını verir.
 
 **VS Code** (clangd eklentisiyle), çalışma alanının `.vscode/settings.json` dosyasında:
 
@@ -31,7 +31,7 @@ Derlemeyi, `kompoz_compose` kullanan bir CMake derlemesinin yazdığı `compile_
 }
 ```
 
-**CLion**: Kompoz'un `editors/clion` içindeki eklentisi, Compose kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). Onu kendi CLion'unuza karşı derleyin ve `build/distributions/` içindeki arşivi diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur). Gradle bir JDK ister; CLion'un kendi `jbr/` dizinindeki yeter:
+**CLion**: Kompoz'un `editors/clion` içindeki eklentisi, Kotlin kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). Onu kendi CLion'unuza karşı derleyin ve `build/distributions/` içindeki arşivi diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur). Gradle bir JDK ister; CLion'un kendi `jbr/` dizinindeki yeter:
 
 ```bash
 cd editors/clion && JAVA_HOME=/yol/clion/jbr ./gradlew buildPlugin -PclionPath=/yol/clion
@@ -44,15 +44,15 @@ kompozc'yi Ayarlar, Araçlar, Kompoz'da; yoksa `KOMPOZC`'de; yoksa projede derle
 Compose'un `@Preview`'ı gibi, bir önizleme tek bir composable'ı uygulamanın geri kalanı olmadan, seçtiğiniz boyutta bir çerçevede tek başına gösterir. Onu composable'ın yanına, uygulamanızın kaynaklarına yazın:
 
 ```kotlin
-#! @Composable fun CounterCard() {}
+#! @Kompozable fun CounterCard() {}
 @Preview(widthDp = 400, heightDp = 220)
-@Composable
+@Kompozable
 fun CounterCardPreview() {
     MaterialTheme(colorScheme = lightColorScheme()) { CounterCard() }
 }
 
 @Preview(widthDp = 400, heightDp = 220, uiMode = Configuration.UI_MODE_NIGHT_YES)
-@Composable
+@Kompozable
 fun CounterCardDarkPreview() {
     MaterialTheme(colorScheme = darkColorScheme()) { CounterCard() }
 }
@@ -136,12 +136,12 @@ Arayüzü hiç pencere açmadan kontrol eden testler için [Test](testing.md) sa
 
 ## Recomposition'ı görmek
 
-`Modifier.recomposeHighlighter()`, Compose snippet'lerindeki highlighter gibi, bir düğümün çevresine onu oluşturan composable'ın kaç kez çalıştığını gösteren bir çerçeve çizer: olması gerekenden sık yeniden kompoze olan şeyi bulmak için kullanın.
+`Modifier.rekompozHighlighter()`, Compose snippet'lerindeki highlighter gibi, bir düğümün çevresine onu oluşturan composable'ın kaç kez çalıştığını gösteren bir çerçeve çizer: olması gerekenden sık yeniden kompoze olan şeyi bulmak için kullanın.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Row1(title: String) {
-    Text(title, modifier = Modifier.recomposeHighlighter())
+    Text(title, modifier = Modifier.rekompozHighlighter())
 }
 ```
 

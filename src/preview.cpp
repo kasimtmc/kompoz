@@ -15,7 +15,7 @@ std::vector<Preview>& previews() {
 
 void PreviewFrame(const Preview& preview) {
     const PreviewSpec& spec = preview.spec;
-    CompositionLocalProvider({LocalSystemDarkTheme.provides(spec.darkTheme.value_or(isSystemInDarkTheme()))}, [&] {
+    KompozitionLocalProvider({LocalSystemDarkTheme.provides(spec.darkTheme.value_or(isSystemInDarkTheme()))}, [&] {
         Modifier frame = Modifier().size(spec.width, spec.height);
         if (spec.background) frame = frame.background(*spec.background);
         detail::Box(frame.clipToBounds(), [&] { preview.content(); });

@@ -21,7 +21,7 @@ For scrolling content, use the scroll modifiers or a lazy list (see [Lists and g
 `Modifier.draggable(state, orientation)` reports drags along one axis, as deltas in dp. It doesn't move anything itself: move what you want, typically with an offset read during layout:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Slider1D() {
     var x by remember { mutableStateOf(0f) }
     Box(modifier = Modifier.fillMaxWidth().height(56.dp)) {
@@ -43,7 +43,7 @@ fun Slider1D() {
 ```kotlin
 enum class DragValue { Start, End }
 
-@Composable
+@Kompozable
 fun Toggle() {
     val state = rememberAnchoredDraggableState(DragValue.Start)
     state.updateAnchors(DraggableAnchors {
@@ -67,7 +67,7 @@ fun Toggle() {
 `transformable` turns multi-touch gestures into zoom, pan and rotation changes. Ctrl+wheel and touchpad pinches zoom too:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ZoomableImage() {
     var scale by remember { mutableStateOf(1f) }
     val state = rememberTransformableState { zoom, _, _ -> scale = (scale * zoom).coerceIn(1f, 5f) }
@@ -83,7 +83,7 @@ fun ZoomableImage() {
 For gestures of your own, `Modifier.pointerInput(key) { }` runs a coroutine that receives the node's pointer events. The gesture detectors run inside it:
 
 ```kotlin
-@Composable
+@Kompozable
 fun TapTarget() {
     var last by remember { mutableStateOf("Nothing yet") }
     Box(modifier = Modifier.size(200.dp).background(MaterialTheme.colorScheme.secondaryContainer)
@@ -105,7 +105,7 @@ fun TapTarget() {
 The block restarts when `key` changes, so give it a key that captures what it depends on. For lower-level work, `awaitPointerEvent()` (in the block: Compose's `awaitPointerEventScope { }` is implicit here) gives each event with every pointer's change; consume a change (`change.consume()`) so that scrolling and clicks around it leave it alone. `awaitEachGesture` and `waitForUpOrCancellation` help structure a gesture, and `VelocityTracker` measures how fast a finger moved when it lifted, for a fling.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Drawing() {
     val points = remember { mutableStateListOf<Offset>() }
     val ink = MaterialTheme.colorScheme.onSurface
@@ -150,7 +150,7 @@ Keyboard focus is shown, as in Compose Material 3, by the component's focus stat
 ## Hover and the mouse
 
 ```kotlin
-@Composable
+@Kompozable
 fun HoverCard() {
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
@@ -165,7 +165,7 @@ fun HoverCard() {
 Compose Multiplatform's desktop APIs are here with their names: `onPointerEvent(type) { event -> }` for the mouse coming in and out, moving, pressing and the wheel (`event.changes.first().consume()` keeps the wheel from scrolling the page), `onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) { }` and `onClick(keyboardModifiers = { it.isCtrlPressed }) { }` for clicks by button or with keys held, `ContextMenuArea` for a menu of your own on a right click, and `TooltipArea` for a tooltip that follows the mouse:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DesktopMouse() {
     var last by remember { mutableStateOf("-") }
     Column {
@@ -183,7 +183,7 @@ fun DesktopMouse() {
 A window's menus are Compose Multiplatform's `MenuBar { Menu("…") { … } }`, drawn as a strip at the top of the content: `Item`, `CheckboxItem`, `RadioButtonItem`, `Separator` and submenus, each with a `KeyShortcut` that works while the window has the keys (key names as Compose's: `Key.DirectionLeft`):
 
 ```kotlin
-@Composable
+@Kompozable
 fun Menus() {
     var dark by remember { mutableStateOf(false) }
     var size by remember { mutableStateOf(1) }
@@ -210,7 +210,7 @@ fun Menus() {
 A `MutableInteractionSource` is told of the presses, hovers, focus and drags of the components it is given to. Read whether one is going on with `collectIsPressedAsState()`, `collectIsHoveredAsState()`, `collectIsFocusedAsState()` and `collectIsDraggedAsState()` (read with `by`); they recompose when it changes.
 
 ```kotlin
-@Composable
+@Kompozable
 fun PressToRecord() {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
@@ -225,7 +225,7 @@ fun PressToRecord() {
 `dragAndDropSource` starts a drag with data; `dragAndDropTarget` accepts drops, from inside the app or, on the desktop, files from outside it:
 
 ```kotlin
-@Composable
+@Kompozable
 fun DropZone() {
     var dropped by remember { mutableStateOf("Drop text here") }
     Column {

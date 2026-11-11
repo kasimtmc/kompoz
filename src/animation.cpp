@@ -252,7 +252,7 @@ AnimationSpec infiniteRepeatable(AnimationSpec spec, RepeatMode mode) {
 
 
 float detail::DrawClock::millis(const LayoutNode& node) const {
-    ComposeHost* host = node.host();
+    KompozHost* host = node.host();
     if (!host) return 0;
     host->requestRedraw();
     return float(std::max<int64_t>(0, host->frameTime() - start_)) / 1e6f;
@@ -263,13 +263,13 @@ float detail::DrawClock::progress(const LayoutNode& node, const AnimationSpec& s
     return spec.progress(millis(node), finished);
 }
 
-int64_t detail::animationReadTime(ComposeHost* host) {
-    if (Composer* composer = Composer::current(); composer && composer->recording()) return composer->frameTimeNanos();
+int64_t detail::animationReadTime(KompozHost* host) {
+    if (Kompozer* kompozer = Kompozer::current(); kompozer && kompozer->recording()) return kompozer->frameTimeNanos();
     return host ? host->frameTime() : 0;
 }
 
-void detail::animationNextFrame(ComposeHost* host, int64_t end) {
-    if (Composer* composer = Composer::current(); composer && composer->recording()) composer->requestFrame();
+void detail::animationNextFrame(KompozHost* host, int64_t end) {
+    if (Kompozer* kompozer = Kompozer::current(); kompozer && kompozer->recording()) kompozer->requestFrame();
     else if (!host) return;
     else if (measuringNode()) host->requestLayoutFrame();
     else {
@@ -295,16 +295,16 @@ int64_t detail::animationEnd(const AnimationSpec& spec, int64_t start) {
     return start + int64_t(std::ceil(ms)) * 1'000'000;
 }
 
-float detail::infiniteProgress(const std::shared_ptr<int64_t>& start, const AnimationSpec& spec, ComposeHost* host) {
-    Composer* composer = Composer::current();
-    bool composing = composer && composer->recording();
+float detail::infiniteProgress(const std::shared_ptr<int64_t>& start, const AnimationSpec& spec, KompozHost* host) {
+    Kompozer* kompozer = Kompozer::current();
+    bool composing = kompozer && kompozer->recording();
     if (!composing && !host) return 0;
-    int64_t now = composing ? composer->frameTimeNanos() : host->frameTime();
+    int64_t now = composing ? kompozer->frameTimeNanos() : host->frameTime();
     if (*start < 0) *start = now;
     bool finished = false;
     float p = spec.progress(float(now - *start) / 1e6f, finished);
     if (!finished) {
-        if (composing) composer->requestFrame();
+        if (composing) kompozer->requestFrame();
         else if (measuringNode()) host->requestLayoutFrame();
         else host->requestRedraw();
     }
@@ -313,13 +313,13 @@ float detail::infiniteProgress(const std::shared_ptr<int64_t>& start, const Anim
 
 InfiniteState<float> InfiniteTransition::animateFloat(float initialValue, float targetValue, const AnimationSpec& animationSpec) const {
     InfiniteState<float> s;
-    s.start_ = start_, s.from_ = initialValue, s.to_ = targetValue, s.spec_ = animationSpec, s.host_ = &detail::Composer::require().host();
+    s.start_ = start_, s.from_ = initialValue, s.to_ = targetValue, s.spec_ = animationSpec, s.host_ = &detail::Kompozer::require().host();
     return s;
 }
 
 InfiniteState<Color> InfiniteTransition::animateColor(Color initialValue, Color targetValue, const AnimationSpec& animationSpec) const {
     InfiniteState<Color> s;
-    s.start_ = start_, s.from_ = initialValue, s.to_ = targetValue, s.spec_ = animationSpec, s.host_ = &detail::Composer::require().host();
+    s.start_ = start_, s.from_ = initialValue, s.to_ = targetValue, s.spec_ = animationSpec, s.host_ = &detail::Kompozer::require().host();
     return s;
 }
 
@@ -339,7 +339,7 @@ struct SizeAnimation {
 
     // The size to show now, heading for `to`: the first one just appears; a new one is gone to
     // from wherever it is shown, even mid-animation. Asks for the next frame's layout while moving.
-    Size step(Size to, ComposeHost& host) {
+    Size step(Size to, KompozHost& host) {
         int64_t now = host.frameTime();
         if (current.width < 0) {
             current = target = to;
@@ -364,7 +364,7 @@ struct SizeAnimation {
 
 struct AnimateContentSizeElement final : ModifierElement {
     std::shared_ptr<SizeAnimation> anim;
-    ComposeHost* host = nullptr;
+    KompozHost* host = nullptr;
 
     Size measure(const Constraints& c, const MeasureNext& next, Offset& contentOffset) const override {
         contentOffset = {};
@@ -397,7 +397,7 @@ struct BoundsAnimation {
 
 struct AnimateBoundsElement final : ModifierElement {
     std::shared_ptr<BoundsAnimation> anim;
-    ComposeHost* host = nullptr;
+    KompozHost* host = nullptr;
 
     Size measure(const Constraints& c, const MeasureNext& next, Offset& contentOffset) const override {
         contentOffset = {};
@@ -461,7 +461,7 @@ Modifier Modifier::animateBounds(const AnimationSpec& spec, CallSite site) const
     auto e = std::make_shared<AnimateBoundsElement>();
     e->anim = remember([] { return std::make_shared<BoundsAnimation>(); }, site);
     e->anim->spec = spec;
-    e->host = &detail::Composer::require().host();
+    e->host = &detail::Kompozer::require().host();
     return then(std::move(e));
 }
 
@@ -473,7 +473,7 @@ Modifier Modifier::animateContentSize(const AnimationSpec& spec, CallSite site) 
     auto e = std::make_shared<AnimateContentSizeElement>();
     e->anim = remember([] { return std::make_shared<SizeAnimation>(); }, site);
     e->anim->spec = spec;
-    e->host = &detail::Composer::require().host();
+    e->host = &detail::Kompozer::require().host();
     return then(std::move(e));
 }
 

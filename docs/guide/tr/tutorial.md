@@ -2,14 +2,14 @@
 
 Küçük bir uygulamayı adım adım kurun: metin, yerleşim, durum, kayan bir liste ve Material 3 stili. Her adım bir öncekine biraz daha ekler.
 
-Bu eğitim, Kompoz'u bir kez derlediğinizi ve `kompoz_compose` ile kendi CMake projenize eklediğinizi varsayar ([Kurulum](setup.md) sayfasına bakın). Her kod parçası eksiksizdir: `main.cpp`'nize, `#include <kompoz/kompoz.hpp>` ve `using namespace kompoz;`'dan sonra kopyalayın.
+Bu eğitim, Kompoz'u bir kez derlediğinizi ve `kompozable` ile kendi CMake projenize eklediğinizi varsayar ([Kurulum](setup.md) sayfasına bakın). Her kod parçası eksiksizdir: `main.cpp`'nize, `#include <kompoz/kompoz.hpp>` ve `using namespace kompoz;`'dan sonra kopyalayın.
 
 ## Adım 1: bir composable fonksiyon
 
-Bir Kompoz uygulaması *composable fonksiyonlardan* oluşur: başka composable'ları çağırarak arayüzün bir parçasını tarif eden, `@Composable` ile işaretlenmiş fonksiyonlar. Kotlin'deki gibi, `.cpp` dosyanızda yazılırlar. En basiti `Text`'tir.
+Bir Kompoz uygulaması *composable fonksiyonlardan* oluşur: başka composable'ları çağırarak arayüzün bir parçasını tarif eden, `@Kompozable` ile işaretlenmiş fonksiyonlar. Kotlin'deki gibi, `.cpp` dosyanızda yazılırlar. En basiti `Text`'tir.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Greeting(name: String) {
     Text("Merhaba, $name!")
 }
@@ -30,7 +30,7 @@ Art arda konan composable'lar, nasıl dizileceklerini söylemezseniz üst üste 
 ```kotlin
 data class Message(val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun MessageCard(msg: Message) {
     Row(modifier = Modifier.padding(8.dp)) {
         Icon(Icons.Filled.AccountCircle, contentDescription = "Profil resmi", modifier = Modifier.size(40.dp))
@@ -53,7 +53,7 @@ fun MessageCard(msg: Message) {
 Hiç değişmeyen bir arayüz pek uygulama sayılmaz. Kompoz, bir composable'ın okuduğu bir *durum* değişince onu yeniden çizer. `mutableStateOf` bir durum oluşturur; `remember` onu recomposition'lar boyunca saklar, böylece fonksiyon her çalıştığında yeniden oluşturulmaz.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
 
@@ -77,12 +77,12 @@ Daha fazlası için [Durum](state.md) sayfasına bakın.
 ```kotlin
 data class Message(val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun MessageCard(msg: Message) {
     Text("${msg.author}: ${msg.body}")
 }
 
-@Composable
+@Kompozable
 fun Conversation(messages: List<Message>) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(messages) { message ->
@@ -99,7 +99,7 @@ Blok, Compose'da `LazyColumn`'un alıcısının yaptığı gibi öğeleri tarif 
 ```kotlin
 data class Message(val id: Int, val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun Conversation(messages: List<Message>) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(messages, key = { it.id }) { message ->
@@ -118,19 +118,19 @@ Kompoz, Compose Material 3 gibi Material 3'ü uygular. `MaterialTheme` içindeki
 ```kotlin
 data class Message(val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun Conversation(messages: List<Message>) {
     LazyColumn { items(messages) { Text("${it.author}: ${it.body}") } }
 }
 
-@Composable
+@Kompozable
 fun ConversationScreen(messages: List<Message>) {
     Scaffold(topBar = { TopAppBar(title = { Text("Mesajlar") }) }) { padding ->
         Box(modifier = Modifier.padding(padding)) { Conversation(messages) }
     }
 }
 
-@Composable
+@Kompozable
 fun TutorialApp() {
     val messages = remember { listOf(Message("Ada", "Merhaba!"), Message("Linus", "Selam Ada.")) }
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
@@ -152,7 +152,7 @@ Her mesajı, tıklanınca metninin tamamını gösteren bir kart yapalım. Açı
 ```kotlin
 data class Message(val author: String, val body: String)
 
-@Composable
+@Kompozable
 fun MessageCard(msg: Message) {
     var expanded by remember { mutableStateOf(false) }
 

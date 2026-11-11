@@ -21,7 +21,7 @@ Her düğüm bir geçişte bir kez ölçülür, bu yüzden ağaç ne kadar derin
 - `Box` onları üst üste yığar.
 
 ```kotlin
-@Composable
+@Kompozable
 fun ProfileHeader(name: String, handle: String) {
     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
@@ -168,9 +168,9 @@ Bu, her çocuğu kompoze eder. Uzun ya da sonu olmayan içerik için onun yerine
 Kesin boyutlara göre değil, pencerenin boyut sınıfına göre yerleşim yapın. `currentWindowAdaptiveInfo()`, Compose'un adaptive kütüphanesinin yaptığı gibi pencerenin genişlik ve yükseklik sınıflarını verir: Compact (600 dp'den dar), Medium (840 dp'den dar) ya da Expanded.
 
 ```kotlin
-#! @Composable fun ListPane() {}
-#! @Composable fun DetailPane() {}
-@Composable
+#! @Kompozable fun ListPane() {}
+#! @Kompozable fun DetailPane() {}
+@Kompozable
 fun MailScreen() {
     val info = currentWindowAdaptiveInfo()
     if (info.windowSizeClass.windowWidthSizeClass == WindowWidthSizeClass.Expanded) {
@@ -191,9 +191,9 @@ Pencere sınıf değiştirince yeniden kompoze eder. `NavigationSuiteScaffold` b
 `mediaQuery { … }`, Compose'unki gibi, uygulamanın üzerinde çalıştığı ortamı sorar: pencerenin boyutunu, en hassas işaretçiyi, klavye olup olmadığını. `derivedMediaQuery { … }` yalnızca cevap değişince değişen bir durum verir; pencerenin boyutu için istediğiniz de budur, çünkü o, yeniden boyutlandırmanın her adımında değişir:
 
 ```kotlin
-#! @Composable fun TwoPanes() {}
-#! @Composable fun OnePane() {}
-@Composable
+#! @Kompozable fun TwoPanes() {}
+#! @Kompozable fun OnePane() {}
+@Kompozable
 fun Adaptive() {
     val wide by derivedMediaQuery { windowWidth >= 600.dp }
     if (wide) TwoPanes() else OnePane()
@@ -215,14 +215,14 @@ BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
 }
 ```
 
-Compose'unki gibi bir `SubcomposeLayout`'tur: içeriği kutu ölçülürken, aldığı kısıtlarla (ilk seferde de) kompoze edilir; kısıtlar değişince yeniden kompoze edilir.
+Compose'unki gibi bir `SubkompozLayout`'tur: içeriği kutu ölçülürken, aldığı kısıtlarla (ilk seferde de) kompoze edilir; kısıtlar değişince yeniden kompoze edilir.
 
 ### Uyarlanır bölmeler
 
 `ListDetailPaneScaffold` ve `SupportingPaneScaffold`, Compose Material 3 Adaptive'inkilerdir: dar bir pencerede bir seferde bir bölme (geri tuşu geri döner), geniş bir pencerede yan yana. Navigator'ları hangi bölmenin ve neyin gösterildiğini söyler: `navigateTo(role, key)`, `navigateBack()`. Bir `paneExpansionState` ile `paneExpansionDragHandle = { state -> VerticalDragHandle(modifier = Modifier.paneExpansionDraggable(state)) }` ayrımın sürüklenmesini sağlar.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Mail() {
     val navigator = rememberListDetailPaneScaffoldNavigator<Int>()
     val mails = listOf("Hoş geldiniz", "Fatura", "Bülten")
@@ -260,10 +260,10 @@ Scaffold { padding ->
 
 ## Sağdan sola
 
-Sistem dili sağdan sola yazılıyorsa (Arapça, İbranice, Farsça…) yerleşim yönü sağdan soladır: `Row`'lar sağdan başlar, `start` ve `end` iç boşlukları yer değiştirir ve yatay listeler sağdan kayar. `CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }` bunu ağacın bir kısmı için, `KOMPOZ_LAYOUT_DIRECTION=rtl` ise bütün uygulama için değiştirir. Çizim, `absoluteOffset` ve `absolutePadding` aynalanmaz.
+Sistem dili sağdan sola yazılıyorsa (Arapça, İbranice, Farsça…) yerleşim yönü sağdan soladır: `Row`'lar sağdan başlar, `start` ve `end` iç boşlukları yer değiştirir ve yatay listeler sağdan kayar. `KompozitionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }` bunu ağacın bir kısmı için, `KOMPOZ_LAYOUT_DIRECTION=rtl` ise bütün uygulama için değiştirir. Çizim, `absoluteOffset` ve `absolutePadding` aynalanmaz.
 
 ## Ayrıca bakın
 
 - [Modifier'lar](modifiers.md): boyut, iç boşluk ve scope modifier'ları.
-- [Özel yerleşimler](custom-layouts.md): `Layout`, intrinsic'ler ve `SubcomposeLayout`.
+- [Özel yerleşimler](custom-layouts.md): `Layout`, intrinsic'ler ve `SubkompozLayout`.
 - [Listeler ve ızgaralar](lists.md): uzun içerik için tembel yerleşimler.

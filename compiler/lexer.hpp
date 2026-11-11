@@ -1,6 +1,6 @@
 #pragma once
 
-// kompozc's tokens: the Kotlin that @Composable functions are written in, read from a C++ source.
+// kompozc's tokens: the Kotlin that @Kompozable functions are written in, read from a C++ source.
 
 #include <stdexcept>
 #include <string>
@@ -49,7 +49,7 @@ struct Token {
     bool spaceBefore = false;       // whitespace (not a newline) right before it
 };
 
-// Reads tokens from `source` starting at `start`, on demand: where a @Composable function ends
+// Reads tokens from `source` starting at `start`, on demand: where a @Kompozable function ends
 // is known only once it is parsed.
 class Lexer {
 public:

@@ -5,7 +5,7 @@
 ## Bir NavHost
 
 ```kotlin
-@Composable
+@Kompozable
 fun App() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
@@ -45,7 +45,7 @@ data class Profile(val id: String, val tab: Int? = null)   // "Profile/{id}?tab=
 @Serializable
 object Home
 
-@Composable
+@Kompozable
 fun TypedApp() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Home, modifier = Modifier.fillMaxSize()) {
@@ -95,7 +95,7 @@ object HomeTab
 @Serializable
 object SettingsTab
 
-@Composable
+@Kompozable
 fun Tabs(nav: NavController) {
     val entry by nav.currentBackStackEntryAsState()
     val inSettings = entry?.destination?.hierarchy?.any { it.hasRoute<SettingsTab>() } == true
@@ -123,7 +123,7 @@ nav.navigate("home") { popUpTo("login") { inclusive = true } }
 `nav.currentBackStackEntryAsState()` en üstteki girdiyi döndürür ve o değiştiğinde yeniden kompoze eder: bir gezinme çubuğunun seçili öğesini vurgulamak için kullanın.
 
 ```kotlin
-@Composable
+@Kompozable
 fun BottomBar(nav: NavController) {
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
@@ -146,7 +146,7 @@ Birbirine ait ekranlar, örneğin bir oturum açma akışı, kendi rotası olan 
 
 ```kotlin
 #! class LoginViewModel : ViewModel() { val user = MutableStateFlow("") }
-@Composable
+@Kompozable
 fun Graphs(nav: NavController) {
     NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
         composable("home") {
@@ -212,7 +212,7 @@ Varsayılan, bir çapraz geçiştir (cross-fade).
 `BackHandler(enabled, onBack)`, `enabled` olduğu sürece geri butonunu, hareketini ya da Escape'i üstlenir; en son kompoze edilen etkin olan kazanır. Ekrandan önce kapanması gereken şeyler için kullanın, örneğin bir seçim modu:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Selectable() {
     var selecting by remember { mutableStateOf(false) }
     BackHandler(enabled = selecting) { selecting = false }

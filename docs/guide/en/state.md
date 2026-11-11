@@ -22,7 +22,7 @@ With `var x by mutableStateOf(…)` (or `by remember { mutableStateOf(…) }`), 
 A state is shared: copies of it see the same value, so a lambda that captures it (by value, as every lambda does here) reads and writes the same state:
 
 ```kotlin
-@Composable
+@Kompozable
 fun NameField() {
     var name by remember { mutableStateOf("") }
     OutlinedTextField(value = name, onValueChange = { name = it })
@@ -32,7 +32,7 @@ fun NameField() {
 A composable that only reads a state can take a `State<T>`, Compose's read-only `State`: a `MutableState<T>` or a derived state (`derivedStateOf`) converts to it. It has `value` and `peek()`, but can't be written, and compares by which state it is, so the composable is skipped when it is given the same one again:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Progress(fraction: State<Float>) {
     LinearProgressIndicator(fraction.value)
 }
@@ -43,7 +43,7 @@ fun Progress(fraction: State<Float>) {
 A composable's body runs on every recomposition, so a state created in it would start over each time. `remember` keeps a value across recompositions:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }   // made once
     Button(onClick = { count++ }) { Text("$count") }
@@ -61,7 +61,7 @@ The lambda runs the first time the composable is composed; after that, `remember
 ```kotlin
 data class User(val first: String, val last: String)
 
-@Composable
+@Kompozable
 fun Greeting(user: User) {
     val fullName = remember(user.first, user.last) { "Dear ${user.first} ${user.last}" }
     Text(fullName)
@@ -103,7 +103,7 @@ struct kompoz::Saver<Point> {
     }
 };
 
-@Composable
+@Kompozable
 fun Pin() {
     val where by rememberSaveable { mutableStateOf(Point()) }
     Text("${where.x}")
@@ -124,7 +124,7 @@ const auto citySaver = mapSaver<City>(
         return name && country ? std::optional(City{*name, *country}) : std::nullopt;
     });
 
-@Composable
+@Kompozable
 fun CityScreen() {
     val city by rememberSaveable(saver = citySaver) { mutableStateOf(City("Madrid", "Spain")) }
     Text(city.name)
@@ -140,7 +140,7 @@ A value that isn't saveable is still kept by a `SaveableStateHolder`, but starts
 When a state is computed from others and changes less often than they do, wrap the computation in `derivedStateOf`. Its readers recompose only when the result changes, not on every change of its inputs:
 
 ```kotlin
-@Composable
+@Kompozable
 fun ScrollToTop() {
     val list = rememberLazyListState()
     val showButton by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
@@ -180,7 +180,7 @@ On the UI thread, states are read and written freely. Another thread may write t
 `mutableStateListOf` and `mutableStateMapOf` are observable containers, like Compose's `SnapshotStateList` and `SnapshotStateMap`. Reading one subscribes; adding, removing or changing items recomposes the readers:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Tags() {
     val tags = remember { mutableStateListOf("red", "green") }
     Column {
@@ -206,13 +206,13 @@ A composable that holds its own state is easy to use but hard to control from ou
 
 ```kotlin
 // Stateless: shows `name`, reports edits. Easy to reuse, preview and test.
-@Composable
+@Kompozable
 fun NameInput(name: String, onNameChange: (String) -> Unit) {
     OutlinedTextField(value = name, onValueChange = onNameChange, singleLine = true)
 }
 
 // Stateful: owns the state and hands it down.
-@Composable
+@Kompozable
 fun Profile() {
     var name by rememberSaveable { mutableStateOf("") }
     Column {
@@ -243,7 +243,7 @@ class SearchState {
     }
 }
 
-@Composable
+@Kompozable
 fun SearchScreen() {
     val search = remember { SearchState() }
     Text(search.query)

@@ -2,7 +2,7 @@
 
 #include "showcase.hpp"
 
-@Composable
+@Kompozable
 fun ComponentsScreen(modifier: Modifier) {
     // A LazyColumn, as Compose has a long list: only the sections in view (and a little past
     // them) are composed, laid out and drawn; one scrolled away leaves the composition.

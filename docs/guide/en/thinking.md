@@ -9,7 +9,7 @@ In an imperative toolkit you build a tree of widgets once and then change it as 
 In Kompoz you write functions that turn data into UI. When the data changes, the functions run again with the new data, and Kompoz works out what changed on the screen:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Inbox(unread: Int) {
     if (unread == 0) {
         Text("No new messages")
@@ -23,7 +23,7 @@ There is no step that "updates" the label: the function always describes the who
 
 ## Composable functions
 
-A composable function is a `@Composable fun` that emits UI by calling other composables:
+A composable function is a `@Kompozable fun` that emits UI by calling other composables:
 
 - It takes the data it shows as parameters.
 - It returns nothing: it *emits* UI by calling `Text`, `Row`, `Button` and so on.
@@ -32,7 +32,7 @@ A composable function is a `@Composable fun` that emits UI by calling other comp
 ```kotlin
 data class Contact(val name: String, val phone: String)
 
-@Composable
+@Kompozable
 fun ContactList(contacts: List<Contact>) {
     Column {
         for (c in contacts) {
@@ -53,12 +53,12 @@ When data changes, Kompoz runs the composables that depend on it again: this is 
 - When a parent does run, a child whose arguments are equal to last time, and that read nothing that changed, is *skipped*: it doesn't run, and its part of the screen stays as it is.
 
 ```kotlin
-@Composable
+@Kompozable
 fun NameTag(name: String) {  // skipped while `name` stays the same
     Text("Hello, $name")
 }
 
-@Composable
+@Kompozable
 fun Screen() {
     var clicks by remember { mutableStateOf(0) }
     Column {
@@ -69,7 +69,7 @@ fun Screen() {
 }
 ```
 
-`Screen` read `clicks`, so it runs again on every click. `NameTag` is a scope of its own whose argument didn't change, so it is skipped, as in Compose: every `@Composable fun` is restartable and skippable. See [Lifecycle and identity](lifecycle.md) for how scopes and skipping work.
+`Screen` read `clicks`, so it runs again on every click. `NameTag` is a scope of its own whose argument didn't change, so it is skipped, as in Compose: every `@Kompozable fun` is restartable and skippable. See [Lifecycle and identity](lifecycle.md) for how scopes and skipping work.
 
 ## Rules that follow
 
@@ -84,7 +84,7 @@ A composable may run on every frame of an animation. Keep its body fast: no file
 Running a composable should only describe UI. Writing a file, sending a request or changing a variable from inside its body happens again every time it recomposes, and in an order you don't control.
 
 ```kotlin nocheck
-@Composable
+@Kompozable
 fun Bad(counter: MutableList<Int>) {
     counter.add(1)          // runs on every recomposition: don't
     Text("${counter.size}")
@@ -106,7 +106,7 @@ Write each composable so that it doesn't depend on another having run first. Sha
 Since the UI is a function of data, changing the UI means changing data. Kompoz watches *state*, values made with `mutableStateOf` and the other state holders, and recomposes what read it:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Toggle() {
     var on by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {

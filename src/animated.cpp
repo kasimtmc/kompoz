@@ -161,7 +161,7 @@ float totalDurationMillis(const AnimationSpec& spec) {
 void animatedContentContainer(const Modifier& modifier, const std::shared_ptr<AnimatedSize>& size, const std::optional<SizeTransform>& transform,
                               int target, Alignment alignment, const Content& children) {
     Modifier m = transform && transform->clip ? modifier.clipToBounds() : modifier;
-    Composer::require().emit(
+    Kompozer::require().emit(
         keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = m;
@@ -235,8 +235,8 @@ Modifier AnimatedVisibilityScope::animateEnterExit(const EnterTransition& enter,
         std::shared_ptr<detail::TransitionProgress> clock = std::make_shared<detail::TransitionProgress>();
         std::shared_ptr<bool> leaving = std::make_shared<bool>(false);
     };
-    ComposableScope scope(site);
-    auto& c = detail::Composer::require();
+    KompozableScope scope(site);
+    auto& c = detail::Kompozer::require();
     int64_t now = c.frameTimeNanos();
     detail::VisibilityState& parent = *state_;
     const auto& parts = parent.visible ? enter.parts : exit.parts;
@@ -315,14 +315,14 @@ void animatedVisibility(bool visible, bool initiallyVisible, const std::shared_p
                         const Modifier& modifier, const EnterTransition& enterTransition, const ExitTransition& exitTransition,
                         const std::function<void(const AnimatedVisibilityScope&)>& content) {
     const auto& parts = visible ? enterTransition.parts : exitTransition.parts;
-    auto& composer = detail::Composer::require();
-    int64_t now = composer.frameTimeNanos();
+    auto& kompozer = detail::Kompozer::require();
+    int64_t now = kompozer.frameTimeNanos();
     // Its progress, worked out here when it turns and gets there, read on the way where it is
     // used (as the content is laid out and drawn).
     auto clock = remember([&] {
         auto made = std::make_shared<detail::TransitionProgress>();
         made->from = made->to = initiallyVisible ? 1.f : 0.f;
-        made->host = &composer.host();
+        made->host = &kompozer.host();
         return made;
     });
     if (clock->to != (visible ? 1.f : 0.f)) clock->turn(visible ? 1.f : 0.f, parts.spec.value_or(defaultVisibilitySpec()), now);
@@ -345,14 +345,14 @@ void animatedVisibility(bool visible, bool initiallyVisible, const std::shared_p
             tell(true);
             return;
         }
-        composer.requestFrame();
+        kompozer.requestFrame();
     }
     tell(visible && done);
     if (visible && !state->composed && state->started) state->shownAt = now;  // coming (back) in
     state->composed = state->started = true;
     state->visible = visible;
     state->running = visible ? !done : true;
-    if (!done) composer.requestFrameAt(clock->end);  // composed again when it gets there
+    if (!done) kompozer.requestFrameAt(clock->end);  // composed again when it gets there
     Modifier m = done ? parts.apply(modifier, progress) : parts.apply(modifier, detail::live(clock));
     detail::Box(visible ? m : detail::ignoringInput(m), [&] { content(AnimatedVisibilityScope(state)); });
 }
@@ -362,7 +362,7 @@ void animatedVisibility(bool visible, bool initiallyVisible, const std::shared_p
 void detail::AnimatedVisibility(bool visible, const Modifier& modifier, const EnterTransition& enterTransition,
                                 const ExitTransition& exitTransition, const std::function<void(const AnimatedVisibilityScope&)>& content,
                                 CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     animatedVisibility(visible, visible, nullptr, modifier, enterTransition, exitTransition, content);
 }
 
@@ -373,7 +373,7 @@ void detail::AnimatedVisibility(const MutableTransitionState<bool>& visibleState
 
 void detail::AnimatedVisibility(const MutableTransitionState<bool>& visibleState, const Modifier& modifier, const EnterTransition& enter,
                                 const ExitTransition& exit, const std::function<void(const AnimatedVisibilityScope&)>& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const auto& d = visibleState.data_;
     animatedVisibility(d->target.get(), d->current.peek(), d, modifier, enter, exit, content);
 }

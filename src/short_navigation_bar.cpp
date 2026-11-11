@@ -16,7 +16,7 @@ namespace {
 constexpr float kBarHeight = 64;
 
 // The bar's arrangement, for its items to lay themselves out by.
-const CompositionLocal<ShortNavigationBarArrangement> LocalShortNavigationBarArrangement{ShortNavigationBarArrangement::EqualWeight};
+const KompozitionLocal<ShortNavigationBarArrangement> LocalShortNavigationBarArrangement{ShortNavigationBarArrangement::EqualWeight};
 
 // Grows from the middle as `shown` goes from 0 to 1 (read as it is drawn).
 Modifier indicator(const Modifier& modifier, Color color, const AnimatedState<float>& shown) {
@@ -30,7 +30,7 @@ Modifier indicator(const Modifier& modifier, Color color, const AnimatedState<fl
 } // namespace
 
 void detail::ShortNavigationBar(const Modifier& modifier, const Content& content, const ShortNavigationBarOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     ShortNavigationBarArrangement arrangement = options.arrangement.value_or(
         currentWindowAdaptiveInfo().windowSizeClass.isWidthAtLeastBreakpoint(600) ? ShortNavigationBarArrangement::Centered
@@ -39,7 +39,7 @@ void detail::ShortNavigationBar(const Modifier& modifier, const Content& content
         options.windowInsets.value_or(detail::systemBarsForVisualComponents().only(WindowInsetsSides::Horizontal | WindowInsetsSides::Bottom)).asPaddingValues();
     Modifier m = modifier.fillMaxWidth().background(options.containerColor.value_or(cs.surfaceContainer))
                      .padding(insets.start, 0, insets.end, insets.bottom);
-    CompositionLocalProvider({LocalShortNavigationBarArrangement.provides(arrangement)}, [&] {
+    KompozitionLocalProvider({LocalShortNavigationBarArrangement.provides(arrangement)}, [&] {
         if (arrangement == ShortNavigationBarArrangement::EqualWeight) {
             detail::Row(m.height(kBarHeight), {.verticalAlignment = Alignment::CenterVertically}, content);
             return;
@@ -65,7 +65,7 @@ void detail::ShortNavigationBar(const Modifier& modifier, const Content& content
 
 void detail::ShortNavigationBarItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
                             const ShortNavigationBarItemOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     ShortNavigationBarArrangement arrangement = LocalShortNavigationBarArrangement.current();
     bool start = options.iconPosition.value_or(arrangement == ShortNavigationBarArrangement::Centered ? NavigationItemIconPosition::Start
@@ -92,8 +92,8 @@ void detail::ShortNavigationBarItem(bool selected, std::function<void()> onClick
             .clip(CircleShape)
             .indication(mapped, ripple());
     };
-    auto text = [&] { CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label); };
-    auto picture = [&] { CompositionLocalProvider({tinted(iconColor)}, icon); };
+    auto text = [&] { KompozitionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label); };
+    auto picture = [&] { KompozitionLocalProvider({tinted(iconColor)}, icon); };
     if (start) {
         detail::Box(item, Alignment::Center, [&] {
             detail::Row(pill(Modifier().height(40)).padding(16, 0), {.horizontalArrangement = Arrangement::spacedBy(4), .verticalAlignment = Alignment::CenterVertically},
@@ -134,7 +134,7 @@ WideNavigationRailState rememberWideNavigationRailState(bool initiallyExpanded, 
 
 namespace {
 
-const CompositionLocal<bool> LocalWideNavigationRailExpanded{false};
+const KompozitionLocal<bool> LocalWideNavigationRailExpanded{false};
 
 } // namespace
 
@@ -151,7 +151,7 @@ void railColumn(bool expanded, const detail::Live<float>& width, Color container
                 const Content& content, PaddingValues insets, Arrangement::Kind arrangement = Arrangement::Kind::Start) {
     const ColorScheme& cs = colorScheme();
     float spacing = expanded ? 0.f : 4.f;
-    CompositionLocalProvider({LocalWideNavigationRailExpanded.provides(expanded), LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    KompozitionLocalProvider({LocalWideNavigationRailExpanded.provides(expanded), LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
         detail::Column(modifier.fillMaxHeight()
                    .background(container, shape)
                    .padding(insets.start, insets.top, 0, insets.bottom)
@@ -176,7 +176,7 @@ void railColumn(bool expanded, const detail::Live<float>& width, Color container
 } // namespace
 
 void detail::WideNavigationRail(const Modifier& modifier, const Content& content, const WideNavigationRailOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     WideNavigationRailState state = options.state ? *options.state : rememberWideNavigationRailState();
     bool expanded = state.isExpanded();
     auto p = animateFloatAsState(expanded ? 1.f : 0.f, motionScheme().defaultSpatialSpec);
@@ -186,24 +186,24 @@ void detail::WideNavigationRail(const Modifier& modifier, const Content& content
 }
 
 void detail::ModalWideNavigationRail(const Modifier& modifier, const Content& content, const ModalWideNavigationRailOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     WideNavigationRailState state = options.state ? *options.state : rememberWideNavigationRailState();
     bool expanded = state.isExpanded();
     // Its progress worked out here as it turns and gets there, read on the way as the scrim is
     // drawn and the rail laid out.
-    auto& composer = detail::Composer::require();
-    int64_t now = composer.frameTimeNanos();
+    auto& kompozer = detail::Kompozer::require();
+    int64_t now = kompozer.frameTimeNanos();
     auto clock = remember([&] {
         auto made = std::make_shared<detail::TransitionProgress>();
         made->from = made->to = expanded ? 1.f : 0.f;
-        made->host = &composer.host();
+        made->host = &kompozer.host();
         return made;
     });
     if (clock->to != (expanded ? 1.f : 0.f)) clock->turn(expanded ? 1.f : 0.f, spring(1, 700), now);
     bool done = false;
     clock->at(now, &done);
-    if (!done) composer.requestFrameAt(clock->end);
+    if (!done) kompozer.requestFrameAt(clock->end);
     detail::Live<float> p = detail::live(clock);
     PaddingValues insets = railInsets(options.windowInsets);
     if (!options.hideOnCollapse)
@@ -237,7 +237,7 @@ void detail::ModalWideNavigationRail(const Modifier& modifier, const Content& co
 
 void detail::WideNavigationRailItem(bool selected, std::function<void()> onClick, const Content& icon, const Content& label, const Modifier& modifier,
                             const WideNavigationRailItemOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     bool expanded = options.railExpanded.value_or(LocalWideNavigationRailExpanded.current());
     auto shown = animateFloatAsState(selected ? 1.f : 0.f, motionScheme().defaultSpatialSpec);  // (as ShortNavigationBarItem's)
@@ -250,20 +250,20 @@ void detail::WideNavigationRailItem(bool selected, std::function<void()> onClick
     Modifier item = modifier.fillMaxWidth().selectable(selected, std::move(onClick), SemanticsRole::Tab,
                                                        {.enabled = options.enabled, .interactionSource = source, .indication = false});
     auto pill = [&](const Modifier& m) { return indicator(m, cs.secondaryContainer, shown).clip(CircleShape).indication(source, ripple()); };
-    auto picture = [&] { CompositionLocalProvider({tinted(iconColor)}, icon); };
+    auto picture = [&] { KompozitionLocalProvider({tinted(iconColor)}, icon); };
     if (expanded) {  // the label after the icon, the indicator round both
         detail::Box(item.height(56).padding(20, 0, 20, 0), Alignment::CenterStart, [&] {
             detail::Row(pill(Modifier().height(56)).padding(16, 0), {.horizontalArrangement = Arrangement::spacedBy(8), .verticalAlignment = Alignment::CenterVertically},
                 [&] {
                     picture();
-                    CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelLarge)}, label);
+                    KompozitionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelLarge)}, label);
                 });
         });
     } else {
         detail::Column(item.height(64), {.verticalArrangement = Arrangement::spacedBy(4, Arrangement::Kind::Center), .horizontalAlignment = Alignment::CenterHorizontally},
                [&] {
                    detail::Box(pill(Modifier().size(56, 32)), Alignment::Center, picture);
-                   CompositionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
+                   KompozitionLocalProvider({tinted(labelColor), LocalTextStyle.provides(typography().labelMedium)}, label);
                });
     }
 }

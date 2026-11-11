@@ -29,12 +29,12 @@ public:
         : d_(std::make_shared<Data>()) {
         d_->calc = std::move(calc);
         d_->equivalent = policy.equivalent;
-        if (auto* c = detail::Composer::current()) {
-            d_->composer = c;
+        if (auto* c = detail::Kompozer::current()) {
+            d_->kompozer = c;
             d_->observer = std::make_unique<detail::Scope>(*c, nullptr);
             Data* raw = d_.get();
             d_->observer->onInvalidated = [raw] {
-                if (raw->recompute()) raw->composer->invalidateReaders(raw);
+                if (raw->recompute()) raw->kompozer->invalidateReaders(raw);
             };
         }
     }
@@ -51,13 +51,13 @@ private:
         bool (*equivalent)(const T&, const T&) = nullptr;
         std::optional<T> value;
         bool valid = false;
-        detail::Composer* composer = nullptr;
+        detail::Kompozer* kompozer = nullptr;
         std::unique_ptr<detail::Scope> observer;
 
         bool recompute() {  // returns whether the value changed
             std::optional<T> next;
             if (observer)
-                composer->observeReads(*observer, [&] { next.emplace(calc()); });
+                kompozer->observeReads(*observer, [&] { next.emplace(calc()); });
             else
                 next.emplace(calc());
             bool changed = !value || !equivalent || !equivalent(*value, *next);

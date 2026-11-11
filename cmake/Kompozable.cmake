@@ -1,7 +1,7 @@
-# kompoz_compose(target): the target's C++ sources go through kompozc before the C++ compiler, so
-# their @Composable functions can be written in Compose's own syntax:
+# kompozable(target): the target's C++ sources go through kompozc before the C++ compiler, so
+# their @Kompozable functions can be written in Kotlin's syntax:
 #
-#   @Composable
+#   @Kompozable
 #   fun Greeting(name: String, modifier: Modifier = Modifier) {
 #       Text("Merhaba $name", modifier = modifier.padding(16.dp))
 #   }
@@ -85,19 +85,19 @@ function(_kompoz_json_strings out)
     list(JOIN items ", " joined)
     set(${out} "[${joined}]" PARENT_SCOPE)
 endfunction()
-# kompozc_commands.json, once every kompoz_compose of the project has added its sources.
+# kompozc_commands.json, once every kompozable of the project has added its sources.
 function(_kompoz_write_commands)
-    get_property(entries GLOBAL PROPERTY KOMPOZ_COMPOSE_COMMANDS)
+    get_property(entries GLOBAL PROPERTY KOMPOZ_KOMPOZABLE_COMMANDS)
     file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/kompozc_commands.json CONTENT "[\n${entries}\n]\n")
 endfunction()
 
-function(kompoz_compose target)
+function(kompozable target)
     kompoz_kompozc(kompozc kompozc_depends)
     get_target_property(sources ${target} SOURCES)
     get_target_property(source_dir ${target} SOURCE_DIR)
     set(out_dir ${CMAKE_CURRENT_BINARY_DIR}/${target}.kompozc)
     set(translated)
-    # The module: every C++ source of the target, whose @Composable functions and data classes the
+    # The module: every C++ source of the target, whose @Kompozable functions and data classes the
     # others call as Kotlin calls them across files.
     set(module)
     foreach(source IN LISTS sources)
@@ -140,20 +140,20 @@ function(kompoz_compose target)
             _kompoz_json_strings(headers_json "${KOMPOZ_HEADERS_DIR}")
             _kompoz_json_strings(includes_json ${include_list})
             _kompoz_json_strings(modules_json ${module})
-            get_property(entries GLOBAL PROPERTY KOMPOZ_COMPOSE_COMMANDS)
+            get_property(entries GLOBAL PROPERTY KOMPOZ_KOMPOZABLE_COMMANDS)
             if(entries)
-                set_property(GLOBAL APPEND_STRING PROPERTY KOMPOZ_COMPOSE_COMMANDS ",\n")
+                set_property(GLOBAL APPEND_STRING PROPERTY KOMPOZ_KOMPOZABLE_COMMANDS ",\n")
             endif()
-            set_property(GLOBAL APPEND_STRING PROPERTY KOMPOZ_COMPOSE_COMMANDS
+            set_property(GLOBAL APPEND_STRING PROPERTY KOMPOZ_KOMPOZABLE_COMMANDS
                 "  {\"source\": ${source_json}, \"output\": ${output_json}, \"headers\": ${headers_json}, \"includes\": ${includes_json}, \"modules\": ${modules_json}}")
         else()
             list(APPEND translated ${source})
         endif()
     endforeach()
     set_property(TARGET ${target} PROPERTY SOURCES ${translated})
-    get_property(scheduled GLOBAL PROPERTY KOMPOZ_COMPOSE_COMMANDS_SCHEDULED)
+    get_property(scheduled GLOBAL PROPERTY KOMPOZ_KOMPOZABLE_COMMANDS_SCHEDULED)
     if(NOT scheduled)
-        set_property(GLOBAL PROPERTY KOMPOZ_COMPOSE_COMMANDS_SCHEDULED ON)
+        set_property(GLOBAL PROPERTY KOMPOZ_KOMPOZABLE_COMMANDS_SCHEDULED ON)
         cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL _kompoz_write_commands)
     endif()
 endfunction()

@@ -32,7 +32,7 @@ web); bütün araç zincirlerinin sizde kurulu olması gerekmez.
 ## Değişiklik yaparken
 
 - **Değişiklikle birlikte test.** Bir düzeltme, onsuz başarısız olan bir testle gelir; bir özellik, yaptığını
-  sınayan testlerle. `kompoz::testing::ComposeTestRule` kompozisyonları pencere olmadan çalıştırır (bkz.
+  sınayan testlerle. `kompoz::testing::KompozTestRule` kompozisyonları pencere olmadan çalıştırır (bkz.
   [Test](docs/guide/tr/testing.md)).
 - **Çevresindeki koda uyun**: adlandırmasına, yorumlarına, biçimine. Değiştirmediğiniz kodu yeniden biçimlendirmeyin.
 - **Her commit'te bir değişiklik**, neyin neden değiştiğini söyleyen bir mesajla: kısa bir ilk satır, sonra ayrıntılar.
@@ -52,7 +52,7 @@ CI, Kompoz'u macOS'ta derliyor, testlerini çalıştırıyor ve orada bir uygula
 
 - Showcase'i bir Mac'te kullanıp çalışmayanları düzeltmek (girdi, metin girişi, fontlar, Retina ölçeği, koyu mod).
 - Bir iOS derlemesi: `examples/showcase/android`'deki Android kurulumu gibi bir Xcode projesi ya da CMake kurulumu.
-- Ekran okuyucular: semantik ağaçtan (`ComposeHost::semanticsTree`) NSAccessibility'ye (macOS) ve UIAccessibility'ye
+- Ekran okuyucular: semantik ağaçtan (`KompozHost::semanticsTree`) NSAccessibility'ye (macOS) ve UIAccessibility'ye
   (iOS) bir köprü; `platform/linux/atspi_bridge.cpp` ve `platform/windows/uia_bridge.cpp` gibi, onlarınki gibi
   `tests/platform_tests*.cpp` testleriyle.
 

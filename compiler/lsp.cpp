@@ -1,4 +1,4 @@
-// kompozc --lsp: a language server for C++ sources with @Composable functions in Compose's
+// kompozc --lsp: a language server for C++ sources with @Kompozable functions in Kotlin's
 // syntax. It stands in front of clangd: a plain C++ file goes to clangd as it is; one with Kotlin
 // goes to clangd as C++ tools can read it (maskedView: the Kotlin blanked, what C++ needs of it
 // on its first line), and its translation goes to clangd too, under the translated file's own
@@ -386,7 +386,7 @@ struct Lines {
 
 // ---- The build's commands ---------------------------------------------------------------------
 
-// How the build translates a source (kompozc_commands.json, written by kompoz_compose).
+// How the build translates a source (kompozc_commands.json, written by kompozable).
 struct Translation {
     std::string output;  // the translated file, the compile command's
     std::vector<std::string> headers, includes, modules;
@@ -883,7 +883,7 @@ private:
             auto it = docs_.find(uri);
             if (it == docs_.end() || !it->second.kotlin) continue;
             Doc& doc = it->second;
-            if (!doc.translation) {  // (not a source of a kompoz_compose target the build knows: its errors alone)
+            if (!doc.translation) {  // (not a source of a kompozable target the build knows: its errors alone)
                 publish(doc);
                 continue;
             }

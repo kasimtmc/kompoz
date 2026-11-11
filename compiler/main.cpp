@@ -1,5 +1,5 @@
-// kompozc: Kompoz's compiler for Compose code in C++ sources. Each @Composable function in a
-// .cpp file is written in Compose's own syntax (Kotlin's); kompozc rewrites it into the C++ the
+// kompozc: Kompoz's compiler for Kotlin code in C++ sources. Each @Kompozable function in a
+// .cpp file is written in Kotlin's syntax; kompozc rewrites it into the C++ the
 // Kompoz library is written in, before the C++ compiler sees the file, the way Compose's compiler
 // plugin rewrites Kotlin. Everything else in the file is C++ and passes through as it is.
 //
@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
     structs.readText(src);  // (the source's own; its Kotlin has no `struct X {`)
     std::string result;
     try {
-        // The module's other sources (the target's): their @Composable functions and data classes
+        // The module's other sources (the target's): their @Kompozable functions and data classes
         // are called here as Kotlin calls them across files.
         std::vector<OtherSource> others = readOthers(moduleSources, fs::path(input));
         result = masked ? maskedView(src, scan(src), structs) : translate(src, fs::path(input), lineFile, structs, others);

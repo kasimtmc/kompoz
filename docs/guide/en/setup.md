@@ -22,7 +22,7 @@ cmake --build build -j
 ./build/showcase
 ```
 
-This builds the core library (`kompoz_core`), the platform layer apps run on (`kompoz_app`), kompozc (the compiler that turns the Compose code in your `.cpp` files into C++), the showcase app, and the headless tests (`./build/kompoz_tests`, `./build/kompoz_compose_tests`).
+This builds the core library (`kompoz_core`), the platform layer apps run on (`kompoz_app`), kompozc (the compiler that turns the Kotlin code in your `.cpp` files into C++), the showcase app, and the headless tests (`./build/kompoz_tests`, `./build/kompozable_tests`).
 
 Useful options:
 
@@ -32,14 +32,14 @@ Useful options:
 | `KOMPOZ_BUILD_EXAMPLES` | `ON` | Build the showcase. |
 | `KOMPOZ_BUILD_TESTS` | `ON` (`OFF` on Android, iOS and the web) | Build the headless tests. |
 | `KOMPOZ_VENDORED_DEPS` | `ON` on Android, iOS, the web and Windows | Build FreeType, HarfBuzz, zlib and libpng from `third_party/` instead of using the system's. |
-| `KOMPOZ_BUILD_COMPILER` | `ON` (`OFF` when cross-compiling) | Build kompozc with Kompoz. Where it's off, `kompoz_compose` builds it for the machine that builds. |
+| `KOMPOZ_BUILD_COMPILER` | `ON` (`OFF` when cross-compiling) | Build kompozc with Kompoz. Where it's off, `kompozable` builds it for the machine that builds. |
 | `KOMPOZC` | empty | A kompozc of yours to use instead (one built from `compiler/`, or an installed one). |
 
 On desktops that have lld, Kompoz links with it unless you chose another linker: about one second instead of GNU ld's twenty-five for the showcase.
 
 ## Use Kompoz in your project
 
-Add Kompoz as a subdirectory, a clone or a git submodule, link its platform layer, `kompoz::app`, which brings the program's entry point, and give your target to `kompoz_compose`, so that its composables can be written in Compose's syntax.
+Add Kompoz as a subdirectory, a clone or a git submodule, link its platform layer, `kompoz::app`, which brings the program's entry point, and give your target to `kompozable`, so that its composables can be written in Kotlin's syntax.
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
@@ -52,11 +52,11 @@ add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
-kompoz_compose(myapp)           # its sources through kompozc: @Composable functions in Compose's syntax
+kompozable(myapp)           # its sources through kompozc: @Kompozable functions in Kotlin's syntax
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 ```
 
-`kompoz_compose` runs kompozc on the target's sources before the C++ compiler, as Compose's compiler plugin rewrites Kotlin: call it after the target's sources are all added. `kompoz_copy_assets` copies what every app ships, the bundled Noto Sans fonts and the licenses, next to your binary each time it is built.
+`kompozable` runs kompozc on the target's sources before the C++ compiler, as Compose's compiler plugin rewrites Kotlin: call it after the target's sources are all added. `kompoz_copy_assets` copies what every app ships, the bundled Noto Sans fonts and the licenses, next to your binary each time it is built.
 
 Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's FreeType,
 HarfBuzz and libpng, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
@@ -72,7 +72,7 @@ cmake --install kompoz/build --prefix ~/.local
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, if that isn't searched already
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
-kompoz_compose(myapp)
+kompozable(myapp)
 kompoz_copy_assets(myapp)
 ```
 
@@ -91,10 +91,10 @@ libcurl (Windows, Android and the web have their own). Each is used when found; 
 `CURL`) requires it, `OFF` leaves it out. vcpkg's features `jpeg`, `webp`, `curl` and Conan's options `with_jpeg`,
 `with_webp`, `with_curl` (all on by default) are the same.
 
-Your `main.cpp` has your composables, in Compose's syntax, and defines `kompoz::createApplication` instead of `main`:
+Your `main.cpp` has your composables, in Kotlin's syntax, and defines `kompoz::createApplication` instead of `main`:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
 
@@ -113,7 +113,7 @@ All of Kompoz is in one header, `#include <kompoz/kompoz.hpp>`, and in the `komp
 
 ### kompozc
 
-kompozc runs on the machine that builds. Built for that machine, Kompoz builds it with itself; built for another (Android, the web), `kompoz_compose` builds it on its own from `compiler/`, with this machine's C++ compiler, the first time it is needed. Where there is no such compiler (Android Studio on Windows without Visual Studio's), set `KOMPOZC` to a kompozc built elsewhere from Kompoz's `compiler/` (`cmake -S kompoz/compiler -B build-kompozc && cmake --build build-kompozc`) or installed with Kompoz.
+kompozc runs on the machine that builds. Built for that machine, Kompoz builds it with itself; built for another (Android, the web), `kompozable` builds it on its own from `compiler/`, with this machine's C++ compiler, the first time it is needed. Where there is no such compiler (Android Studio on Windows without Visual Studio's), set `KOMPOZC` to a kompozc built elsewhere from Kompoz's `compiler/` (`cmake -S kompoz/compiler -B build-kompozc && cmake --build build-kompozc`) or installed with Kompoz.
 
 ### The Application
 

@@ -26,7 +26,7 @@ constexpr float kMinFlingSpeed = 150;  // dp/s
 constexpr int64_t kTapTimeoutNanos = 100000000;  // Android ViewConfiguration.getTapTimeout(): a press in a scrollable shows after it
 
 std::mutex gMutex;
-std::vector<ComposeHost*> gHosts;
+std::vector<KompozHost*> gHosts;
 bool gKeepCheck = false;  // (detail::setKeepCheck: the tests'; an app's platform checks its own frames, KOMPOZ_KEEP_CHECK)
 int gKeepMismatches = 0;
 std::vector<std::function<void()>> gTasks;
@@ -151,7 +151,7 @@ void detail::requestLayout() {
 }
 
 void runOnUiThread(std::function<void()> task) {
-    std::vector<ComposeHost*> hosts;
+    std::vector<KompozHost*> hosts;
     {
         std::lock_guard lock(gMutex);
         gTasks.push_back(std::move(task));
@@ -160,16 +160,16 @@ void runOnUiThread(std::function<void()> task) {
     for (auto* host : hosts) host->wake();
 }
 
-ComposeHost::ComposeHost(TextMeasurer& measurer, Content content)
+KompozHost::KompozHost(TextMeasurer& measurer, Content content)
     : measurer_(measurer),
       content_(std::move(content)),
-      composer_(*this),
+      kompozer_(*this),
       dispatcher_(std::make_unique<detail::Dispatcher>()),
       rootGroup_(std::make_unique<detail::Group>()),
       saveable_(std::make_shared<detail::SaveableRegistry>()) {
     saveable_->boundary = rootGroup_.get();
     saveable_->forgetsLeaving = true;
-    dispatcher_->composer = &composer_;
+    dispatcher_->kompozer = &kompozer_;
     flings_ = std::make_unique<CoroutineScope>(*dispatcher_);
     rootGroup_->node = std::make_unique<LayoutNode>(this);
     rootGroup_->node->measurePolicy = [](LayoutNode& node, const Constraints& c) {
@@ -179,14 +179,14 @@ ComposeHost::ComposeHost(TextMeasurer& measurer, Content content)
         }
         return Size{c.maxWidth, c.maxHeight};
     };
-    composer_.setRoot(*rootGroup_, [this] {
+    kompozer_.setRoot(*rootGroup_, [this] {
         const SystemInsets& i = insets_;
         auto max = [](PaddingValues a, PaddingValues b) {
             return PaddingValues{std::max(a.start, b.start), std::max(a.top, b.top), std::max(a.end, b.end),
                                  std::max(a.bottom, b.bottom)};
         };
         PaddingValues safeDrawing = max(max(i.statusBars, i.navigationBars), max(i.ime, i.displayCutout));
-        CompositionLocalProvider({LocalSystemInsets.provides(insets_), LocalWindowInsets.provides(safeDrawing),
+        KompozitionLocalProvider({LocalSystemInsets.provides(insets_), LocalWindowInsets.provides(safeDrawing),
                                   LocalSystemDarkTheme.provides(systemDark_), LocalLayoutDirection.provides(layoutDirection_),
                                   LocalStrings.provides(strings_),
                                   LocalWindowSize.provides(viewport_), LocalWindowInfo.provides(WindowInfo{windowFocused_, viewport_}),
@@ -198,7 +198,7 @@ ComposeHost::ComposeHost(TextMeasurer& measurer, Content content)
                                  [this] {
                                      // Skipped when only a provided value changed: its readers
                                      // recompose, the rest stays as it is.
-                                     composable(CallSite::current(), contentPass_, [this] { content_(); });
+                                     kompozable(CallSite::current(), contentPass_, [this] { content_(); });
                                  });
     });
     detail::setUiThread();
@@ -207,7 +207,7 @@ ComposeHost::ComposeHost(TextMeasurer& measurer, Content content)
     gHosts.push_back(this);
 }
 
-ComposeHost::~ComposeHost() {
+KompozHost::~KompozHost() {
     {
         std::lock_guard lock(gMutex);
         std::erase(gHosts, this);
@@ -218,14 +218,14 @@ ComposeHost::~ComposeHost() {
     rootGroup_.reset();  // runs DisposableEffect cleanups and destroys the node tree
 }
 
-const std::shared_ptr<ViewModelStore>& ComposeHost::viewModelStore() {
+const std::shared_ptr<ViewModelStore>& KompozHost::viewModelStore() {
     if (!viewModelStore_) viewModelStore_ = std::make_shared<ViewModelStore>();
     return viewModelStore_;
 }
 
 // The rememberSaveable values and the app's ViewModels' SavedStateHandles (a navigation entry's
 // go with the NavController that keeps the entry).
-std::vector<uint8_t> ComposeHost::saveState() const {
+std::vector<uint8_t> KompozHost::saveState() const {
     SavedValue::Map out{{"composition", saveable_->save()}};
     if (viewModelStore_)
         if (SavedValue viewModels = viewModelStore_->saveState(); viewModels.map() && !viewModels.map()->empty())
@@ -233,7 +233,7 @@ std::vector<uint8_t> ComposeHost::saveState() const {
     return SavedValue(std::move(out)).encode();
 }
 
-void ComposeHost::restoreState(const std::vector<uint8_t>& bytes) {
+void KompozHost::restoreState(const std::vector<uint8_t>& bytes) {
     auto saved = SavedValue::decode(bytes);
     if (!saved) return;
     if (const SavedValue& composition = (*saved)["composition"]; composition.map()) {
@@ -244,40 +244,40 @@ void ComposeHost::restoreState(const std::vector<uint8_t>& bytes) {
     }
 }
 
-void ComposeHost::openDeepLink(std::string link) {
+void KompozHost::openDeepLink(std::string link) {
     deepLink_ = std::move(link);
     deepLinks_.set(deepLinks_.peek() + 1);
 }
 
-void ComposeHost::addDeepLinkHandler(const void* owner, std::function<bool(const std::string&)> accepts) {
+void KompozHost::addDeepLinkHandler(const void* owner, std::function<bool(const std::string&)> accepts) {
     removeDeepLinkHandler(owner);
     deepLinkHandlers_.push_back({owner, std::move(accepts)});
 }
 
-void ComposeHost::removeDeepLinkHandler(const void* owner) {
+void KompozHost::removeDeepLinkHandler(const void* owner) {
     std::erase_if(deepLinkHandlers_, [owner](const auto& h) { return h.first == owner; });
 }
 
-void ComposeHost::openUri(const std::string& uri) {
+void KompozHost::openUri(const std::string& uri) {
     for (const auto& [owner, accepts] : deepLinkHandlers_)
         if (accepts(uri)) return openDeepLink(uri);
     if (callbacks_.openUri) callbacks_.openUri(uri);
 }
 
-std::optional<std::string> ComposeHost::takeDeepLink(const std::function<bool(const std::string&)>& accepts) {
+std::optional<std::string> KompozHost::takeDeepLink(const std::function<bool(const std::string&)>& accepts) {
     deepLinks_.get();
     if (!deepLink_ || !accepts(*deepLink_)) return std::nullopt;
     return std::exchange(deepLink_, std::nullopt);
 }
 
-void ComposeHost::setCallbacks(Callbacks callbacks) {
+void KompozHost::setCallbacks(Callbacks callbacks) {
     callbacks_ = std::move(callbacks);
     // What was composed before the platform was listening.
     if (barsAppearance_ && callbacks_.systemBarsAppearance)
         callbacks_.systemBarsAppearance(barsAppearance_->first, barsAppearance_->second);
 }
 
-void ComposeHost::setViewportSize(Size size) {
+void KompozHost::setViewportSize(Size size) {
     if (size == viewport_) return;
     // Shorter around the keyboard (a window that isn't edge to edge, where the keyboard is no
     // inset): the field typed in stays in view.
@@ -288,7 +288,7 @@ void ComposeHost::setViewportSize(Size size) {
     environmentChanged();
 }
 
-void ComposeHost::setSystemInsets(SystemInsets insets) {
+void KompozHost::setSystemInsets(SystemInsets insets) {
     if (insets == insets_) return;
     if (!(insets.ime == insets_.ime) && isTextField(focused_)) bringFocusedIntoView_ = true;  // keep it above the keyboard
     insets_ = insets;
@@ -296,9 +296,9 @@ void ComposeHost::setSystemInsets(SystemInsets insets) {
     environmentChanged();
 }
 
-void ComposeHost::setWindowInsets(PaddingValues insets) { setSystemInsets({.displayCutout = insets}); }
+void KompozHost::setWindowInsets(PaddingValues insets) { setSystemInsets({.displayCutout = insets}); }
 
-float ComposeHost::imeControlBy(float dp) {
+float KompozHost::imeControlBy(float dp) {
     if (!imeControlling_) {
         auto* f = focused_ && isTextField(focused_) ? focused_->modifier.find<FocusableElement>() : nullptr;
         if (!callbacks_.imeControlBy || !f || f->readOnly) return 0;
@@ -313,74 +313,74 @@ float ComposeHost::imeControlBy(float dp) {
     return used;
 }
 
-void ComposeHost::imeControlEnd(float velocity) {
+void KompozHost::imeControlEnd(float velocity) {
     if (!imeControlling_) return;
     imeControlling_ = false;
     if (callbacks_.imeControlEnd) callbacks_.imeControlEnd(velocity);
 }
 
-void ComposeHost::setDensity(Density density) {
+void KompozHost::setDensity(Density density) {
     if (density == density_) return;
     density_ = density;
     requestLayout();  // text sizes may have changed
     invalidate();
 }
 
-void ComposeHost::setMediaInfo(const MediaInfo& info) {
+void KompozHost::setMediaInfo(const MediaInfo& info) {
     mediaInfo_ = info;
     media_.update(viewport_, insets_.imeVisible, mediaInfo_);  // what read it recomposes
 }
 
-void ComposeHost::setDynamicTonalPalette(std::optional<TonalPalette> palette) {
+void KompozHost::setDynamicTonalPalette(std::optional<TonalPalette> palette) {
     if (palette == dynamicPalette_) return;
     dynamicPalette_ = std::move(palette);
     environmentChanged();
 }
 
-void ComposeHost::setWallpaperTonalPalette(std::optional<TonalPalette> palette) {
+void KompozHost::setWallpaperTonalPalette(std::optional<TonalPalette> palette) {
     if (palette == wallpaperPalette_) return;
     wallpaperPalette_ = std::move(palette);
     environmentChanged();
 }
 
-void ComposeHost::setSystemBarsAppearance(bool lightStatusBars, bool lightNavigationBars) {
+void KompozHost::setSystemBarsAppearance(bool lightStatusBars, bool lightNavigationBars) {
     std::pair<bool, bool> appearance{lightStatusBars, lightNavigationBars};
     if (barsAppearance_ == appearance) return;
     barsAppearance_ = appearance;
     if (callbacks_.systemBarsAppearance) callbacks_.systemBarsAppearance(lightStatusBars, lightNavigationBars);
 }
 
-void ComposeHost::setSystemDarkTheme(bool dark) {
+void KompozHost::setSystemDarkTheme(bool dark) {
     if (dark == systemDark_) return;
     systemDark_ = dark;
     environmentChanged();
 }
 
-void ComposeHost::setViewConfiguration(const ViewConfiguration& configuration) {
+void KompozHost::setViewConfiguration(const ViewConfiguration& configuration) {
     if (configuration == viewConfiguration_) return;
     viewConfiguration_ = configuration;
     environmentChanged();
 }
 
-void ComposeHost::setWindowFocused(bool focused) {
+void KompozHost::setWindowFocused(bool focused) {
     if (focused == windowFocused_) return;
     windowFocused_ = focused;
     environmentChanged();
 }
 
-void ComposeHost::setLayoutDirection(LayoutDirection direction) {
+void KompozHost::setLayoutDirection(LayoutDirection direction) {
     if (direction == layoutDirection_) return;
     layoutDirection_ = direction;
     environmentChanged();
 }
 
-void ComposeHost::setStrings(Strings strings) {
+void KompozHost::setStrings(Strings strings) {
     if (strings == strings_) return;
     strings_ = std::move(strings);
     environmentChanged();
 }
 
-bool ComposeHost::frame(int64_t frameTimeNanos) {
+bool KompozHost::frame(int64_t frameTimeNanos) {
     std::vector<std::function<void()>> tasks;
     {
         std::lock_guard lock(gMutex);
@@ -408,18 +408,18 @@ bool ComposeHost::frame(int64_t frameTimeNanos) {
             std::lock_guard lock(gMutex);
             changed.swap(pendingChanges_);
         }
-        for (const void* key : changed) composer_.invalidateReaders(key);
+        for (const void* key : changed) kompozer_.invalidateReaders(key);
         // State read outside composition (offset { }, graphicsLayer { }, drawBehind) only
         // needs layout and drawing again.
         if (!changed.empty()) layoutDirty_ = true;
         if (rootInvalid_.exchange(false)) {  // something global changed (density, fonts): all of it again
             ++contentPass_;
-            composer_.invalidateRoot();
+            kompozer_.invalidateRoot();
             layoutEverything_ = true;
         }
-        if (std::exchange(environmentChanged_, false)) composer_.invalidateRoot();  // the providers again, then their readers
-        if (pass == 0) composer_.invalidateFrameScopes(frameTimeNanos);
-        if (composer_.recompose(frameTimeNanos)) {
+        if (std::exchange(environmentChanged_, false)) kompozer_.invalidateRoot();  // the providers again, then their readers
+        if (pass == 0) kompozer_.invalidateFrameScopes(frameTimeNanos);
+        if (kompozer_.recompose(frameTimeNanos)) {
             layoutDirty_ = true;
             syncTextInput();
         }
@@ -445,13 +445,13 @@ bool ComposeHost::frame(int64_t frameTimeNanos) {
         return done;
     });
     if (rippling) redraw_ = true;
-    animating_ = composer_.hasFrameScopes() || flingNode_ || wheel_ || rippling;
+    animating_ = kompozer_.hasFrameScopes() || flingNode_ || wheel_ || rippling;
     if (redraw_ && mouseOver_ && !pointerDown_) updateHover(lastPosition_);  // content may have moved under a resting mouse
     if (gKeepCheck) checkKept();
     return std::exchange(redraw_, false);
 }
 
-void ComposeHost::checkKept() {
+void KompozHost::checkKept() {
     if (!keepCheck_) {
         keepCheck_ = std::make_unique<std::pair<DisplayList, DisplayList>>(std::piecewise_construct, std::forward_as_tuple(measurer_),
                                                                           std::forward_as_tuple(measurer_));
@@ -473,14 +473,14 @@ void ComposeHost::checkKept() {
     }
 }
 
-void ComposeHost::requestIdleWork(const void* owner, int64_t estimateNanos, std::function<bool()> start, std::function<void(int64_t)> took) {
+void KompozHost::requestIdleWork(const void* owner, int64_t estimateNanos, std::function<bool()> start, std::function<void(int64_t)> took) {
     IdleWork work{owner, estimateNanos, std::move(start), std::move(took)};
     for (IdleWork& w : idleWork_)
         if (w.owner == owner) return void(w = std::move(work));
     idleWork_.push_back(std::move(work));
 }
 
-void ComposeHost::idle(int64_t budgetNanos) {
+void KompozHost::idle(int64_t budgetNanos) {
     using Clock = std::chrono::steady_clock;
     auto deadline = Clock::now() + std::chrono::nanoseconds(budgetNanos);
     while (!idleWork_.empty()) {
@@ -497,9 +497,9 @@ void ComposeHost::idle(int64_t budgetNanos) {
             std::lock_guard lock(gMutex);
             changed.swap(pendingChanges_);
         }
-        for (const void* key : changed) composer_.invalidateReaders(key);
+        for (const void* key : changed) kompozer_.invalidateReaders(key);
         if (!changed.empty()) layoutDirty_ = true;
-        if (composer_.recompose(lastFrameTime_)) {
+        if (kompozer_.recompose(lastFrameTime_)) {
             layoutDirty_ = true;
             syncTextInput();
         }
@@ -507,15 +507,15 @@ void ComposeHost::idle(int64_t budgetNanos) {
     }
 }
 
-bool ComposeHost::wantsFrame() const {
+bool KompozHost::wantsFrame() const {
     if (rootInvalid_ || environmentChanged_ || detail::globalSnapshotChanged() || animating_ || layoutDirty_ || redraw_ || flingNode_ || layoutAnimating_ || lastFrameTime_ < drawingAnimatedUntil_ ||
-        composer_.hasInvalidScopes() || dispatcher_->hasFrameWaiters())
+        kompozer_.hasInvalidScopes() || dispatcher_->hasFrameWaiters())
         return true;
     std::lock_guard lock(gMutex);
     return !pendingChanges_.empty();
 }
 
-bool ComposeHost::hasPendingWork() const {
+bool KompozHost::hasPendingWork() const {
     if (wantsFrame() || !unechoed_.empty()) return true;
     for (const auto& [key, v] : visibility_)
         if (v.visibleSince >= 0) return true;  // a visibility to tell once it has lasted
@@ -526,7 +526,7 @@ bool ComposeHost::hasPendingWork() const {
     return !gTasks.empty() || !pendingChanges_.empty();
 }
 
-int64_t ComposeHost::nextTimerDeadline() const {
+int64_t KompozHost::nextTimerDeadline() const {
     int64_t next = dispatcher_->nextDeadline();
     for (int64_t t : {pressed_ ? longPressAt_ : -1, pressed_ ? delayedPressAt_ : -1, pendingClick_ ? pendingClickAt_ : -1,
                       longPressTrigger_ ? triggerLongPressAt_ : -1,
@@ -534,13 +534,13 @@ int64_t ComposeHost::nextTimerDeadline() const {
         if (t >= 0 && (next < 0 || t < next)) next = t;
     return next;
 }
-bool ComposeHost::hasTimers() const {
+bool KompozHost::hasTimers() const {
     return dispatcher_->hasTimers() || (pressed_ && (longPressAt_ >= 0 || delayedPressAt_ >= 0)) || pendingClick_ ||
            (longPressTrigger_ && triggerLongPressAt_ >= 0) || (textLongPress_ && textLongPressAt_ >= 0) ||
            (dndSource_ && dndLongPressAt_ >= 0);
 }
 
-void ComposeHost::tellVisibility(Visibility& v, bool visible) {
+void KompozHost::tellVisibility(Visibility& v, bool visible) {
     v.visibleSince = -1;
     v.reported = visible;
     if (v.onChanged) visibilityCalls_.push_back([f = v.onChanged, visible] { f(visible); });
@@ -550,13 +550,13 @@ void ComposeHost::tellVisibility(Visibility& v, bool visible) {
     }
 }
 
-void ComposeHost::tellRect(RectReport& r, int64_t now) {
+void KompozHost::tellRect(RectReport& r, int64_t now) {
     r.told = r.latest;
     r.toldAt = now;
     if (r.callback) visibilityCalls_.push_back([f = r.callback, bounds = *r.latest] { f(bounds); });
 }
 
-void ComposeHost::checkVisibilityTimers(int64_t now) {
+void KompozHost::checkVisibilityTimers(int64_t now) {
     for (auto& [key, v] : visibility_)
         if (v.visibleSince >= 0 && now - v.visibleSince >= v.minDurationNanos) tellVisibility(v, true);
     // Rects that stayed put long enough, or whose throttle lets them be told (again).
@@ -625,7 +625,7 @@ void LayoutNode::checkReported() {
 
 bool LayoutNode::scrollableAt(size_t index) const { return index < reported_.size() && (reported_[index] & kScrollable); }
 
-void ComposeHost::reportPositions(int64_t now) {
+void KompozHost::reportPositions(int64_t now) {
     std::vector<std::pair<std::function<void(const LayoutCoordinates&)>, LayoutCoordinates>> calls;
     for (auto& [key, v] : visibility_) v.seen = false;
     for (auto& [key, r] : rects_) r.seen = false;
@@ -842,7 +842,7 @@ int64_t detail::frameTimeOnBeat(int64_t last, int64_t now, int64_t period) {
 int detail::keepCheckMismatches() { return gKeepMismatches; }
 int detail::layoutCheckMismatches() { return gLayoutMismatches; }
 
-void ComposeHost::measureAndPlace() {
+void KompozHost::measureAndPlace() {
     LayoutNode& r = root();
     uint64_t before = detail::relaidOutCount();
     r.measure(Constraints::fixed(viewport_.width, viewport_.height));
@@ -856,7 +856,7 @@ void ComposeHost::measureAndPlace() {
     if (detail::nodesWithPopups() > 0) layoutOverlays(r);  // (else no node has any: none to look for)
 }
 
-bool ComposeHost::layout() {
+bool KompozHost::layout() {
     LayoutNode& r = root();
     uint64_t before = detail::relaidOutCount();
     if (std::exchange(layoutEverything_, false) || gFullLayout) measureAllAgain(r);
@@ -941,7 +941,7 @@ bool ComposeHost::layout() {
     return changed;
 }
 
-LayoutNode* ComposeHost::findRequester(LayoutNode& node, const FocusRequester::Data* data) {
+LayoutNode* KompozHost::findRequester(LayoutNode& node, const FocusRequester::Data* data) {
     for (const auto& e : node.modifier.elements())
         if (auto* r = dynamic_cast<const FocusRequesterElement*>(e.get()); r && r->requester.data_.get() == data) return &node;
     for (auto* child : node.children)
@@ -972,7 +972,7 @@ bool flipsWithFinger(const LayoutNode& node, int axis, const ScrollableElement& 
 }
 } // namespace
 
-void ComposeHost::collectFocusables(LayoutNode& node, std::vector<LayoutNode*>& out) {
+void KompozHost::collectFocusables(LayoutNode& node, std::vector<LayoutNode*>& out) {
     for (const auto& e : node.modifier.elements())
         if (e->ignoresInput()) return;
     auto* click = node.modifier.find<ClickableElement>();
@@ -982,13 +982,13 @@ void ComposeHost::collectFocusables(LayoutNode& node, std::vector<LayoutNode*>& 
     for (auto* popup : node.overlays) collectFocusables(*popup, out);
 }
 
-void ComposeHost::requestFocus(const FocusRequester& requester) {
+void KompozHost::requestFocus(const FocusRequester& requester) {
     pendingFocus_ = requester.data_;
     requestLayout();
     wake();
 }
 
-void ComposeHost::freeFocus(const FocusRequester& requester) {
+void KompozHost::freeFocus(const FocusRequester& requester) {
     LayoutNode* node = findRequester(root(), requester.data_.get());
     if (!node || !focused_) return;
     std::vector<LayoutNode*> inside;
@@ -996,7 +996,7 @@ void ComposeHost::freeFocus(const FocusRequester& requester) {
     if (std::find(inside.begin(), inside.end(), focused_) != inside.end()) setFocus(nullptr);
 }
 
-bool ComposeHost::moveFocus(FocusDirection direction) {
+bool KompozHost::moveFocus(FocusDirection direction) {
     LayoutNode* popup = inputOverlay();  // a popup on top keeps the focus inside it
     // The focused node may say where this move goes (or that it stays).
     if (auto* f = focused_ ? focusPropertiesOf(*focused_) : nullptr) {
@@ -1095,7 +1095,7 @@ LayoutNode* groupIn(const LayoutNode* node, const LayoutNode* scope) {
 // focusable that way in the focused one's innermost focus group; else, group by group outwards,
 // the nearest target there — a focusable, or a whole group (by its bounds) entered at its
 // focusable nearest that way (its first if none is). Without groups: the nearest of all.
-LayoutNode* ComposeHost::nearestThatWay(const std::vector<LayoutNode*>& order, LayoutNode* focused, FocusDirection direction) {
+LayoutNode* KompozHost::nearestThatWay(const std::vector<LayoutNode*>& order, LayoutNode* focused, FocusDirection direction) {
     Rect from = focusRect(*focused);
     using Targets = std::vector<std::pair<LayoutNode*, Rect>>;
     auto nearest = [&](const Targets& targets) {
@@ -1133,9 +1133,9 @@ LayoutNode* ComposeHost::nearestThatWay(const std::vector<LayoutNode*>& order, L
     }
 }
 
-void ComposeHost::bringIntoView(LayoutNode& node) { bringIntoView(node, std::nullopt, 1); }
+void KompozHost::bringIntoView(LayoutNode& node) { bringIntoView(node, std::nullopt, 1); }
 
-void ComposeHost::bringIntoView(LayoutNode& node, std::optional<Rect> rect, float fraction) {
+void KompozHost::bringIntoView(LayoutNode& node, std::optional<Rect> rect, float fraction) {
     Rect target = rect.value_or(focusRect(node));
     for (LayoutNode* n = node.overlay ? nullptr : node.parent; n; n = n->overlay ? nullptr : n->parent) {
         const auto& elements = n->modifier.elements();
@@ -1162,7 +1162,7 @@ void ComposeHost::bringIntoView(LayoutNode& node, std::optional<Rect> rect, floa
 
 // Tells onFocusChanged modifiers whose state changed: isFocused for the focused node,
 // hasFocus for it and every node around it.
-void ComposeHost::notifyFocusChanged() {
+void KompozHost::notifyFocusChanged() {
     std::vector<std::pair<std::function<void(FocusState)>, FocusState>> calls;
     auto visit = [&](auto&& self, LayoutNode& node) -> bool {
         bool contains = &node == focused_;
@@ -1188,7 +1188,7 @@ void ComposeHost::notifyFocusChanged() {
 
 // Popups after the main tree (their anchors have positions by then), each after its anchor's
 // subtree, nested popups above the popup they were opened from.
-void ComposeHost::layoutOverlays(LayoutNode& node) {
+void KompozHost::layoutOverlays(LayoutNode& node) {
     for (auto* child : node.children) layoutOverlays(*child);
     for (auto* popup : node.overlays) {
         placeOverlay(*popup, node);
@@ -1197,7 +1197,7 @@ void ComposeHost::layoutOverlays(LayoutNode& node) {
     }
 }
 
-void ComposeHost::placeOverlay(LayoutNode& popup, LayoutNode& anchor) {
+void KompozHost::placeOverlay(LayoutNode& popup, LayoutNode& anchor) {
     const OverlaySpec& spec = *popup.overlay;
     Size size = popup.measure(spec.fullScreen ? Constraints::fixed(viewport_.width, viewport_.height)
                                               : Constraints{0, viewport_.width, 0, viewport_.height});
@@ -1208,13 +1208,13 @@ void ComposeHost::placeOverlay(LayoutNode& popup, LayoutNode& anchor) {
     popup.updateAbsolutePosition({0, 0});
 }
 
-LayoutNode* ComposeHost::inputOverlay() const {
+LayoutNode* KompozHost::inputOverlay() const {
     for (auto it = overlays_.rbegin(); it != overlays_.rend(); ++it)
         if (it->first->overlay->focusable) return it->first;
     return nullptr;
 }
 
-struct ComposeHost::DragSession {
+struct KompozHost::DragSession {
     std::shared_ptr<const DragAndDropTransferData> data;
     LayoutNode* source = nullptr;  // null once it left the composition
     Offset grab;                   // where it was grabbed, from its top left
@@ -1232,7 +1232,7 @@ void collectDropTargets(LayoutNode& node, std::vector<LayoutNode*>& out) {  // b
 }
 } // namespace
 
-void ComposeHost::draw(GraphicsContext& canvas) {
+void KompozHost::draw(GraphicsContext& canvas) {
     root().draw(canvas);
     for (auto& [popup, anchor] : overlays_) popup->draw(canvas);
     if (dnd_ && dnd_->source) {  // what is dragged, faded, under the pointer
@@ -1277,7 +1277,7 @@ void ComposeHost::draw(GraphicsContext& canvas) {
 
 // The content around `source` zoomed into a rounded rect at `center`: the scene drawn again
 // through a layer of the source's surroundings, scaled about its middle and moved there.
-void ComposeHost::drawMagnifier(GraphicsContext& canvas, Offset source, Offset center, const MagnifierOptions& o) {
+void KompozHost::drawMagnifier(GraphicsContext& canvas, Offset source, Offset center, const MagnifierOptions& o) {
     float zoom = std::max(0.01f, o.zoom);
     Rect loupe{center.x - o.size.width / 2, center.y - o.size.height / 2, o.size.width, o.size.height};
     if (o.elevation > 0) canvas.drawShadow(loupe, o.cornerRadius, Shadow{Color{0, 0, 0, 0.3f}, {0, o.elevation / 2}, o.elevation * 2, 0}, false);
@@ -1291,21 +1291,21 @@ void ComposeHost::drawMagnifier(GraphicsContext& canvas, Offset source, Offset c
     canvas.popLayer();
 }
 
-ImageBitmap ComposeHost::renderImage(Size size, const std::function<void(GraphicsContext&)>& draw) const {
+ImageBitmap KompozHost::renderImage(Size size, const std::function<void(GraphicsContext&)>& draw) const {
     return callbacks_.renderImage ? callbacks_.renderImage(size, draw) : ImageBitmap{};
 }
 
-void ComposeHost::showTextMagnifier(Offset source) {
+void KompozHost::showTextMagnifier(Offset source) {
     if (textMagnifier_ && textMagnifier_->x == source.x && textMagnifier_->y == source.y) return;
     textMagnifier_ = source;
     requestRedraw();
 }
-void ComposeHost::hideTextMagnifier() {
+void KompozHost::hideTextMagnifier() {
     if (!textMagnifier_) return;
     textMagnifier_.reset();
     requestRedraw();
 }
-void ComposeHost::registerMagnifier(LayoutNode& node) {
+void KompozHost::registerMagnifier(LayoutNode& node) {
     LayoutNode* self = &node;
     if (std::none_of(magnifiers_.begin(), magnifiers_.end(), [&](const auto& w) {
             auto h = w.lock();
@@ -1318,7 +1318,7 @@ void MagnifierElement::attach(LayoutNode& node) const {
     if (node.host()) node.host()->registerMagnifier(node);
 }
 
-bool ComposeHost::startDragAndDrop(Offset p, int64_t time) {
+bool KompozHost::startDragAndDrop(Offset p, int64_t time) {
     LayoutNode* source = std::exchange(dndSource_, nullptr);
     dndLongPressAt_ = -1;
     const auto* e = source ? source->modifier.find<DragAndDropSourceElement>() : nullptr;
@@ -1339,7 +1339,7 @@ bool ComposeHost::startDragAndDrop(Offset p, int64_t time) {
     return true;
 }
 
-void ComposeHost::beginDragAndDrop(std::shared_ptr<const DragAndDropTransferData> data, LayoutNode* source, Offset grab,
+void KompozHost::beginDragAndDrop(std::shared_ptr<const DragAndDropTransferData> data, LayoutNode* source, Offset grab,
                                    std::optional<Offset> pointer) {
     dnd_ = std::make_unique<DragSession>();
     dnd_->data = std::move(data);
@@ -1364,18 +1364,18 @@ void ComposeHost::beginDragAndDrop(std::shared_ptr<const DragAndDropTransferData
     requestRedraw();
 }
 
-void ComposeHost::externalDragEntered(std::vector<std::string> mimeTypes) {
+void KompozHost::externalDragEntered(std::vector<std::string> mimeTypes) {
     if (dnd_) endDragAndDrop(false);
     auto data = std::make_shared<DragAndDropTransferData>();
     data->mimeTypes = std::move(mimeTypes);
     beginDragAndDrop(std::move(data), nullptr, {}, std::nullopt);
 }
 
-void ComposeHost::externalDragMoved(Offset position) {
+void KompozHost::externalDragMoved(Offset position) {
     if (dnd_) moveDragAndDrop(position);
 }
 
-void ComposeHost::externalDrop(DragAndDropTransferData data, Offset position) {
+void KompozHost::externalDrop(DragAndDropTransferData data, Offset position) {
     if (!dnd_) externalDragEntered(data.mimeTypes);
     if (!dnd_) return;
     dnd_->data = std::make_shared<const DragAndDropTransferData>(std::move(data));  // now it is known what it carries
@@ -1383,11 +1383,11 @@ void ComposeHost::externalDrop(DragAndDropTransferData data, Offset position) {
     endDragAndDrop(true);
 }
 
-void ComposeHost::externalDragLeft() {
+void KompozHost::externalDragLeft() {
     if (dnd_) endDragAndDrop(false);
 }
 
-void ComposeHost::moveDragAndDrop(Offset p) {
+void KompozHost::moveDragAndDrop(Offset p) {
     dnd_->pointer = p;
     requestRedraw();
     auto eventFor = [this](LayoutNode& n) {
@@ -1407,7 +1407,7 @@ void ComposeHost::moveDragAndDrop(Offset p) {
         if (auto onMoved = dropTargetOf(*dnd_->hovered)->target.onMoved) onMoved(eventFor(*dnd_->hovered));
 }
 
-void ComposeHost::endDragAndDrop(bool drop) {
+void KompozHost::endDragAndDrop(bool drop) {
     std::unique_ptr<DragSession> s = std::move(dnd_);
     auto eventFor = [&s](LayoutNode& n, bool accepted) {
         Rect r = n.bounds();
@@ -1430,42 +1430,42 @@ void ComposeHost::endDragAndDrop(bool drop) {
     requestRedraw();
 }
 
-void ComposeHost::invalidate() {
+void KompozHost::invalidate() {
     rootInvalid_ = true;
     if (callbacks_.wake) callbacks_.wake();
 }
 
-void ComposeHost::environmentChanged() {
+void KompozHost::environmentChanged() {
     environmentChanged_ = true;
     wake();
 }
 
 // Called with the global host mutex held.
-void ComposeHost::stateChanged(const void* key) {
+void KompozHost::stateChanged(const void* key) {
     pendingChanges_.push_back(key);
     wake();
 }
 
-void ComposeHost::wake() {
+void KompozHost::wake() {
     if (callbacks_.wake) callbacks_.wake();
 }
 
-void ComposeHost::requestLayout() {
+void KompozHost::requestLayout() {
     layoutDirty_ = true;
     layoutEverything_ = true;
 }
-void ComposeHost::requestLayoutFrame() {
+void KompozHost::requestLayoutFrame() {
     layoutAnimating_ = true;
     if (LayoutNode* node = detail::measuringNode()) animatingLayouts_.push_back(node->handle());
     else layoutEverything_ = true;
 }
 
-void ComposeHost::recordLayoutRead(const void* key, LayoutNode& node) {
+void KompozHost::recordLayoutRead(const void* key, LayoutNode& node) {
     if (std::find(node.layoutReads_.begin(), node.layoutReads_.end(), key) != node.layoutReads_.end()) return;
     node.layoutReads_.push_back(key);
     layoutReaders_[key].push_back(&node);
 }
-void ComposeHost::forgetLayoutReads(LayoutNode& node) {
+void KompozHost::forgetLayoutReads(LayoutNode& node) {
     for (const void* key : node.layoutReads_) {
         auto it = layoutReaders_.find(key);
         if (it == layoutReaders_.end()) continue;
@@ -1474,18 +1474,18 @@ void ComposeHost::forgetLayoutReads(LayoutNode& node) {
     }
     node.layoutReads_.clear();
 }
-void ComposeHost::invalidateLayoutReaders(const void* key) {
+void KompozHost::invalidateLayoutReaders(const void* key) {
     auto it = layoutReaders_.find(key);
     if (it == layoutReaders_.end()) return;
     for (LayoutNode* node : it->second) node->invalidateMeasure();
     layoutDirty_ = true;
 }
-void ComposeHost::recordDrawRead(const void* key, LayoutNode& node) {
+void KompozHost::recordDrawRead(const void* key, LayoutNode& node) {
     if (std::find(node.drawReads_.begin(), node.drawReads_.end(), key) != node.drawReads_.end()) return;
     node.drawReads_.push_back(key);
     drawReaders_[key].push_back(&node);
 }
-void ComposeHost::forgetDrawReads(LayoutNode& node) {
+void KompozHost::forgetDrawReads(LayoutNode& node) {
     for (const void* key : node.drawReads_) {
         auto it = drawReaders_.find(key);
         if (it == drawReaders_.end()) continue;
@@ -1494,13 +1494,13 @@ void ComposeHost::forgetDrawReads(LayoutNode& node) {
     }
     node.drawReads_.clear();
 }
-void ComposeHost::invalidateDrawReaders(const void* key) {
+void KompozHost::invalidateDrawReaders(const void* key) {
     auto it = drawReaders_.find(key);
     if (it == drawReaders_.end()) return;
     for (LayoutNode* node : it->second) node->invalidateDraw();
     redraw_ = true;
 }
-ImageBitmap ComposeHost::loadImage(std::string_view path) {
+ImageBitmap KompozHost::loadImage(std::string_view path) {
     std::string key(path);
     if (auto it = images_.find(key); it != images_.end()) {
         it->second.used = ++imageUses_;
@@ -1519,7 +1519,7 @@ ImageBitmap ComposeHost::loadImage(std::string_view path) {
     return image;
 }
 
-void ComposeHost::requestRedraw() {
+void KompozHost::requestRedraw() {
     // Asked as a node is drawn (an animation drawn on): the next frame draws that node again, if
     // any of it shows (asked once it has drawn).
     if (LayoutNode* drawing = detail::drawingNode(); drawing && drawing->host() == this) {
@@ -1529,23 +1529,23 @@ void ComposeHost::requestRedraw() {
     redraw_ = true;
 }
 
-void ComposeHost::animateDrawingUntil(int64_t frameTime) {
+void KompozHost::animateDrawingUntil(int64_t frameTime) {
     if (LayoutNode* drawing = detail::drawingNode(); drawing && drawing->host() == this)
         if (detail::DrawAsk* ask = detail::drawAsk()) return void(ask->until = std::max(ask->until, frameTime));
     drawingAnimatedUntil_ = std::max(drawingAnimatedUntil_, frameTime);
 }
 
-void ComposeHost::redrawDrawn(int64_t until) {
+void KompozHost::redrawDrawn(int64_t until) {
     redraw_ = true;
     drawingAnimatedUntil_ = std::max(drawingAnimatedUntil_, until);
 }
 
-Rect ComposeHost::touchBoundsOf(const LayoutNode& node, const ModifierElement* element) const {
+Rect KompozHost::touchBoundsOf(const LayoutNode& node, const ModifierElement* element) const {
     Rect r = hitBoundsOf(node, element);
     return pointerType_ == PointerType::Touch ? touchTarget(r, viewConfiguration_.minimumTouchTargetSize) : r;
 }
 
-void ComposeHost::addNearTouchTarget(std::vector<Hit>& hits, Offset p) {
+void KompozHost::addNearTouchTarget(std::vector<Hit>& hits, Offset p) {
     auto tappable = [](const ModifierElement* e) {
         auto* click = elementOf<ClickableElement>(e);
         return (click && click->enabled) || elementOf<PointerInputElement>(e);
@@ -1585,7 +1585,7 @@ void ComposeHost::addNearTouchTarget(std::vector<Hit>& hits, Offset p) {
     hits.insert(hits.begin(), near.begin(), near.end());
 }
 
-std::vector<ComposeHost::Hit> ComposeHost::hitTest(Offset position) {
+std::vector<KompozHost::Hit> KompozHost::hitTest(Offset position) {
     std::vector<Hit> hits;
     // From the top: a focusable popup takes all input; a touchable one what lands on its own
     // interactive elements; the others let it through.
@@ -1605,7 +1605,7 @@ std::vector<ComposeHost::Hit> ComposeHost::hitTest(Offset position) {
 }
 
 // Collects interactive elements under `p`, innermost first.
-void ComposeHost::collectHits(LayoutNode& node, Offset p, std::vector<Hit>& out) {
+void KompozHost::collectHits(LayoutNode& node, Offset p, std::vector<Hit>& out) {
     const auto& elements = node.modifier.elements();
     for (size_t i = 0; i < elements.size(); ++i) {
         if (elements[i]->clipsContent() && !elements[i]->clipBounds(node.layerBounds(i)).contains(p)) return;  // clipped away
@@ -1631,12 +1631,12 @@ void ComposeHost::collectHits(LayoutNode& node, Offset p, std::vector<Hit>& out)
     }
 }
 
-void ComposeHost::deliverPass(std::vector<PointerTarget> targets, PointerEventType type, int64_t pointerId,
+void KompozHost::deliverPass(std::vector<PointerTarget> targets, PointerEventType type, int64_t pointerId,
                               const std::shared_ptr<bool>& consumed, int64_t time, PointerEventPass pass) {
     for (auto it = targets.rbegin(); it != targets.rend(); ++it) deliver(*it, type, pointerId, consumed, time, pass);
 }
 
-void ComposeHost::deliver(PointerTarget& target, PointerEventType type, int64_t pointerId,
+void KompozHost::deliver(PointerTarget& target, PointerEventType type, int64_t pointerId,
                           const std::shared_ptr<bool>& consumed, int64_t time, PointerEventPass pass) {
     LayoutNode& node = *target.node;
     detail::syncPointerInputs(node);  // the node may have recomposed since the press
@@ -1669,20 +1669,20 @@ void ComposeHost::deliver(PointerTarget& target, PointerEventType type, int64_t 
     requestRedraw();
 }
 
-ComposeHost::TrackedPointer* ComposeHost::trackedPointer(int64_t id) {
+KompozHost::TrackedPointer* KompozHost::trackedPointer(int64_t id) {
     for (auto& f : pointers_)
         if (f.id == id) return &f;
     return nullptr;
 }
 
-void ComposeHost::commitPointers() {
+void KompozHost::commitPointers() {
     for (auto& f : pointers_) {
         f.previous = f.position;
         f.previousPressed = f.pressed;
     }
 }
 
-void ComposeHost::cancelPointerTargets(int64_t time) {
+void KompozHost::cancelPointerTargets(int64_t time) {
     auto targets = std::move(pointerTargets_);
     pointerTargets_.clear();
     auto consumed = std::make_shared<bool>(false);
@@ -1692,30 +1692,30 @@ void ComposeHost::cancelPointerTargets(int64_t time) {
     deliverPass(targets, PointerEventType::Cancel, id, consumed, time, PointerEventPass::Final);
 }
 
-void ComposeHost::startInteraction(std::optional<ActiveInteraction>& slot, const std::optional<MutableInteractionSource>& source,
+void KompozHost::startInteraction(std::optional<ActiveInteraction>& slot, const std::optional<MutableInteractionSource>& source,
                                    const Interaction& start, const LayoutNode* node) {
     if (!source) return;
     slot = ActiveInteraction{*source, start, node};
     source->tryEmit(start);
 }
 
-void ComposeHost::endInteraction(std::optional<ActiveInteraction>& slot, Interaction (Interaction::*end)() const) {
+void KompozHost::endInteraction(std::optional<ActiveInteraction>& slot, Interaction (Interaction::*end)() const) {
     if (auto a = std::exchange(slot, std::nullopt)) a->source.tryEmit((a->start.*end)());
 }
 
-void ComposeHost::startRipple(const LayoutNode& node, const ClickableElement& click, Offset origin, int64_t time) {
+void KompozHost::startRipple(const LayoutNode& node, const ClickableElement& click, Offset origin, int64_t time) {
     if (click.indication.kind != Indication::Kind::Ripple) return;
     ripples_.push_back({&node, origin, time});
     requestRedraw();
 }
 
-void ComposeHost::releaseRipples(const LayoutNode* node, int64_t time) {
+void KompozHost::releaseRipples(const LayoutNode* node, int64_t time) {
     for (Ripple& r : ripples_)
         if (r.node == node && r.released < 0) r.released = time;
     requestRedraw();
 }
 
-std::optional<ComposeHost::RippleDraw> ComposeHost::rippleAt(const Rect& b, const Indication& indication, Offset origin, int64_t start,
+std::optional<KompozHost::RippleDraw> KompozHost::rippleAt(const Rect& b, const Indication& indication, Offset origin, int64_t start,
                                                              int64_t released, int64_t now) {
     // Material's: from 0.3 of the larger side to the farthest corner, the center moving to the
     // middle, in 225 ms; faded in over 75 ms, out over 150 ms once let go and spread.
@@ -1735,7 +1735,7 @@ std::optional<ComposeHost::RippleDraw> ComposeHost::rippleAt(const Rect& b, cons
                       lerp(from, to, FastOutSlowInEasing(spread)), alpha};
 }
 
-std::vector<ComposeHost::RippleDraw> ComposeHost::ripples(const LayoutNode& node, const Rect& b, const Indication& indication) const {
+std::vector<KompozHost::RippleDraw> KompozHost::ripples(const LayoutNode& node, const Rect& b, const Indication& indication) const {
     std::vector<RippleDraw> out;
     for (const Ripple& r : ripples_)
         if (r.node == &node)
@@ -1743,7 +1743,7 @@ std::vector<ComposeHost::RippleDraw> ComposeHost::ripples(const LayoutNode& node
     return out;
 }
 
-void ComposeHost::startDelayedPress(int64_t time) {
+void KompozHost::startDelayedPress(int64_t time) {
     if (!pressed_ || delayedPressAt_ < 0) return;
     delayedPressAt_ = -1;
     auto* click = pressed_->modifier.find<ClickableElement>();
@@ -1751,7 +1751,7 @@ void ComposeHost::startDelayedPress(int64_t time) {
     startRipple(*pressed_, *click, delayedPressPoint_, time);
 }
 
-void ComposeHost::unpress() {
+void KompozHost::unpress() {
     if (pressed_) releaseRipples(pressed_, lastFrameTime_);
     if (pressed_) {
         pressed_->invalidateDraw();
@@ -1762,7 +1762,7 @@ void ComposeHost::unpress() {
     requestRedraw();
 }
 
-void ComposeHost::pointerDown(Offset p, int64_t time, int64_t pointerId, PointerType type) {
+void KompozHost::pointerDown(Offset p, int64_t time, int64_t pointerId, PointerType type) {
     dispatcher_->advanceTo(timeOr(time));
     if (swallowGesture_) return;  // a finger joining a press that only closed a popup
     if (pointerDown_) {           // another finger: it joins the gesture
@@ -1914,7 +1914,7 @@ void ComposeHost::pointerDown(Offset p, int64_t time, int64_t pointerId, Pointer
     requestRedraw();
 }
 
-void ComposeHost::selectWordAt(LayoutNode& field, Offset point) {
+void KompozHost::selectWordAt(LayoutNode& field, Offset point) {
     auto* f = field.modifier.find<FocusableElement>();
     if (!f || focused_ != &field) return;
     int offset = imeState_.selectionEnd;
@@ -1930,7 +1930,7 @@ void ComposeHost::selectWordAt(LayoutNode& field, Offset point) {
     applyEdit(s);
 }
 
-bool ComposeHost::startMouseSelection(LayoutNode& field, Offset p, int64_t time) {
+bool KompozHost::startMouseSelection(LayoutNode& field, Offset p, int64_t time) {
     auto* f = field.modifier.find<FocusableElement>();
     if (!f || !f->offsetAt) return false;
     int64_t now = timeOr(time);
@@ -1965,7 +1965,7 @@ bool ComposeHost::startMouseSelection(LayoutNode& field, Offset p, int64_t time)
     return true;
 }
 
-void ComposeHost::extendMouseSelection(Offset p) {
+void KompozHost::extendMouseSelection(Offset p) {
     const MouseTextSelection& s = *mouseSelection_;
     auto* f = s.field && s.field == focused_ ? s.field->modifier.find<FocusableElement>() : nullptr;
     if (!f || !f->offsetAt) return;
@@ -1980,7 +1980,7 @@ void ComposeHost::extendMouseSelection(Offset p) {
     if (!(e == imeState_)) applyEdit(e);
 }
 
-void ComposeHost::applyTapFocus() {
+void KompozHost::applyTapFocus() {
     TapFocus tap = std::exchange(tapFocus_, {});
     if (!tap.armed) return;
     LayoutNode* field = tap.field;
@@ -2013,7 +2013,7 @@ void ComposeHost::applyTapFocus() {
     }
 }
 
-void ComposeHost::pointerMove(Offset p, int64_t time, int64_t pointerId) {
+void KompozHost::pointerMove(Offset p, int64_t time, int64_t pointerId) {
     dispatcher_->advanceTo(timeOr(time));
     if (swallowGesture_) {
         lastPosition_ = p;
@@ -2090,7 +2090,7 @@ void ComposeHost::pointerMove(Offset p, int64_t time, int64_t pointerId) {
     if (!pointerDown_ || pointers_.front().id == pointerId) firePointerEvent(PointerEventType::Move, p, std::nullopt);
 }
 
-void ComposeHost::deliverMove(int64_t pointerId, Offset p, int64_t time, int axis) {
+void KompozHost::deliverMove(int64_t pointerId, Offset p, int64_t time, int axis) {
     auto consumed = std::make_shared<bool>(false);
     auto targets = pointerTargets_;  // handlers run user code
     deliverPass(targets, PointerEventType::Move, pointerId, consumed, time, PointerEventPass::Initial);
@@ -2127,7 +2127,7 @@ void ComposeHost::deliverMove(int64_t pointerId, Offset p, int64_t time, int axi
 }
 
 // The axis a scrollable under the pointer would scroll along now that it moved to `p`, or -1.
-int ComposeHost::scrollAxis(Offset p, bool mostlyAlong) const {
+int KompozHost::scrollAxis(Offset p, bool mostlyAlong) const {
     float dx = std::abs(p.x - downPosition_.x), dy = std::abs(p.y - downPosition_.y);
     if (scrollNodes_[0] && dy > viewConfiguration_.touchSlop && (dy >= dx || (!mostlyAlong && !scrollNodes_[1]))) return 0;
     if (scrollNodes_[1] && dx > viewConfiguration_.touchSlop && (dx > dy || (!mostlyAlong && !scrollNodes_[0]))) return 1;
@@ -2137,7 +2137,7 @@ int ComposeHost::scrollAxis(Offset p, bool mostlyAlong) const {
 // The page started scrolling under the first finger a moment ago and a second one lands over
 // something that pinches (transformable): fingers rarely land together, so the pinch takes the
 // gesture after all, the stretch the scroll pulled springs back.
-bool ComposeHost::handOverToPinch(int64_t time) {
+bool KompozHost::handOverToPinch(int64_t time) {
     if (dragAxis_ < 0 || pointers_.size() != 2 || timeOr(time) - dragStartTime_ > 250'000'000 || dragTravel_ > 48) return false;
     std::vector<PointerTarget> targets;
     for (const Hit& hit : hitTest(downPosition_)) {
@@ -2168,7 +2168,7 @@ bool ComposeHost::handOverToPinch(int64_t time) {
     return true;
 }
 
-void ComposeHost::setUserScrolled(LayoutNode* node, int axis) {
+void KompozHost::setUserScrolled(LayoutNode* node, int axis) {
     if (node == userScrolled_ && axis == userScrolledAxis_) return;
     if (userScrolled_)
         if (const ScrollableElement* s = scrollableOf(*userScrolled_, userScrolledAxis_)) s->scrollInProgress(false);
@@ -2178,7 +2178,7 @@ void ComposeHost::setUserScrolled(LayoutNode* node, int axis) {
         if (const ScrollableElement* s = scrollableOf(*node, axis)) s->scrollInProgress(true);
 }
 
-void ComposeHost::startDrag(int axis, Offset p, int64_t time) {
+void KompozHost::startDrag(int axis, Offset p, int64_t time) {
     dragAxis_ = axis;
     setUserScrolled(scrollNodes_[axis], axis);
     if (LayoutNode* node = scrollNodes_[axis])
@@ -2196,7 +2196,7 @@ void ComposeHost::startDrag(int axis, Offset p, int64_t time) {
 // One scroll step of `node`'s scrollable along `axis` with its nested scroll parents: they are
 // offered `delta` (finger direction) first, the scrollable uses what it can, then they get the
 // rest. Returns what all of them used.
-float ComposeHost::nestedScroll(LayoutNode& node, int axis, float delta, NestedScrollSource source) {
+float KompozHost::nestedScroll(LayoutNode& node, int axis, float delta, NestedScrollSource source) {
     size_t index = 0;
     const ScrollableElement* s = scrollableOf(node, axis, &index);
     if (!s) return 0;
@@ -2211,7 +2211,7 @@ float ComposeHost::nestedScroll(LayoutNode& node, int axis, float delta, NestedS
     return pre + self + post;
 }
 
-void ComposeHost::pointerUp(Offset p, int64_t time, int64_t pointerId) {
+void KompozHost::pointerUp(Offset p, int64_t time, int64_t pointerId) {
     dispatcher_->advanceTo(timeOr(time));
     if (std::exchange(swallowGesture_, false)) {
         lastPosition_ = p;
@@ -2329,7 +2329,7 @@ void ComposeHost::pointerUp(Offset p, int64_t time, int64_t pointerId) {
 }
 
 // A click on `target`, or (target null) the pending click whose double-click wait is over.
-void ComposeHost::fireClick(LayoutNode* target, int64_t time) {
+void KompozHost::fireClick(LayoutNode* target, int64_t time) {
     if (!target) {
         LayoutNode* pending = std::exchange(pendingClick_, nullptr);
         secondPress_ = false;
@@ -2360,7 +2360,7 @@ void ComposeHost::fireClick(LayoutNode* target, int64_t time) {
     }
 }
 
-void ComposeHost::runClickTimers(int64_t now) {
+void KompozHost::runClickTimers(int64_t now) {
     // A finger held on a drag source: the drag starts (unless the page scrolled or a handler took it).
     if (dndSource_ && pointerDown_ && dndLongPressAt_ >= 0 && now >= dndLongPressAt_) {
         if (dragAxis_ < 0 && !pointerClaimed_ && pointers_.size() == 1) {
@@ -2419,7 +2419,7 @@ void ComposeHost::runClickTimers(int64_t now) {
 
 // The parents get the velocity first, then the scrollable flings with the rest (or settles by
 // itself), and the parents get what is left when that is over.
-std::optional<float> ComposeHost::startFling(LayoutNode& node, int axis, float velocity, int64_t time) {
+std::optional<float> KompozHost::startFling(LayoutNode& node, int axis, float velocity, int64_t time) {
     size_t index = 0;
     const ScrollableElement* s = scrollableOf(node, axis, &index);
     if (!s) return 0.f;
@@ -2443,13 +2443,13 @@ std::optional<float> ComposeHost::startFling(LayoutNode& node, int axis, float v
     return 0.f;
 }
 
-std::shared_ptr<OverscrollEffect> ComposeHost::overscrollOf(LayoutNode& node, int axis) const {
+std::shared_ptr<OverscrollEffect> KompozHost::overscrollOf(LayoutNode& node, int axis) const {
     const ScrollableElement* s = scrollableOf(node, axis);
     if (!s) return nullptr;
     return s->overscrollEffect ? s->overscrollEffect : s->overscrolls() ? node.stretch : nullptr;
 }
 
-TaskOf<Velocity> ComposeHost::performFling(std::weak_ptr<LayoutNode*> node, int axis, Velocity velocity, int64_t time) {
+TaskOf<Velocity> KompozHost::performFling(std::weak_ptr<LayoutNode*> node, int axis, Velocity velocity, int64_t time) {
     auto handle = node.lock();
     if (!handle || !*handle) co_return Velocity{};
     float given = component(axis, velocity);
@@ -2458,14 +2458,14 @@ TaskOf<Velocity> ComposeHost::performFling(std::weak_ptr<LayoutNode*> node, int 
     co_return velocityAlong(axis, given - *left);
 }
 
-void ComposeHost::finishFling(float left) {
+void KompozHost::finishFling(float left) {
     auto waiter = std::exchange(flingWaiter_, {});
     if (!waiter.handle) return;
     flingLeft_ = left;
     if (auto job = waiter.job.lock()) dispatcher_->resumeNow(job, waiter.handle);
 }
 
-void ComposeHost::stepFling(int64_t now) {
+void KompozHost::stepFling(int64_t now) {
     if (!flingNode_) return;
     float dt = std::clamp(float(now - flingTime_) / 1e9f, 0.f, 0.05f);
     flingTime_ = now;
@@ -2490,14 +2490,14 @@ void ComposeHost::stepFling(int64_t now) {
     finishFling(left);
 }
 
-void ComposeHost::stopFling() {
+void KompozHost::stopFling() {
     if (flingNode_) setUserScrolled(nullptr, 0);
     flingNode_ = nullptr;
     flingVelocity_ = 0;
     finishFling(0);
 }
 
-void ComposeHost::pointerExit() {
+void KompozHost::pointerExit() {
     if (hovered_) {
         hovered_->invalidateDraw();
         std::exchange(hovered_, nullptr)->hovered = false;
@@ -2509,7 +2509,7 @@ void ComposeHost::pointerExit() {
     requestRedraw();
 }
 
-bool ComposeHost::zoom(Offset p, float factor, float rotation) {
+bool KompozHost::zoom(Offset p, float factor, float rotation) {
     if (!(factor > 0) || (factor == 1 && rotation == 0)) return false;
     for (const Hit& hit : hitTest(p))
         if (auto* z = elementOf<ZoomElement>(hit.element); z && z->onZoom) {
@@ -2522,7 +2522,7 @@ bool ComposeHost::zoom(Offset p, float factor, float rotation) {
     return false;
 }
 
-void ComposeHost::scroll(Offset p, float wheelDelta, float horizontalWheelDelta) {
+void KompozHost::scroll(Offset p, float wheelDelta, float horizontalWheelDelta) {
     stopFling();
     if (firePointerEvent(PointerEventType::Scroll, p, std::nullopt, {horizontalWheelDelta, -wheelDelta})) return;  // a handler took it
     for (int axis : {0, 1}) {
@@ -2570,7 +2570,7 @@ void ComposeHost::scroll(Offset p, float wheelDelta, float horizontalWheelDelta)
     }
 }
 
-void ComposeHost::stepWheel(int64_t now) {
+void KompozHost::stepWheel(int64_t now) {
     if (!wheel_) return;
     WheelScroll& w = *wheel_;
     float t = w.durationNanos > 0 ? std::clamp(float(now - w.start) / float(w.durationNanos), 0.f, 1.f) : 1.f;
@@ -2587,7 +2587,7 @@ void ComposeHost::stepWheel(int64_t now) {
     if (t >= 1) stopWheel();
 }
 
-void ComposeHost::stopWheel() {
+void KompozHost::stopWheel() {
     if (!wheel_) return;
     LayoutNode* node = std::exchange(wheel_, std::nullopt)->node;
     size_t index = 0;
@@ -2597,7 +2597,7 @@ void ComposeHost::stopWheel() {
 
 // Hover interactions follow a mouse pointer only: the clickable it is over (hovered_) and every
 // hoverable() under it.
-void ComposeHost::updateHoverInteractions(Offset p) {
+void KompozHost::updateHoverInteractions(Offset p) {
     LayoutNode* clickable = mouseOver_ ? hovered_ : nullptr;
     if (!hoverInteraction_ || hoverInteraction_->node != clickable) {
         endInteraction(hoverInteraction_, &Interaction::exit);
@@ -2632,7 +2632,7 @@ void ComposeHost::updateHoverInteractions(Offset p) {
         }
 }
 
-void ComposeHost::updateHover(Offset p) {
+void KompozHost::updateHover(Offset p) {
     LayoutNode* hover = nullptr;
     // The pointer's look: the innermost say (an icon, a clickable's hand, a field's I-beam),
     // unless an icon around it overrides its descendants.
@@ -2671,7 +2671,7 @@ void ComposeHost::updateHover(Offset p) {
     }
 }
 
-void ComposeHost::setHoveredTrigger(LayoutNode* trigger) {
+void KompozHost::setHoveredTrigger(LayoutNode* trigger) {
     if (trigger == hoveredTrigger_) return;
     auto tell = [](LayoutNode* node, bool hovered) {
         auto* t = node ? node->modifier.find<TooltipTriggerElement>() : nullptr;
@@ -2687,7 +2687,7 @@ void ComposeHost::setHoveredTrigger(LayoutNode* trigger) {
 
 // Desktop keyboards deliver typed text; turn it into a full edit at the caret so every
 // platform goes through the same textEdit() path.
-void ComposeHost::textInput(std::string_view text) {
+void KompozHost::textInput(std::string_view text) {
     if (!isTextField(focused_)) return;
     TextEditState s = imeState_;
     int from = std::min(s.selectionStart, s.selectionEnd), to = std::max(s.selectionStart, s.selectionEnd);
@@ -2697,7 +2697,7 @@ void ComposeHost::textInput(std::string_view text) {
     textEdit(s);
 }
 
-void ComposeHost::textEdit(const TextEditState& proposed) {
+void KompozHost::textEdit(const TextEditState& proposed) {
     if (!focused_) return;
     auto* f = focused_->modifier.find<FocusableElement>();
     if (!f) return;
@@ -2728,16 +2728,16 @@ void ComposeHost::textEdit(const TextEditState& proposed) {
     requestRedraw();
 }
 
-bool ComposeHost::keyDown(Key key, KeyModifiers modifiers) { return dispatchKey({key, KeyEventType::KeyDown, modifiers}); }
+bool KompozHost::keyDown(Key key, KeyModifiers modifiers) { return dispatchKey({key, KeyEventType::KeyDown, modifiers}); }
 
-std::shared_ptr<void> ComposeHost::addKeyHandler(std::function<bool(const KeyEvent&)> handler) {
+std::shared_ptr<void> KompozHost::addKeyHandler(std::function<bool(const KeyEvent&)> handler) {
     auto h = std::make_shared<std::function<bool(const KeyEvent&)>>(std::move(handler));
     keyHandlers_.push_back(h);
     return h;
 }
-bool ComposeHost::keyUp(Key key, KeyModifiers modifiers) { return dispatchKey({key, KeyEventType::KeyUp, modifiers}); }
+bool KompozHost::keyUp(Key key, KeyModifiers modifiers) { return dispatchKey({key, KeyEventType::KeyUp, modifiers}); }
 
-bool ComposeHost::dispatchKey(const KeyEvent& event) {
+bool KompozHost::dispatchKey(const KeyEvent& event) {
     if (dnd_ && event.key == Key::Escape) {  // the drag is called off
         if (event.type == KeyEventType::KeyDown) endDragAndDrop(false);
         return true;
@@ -2772,7 +2772,7 @@ bool ComposeHost::dispatchKey(const KeyEvent& event) {
     return down && defaultKeyAction(event.key, event.modifiers);
 }
 
-bool ComposeHost::editKey(Key key, KeyModifiers modifiers) {
+bool KompozHost::editKey(Key key, KeyModifiers modifiers) {
     if (!isTextField(focused_)) return false;
     auto* f = focused_->modifier.find<FocusableElement>();
     TextEditState s = imeState_;
@@ -2892,7 +2892,7 @@ bool ComposeHost::editKey(Key key, KeyModifiers modifiers) {
     return typing && !modifiers.ctrl && !modifiers.alt;
 }
 
-std::shared_ptr<ComposeHost::BackCallback> ComposeHost::backTarget() const {
+std::shared_ptr<KompozHost::BackCallback> KompozHost::backTarget() const {
     LayoutNode* popup = inputOverlay();
     std::shared_ptr<const void> scope = popup ? popup->backScope : nullptr;
     for (auto it = backHandlers_.rbegin(); it != backHandlers_.rend(); ++it)
@@ -2900,22 +2900,22 @@ std::shared_ptr<ComposeHost::BackCallback> ComposeHost::backTarget() const {
     return nullptr;
 }
 
-void ComposeHost::backStarted(const BackEventCompat& event) {
+void KompozHost::backStarted(const BackEventCompat& event) {
     backCancelled();  // one that never ended
     if (!inputOverlay() && focused_) return;  // cleared once the gesture is done
     backGesture_ = backTarget();  // none in a popup on top: it is dismissed once the gesture is done
     if (backGesture_ && backGesture_->onStarted) backGesture_->onStarted(event);
 }
 
-void ComposeHost::backProgressed(const BackEventCompat& event) {
+void KompozHost::backProgressed(const BackEventCompat& event) {
     if (backGesture_ && backGesture_->onProgressed) backGesture_->onProgressed(event);
 }
 
-void ComposeHost::backCancelled() {
+void KompozHost::backCancelled() {
     if (auto handler = std::exchange(backGesture_, nullptr); handler && handler->onCancelled) handler->onCancelled();
 }
 
-bool ComposeHost::backInvoked() {
+bool KompozHost::backInvoked() {
     if (auto handler = std::exchange(backGesture_, nullptr)) {
         if (handler == backTarget()) {
             auto onBack = handler->onBack;
@@ -2927,11 +2927,11 @@ bool ComposeHost::backInvoked() {
     return keyDown(Key::Escape);
 }
 
-bool ComposeHost::wantsBack() const {
+bool KompozHost::wantsBack() const {
     return inputOverlay() || focused_ || backTarget();
 }
 
-bool ComposeHost::defaultKeyAction(Key key, KeyModifiers modifiers) {
+bool KompozHost::defaultKeyAction(Key key, KeyModifiers modifiers) {
     switch (key) {
     case Key::Escape:
         if (LayoutNode* popup = inputOverlay()) {  // a popup on top gets back, even one that can't be dismissed
@@ -2978,7 +2978,7 @@ bool ComposeHost::defaultKeyAction(Key key, KeyModifiers modifiers) {
     }
 }
 
-void ComposeHost::imeAction(ImeAction action) {
+void KompozHost::imeAction(ImeAction action) {
     if (!focused_) return;
     auto* f = focused_->modifier.find<FocusableElement>();
     if (!f) return;
@@ -2989,7 +2989,7 @@ void ComposeHost::imeAction(ImeAction action) {
     }
 }
 
-void ComposeHost::setTouchSelection(bool on, bool toolbar) {
+void KompozHost::setTouchSelection(bool on, bool toolbar) {
     if (touchSelection_ == on) return;
     touchSelection_ = on;
     auto* f = focused_ ? focused_->modifier.find<FocusableElement>() : nullptr;
@@ -3000,7 +3000,7 @@ void ComposeHost::setTouchSelection(bool on, bool toolbar) {
     requestRedraw();
 }
 
-void ComposeHost::setTextSelection(int start, int end) {
+void KompozHost::setTextSelection(int start, int end) {
     if (!isTextField(focused_)) return;
     int length = int(imeState_.text.size());
     TextEditState s = imeState_;
@@ -3010,7 +3010,7 @@ void ComposeHost::setTextSelection(int start, int end) {
     if (!(s == imeState_)) applyEdit(s);
 }
 
-bool ComposeHost::firePointerEvent(PointerEventType type, Offset p, std::optional<PointerButton> button, Offset scrollDelta,
+bool KompozHost::firePointerEvent(PointerEventType type, Offset p, std::optional<PointerButton> button, Offset scrollDelta,
                                    LayoutNode* onlyNode) {
     struct Call {
         std::function<void(PointerEvent&)> onEvent;  // a copy: user code may recompose the node
@@ -3044,13 +3044,13 @@ bool ComposeHost::firePointerEvent(PointerEventType type, Offset p, std::optiona
     return *consumed;
 }
 
-void ComposeHost::mouseButton(Offset p, PointerButton button, bool down) {
+void KompozHost::mouseButton(Offset p, PointerButton button, bool down) {
     if (button == PointerButton::Primary) return down ? pointerDown(p, -1, 0, PointerType::Mouse) : pointerUp(p);
     if (down) ++mouseButtonPresses_;
     firePointerEvent(down ? PointerEventType::Press : PointerEventType::Release, p, button);
 }
 
-bool ComposeHost::secondaryClick(Offset p) {
+bool KompozHost::secondaryClick(Offset p) {
     for (const Hit& hit : hitTest(p)) {
         if (auto* menu = elementOf<ContextMenuElement>(hit.element); menu && menu->onOpen) {
             menu->onOpen(p);
@@ -3079,7 +3079,7 @@ bool ComposeHost::secondaryClick(Offset p) {
     return false;
 }
 
-void ComposeHost::textAction(TextAction action) {
+void KompozHost::textAction(TextAction action) {
     if (!isTextField(focused_)) return;
     switch (action) {
     case TextAction::Cut: editKey(Key::X, {.ctrl = true}); break;  // the text changes: touch selection ends
@@ -3096,7 +3096,7 @@ void ComposeHost::textAction(TextAction action) {
     }
 }
 
-void ComposeHost::applyEdit(const TextEditState& state) {
+void KompozHost::applyEdit(const TextEditState& state) {
     textEdit(state);
     if (callbacks_.textInputChanged) callbacks_.textInputChanged(imeState_);
 }
@@ -3109,7 +3109,7 @@ bool inside(const LayoutNode* node, const LayoutNode* ancestor) {
 }
 } // namespace
 
-LayoutNode* ComposeHost::restoreFocus(LayoutNode* next) {
+LayoutNode* KompozHost::restoreFocus(LayoutNode* next) {
     // The outermost focusRestorer around `next` that the focus is coming into from outside.
     LayoutNode* group = nullptr;
     for (LayoutNode* n = next; n; n = n->overlay ? nullptr : n->parent)
@@ -3130,7 +3130,7 @@ LayoutNode* ComposeHost::restoreFocus(LayoutNode* next) {
     return next;
 }
 
-void ComposeHost::setFocus(LayoutNode* node, bool touched) {
+void KompozHost::setFocus(LayoutNode* node, bool touched) {
     if (node == focused_ || (node && !canFocus(*node))) return;
     // Leaving focusRestorers: they keep what had it.
     for (LayoutNode* n = focused_; n; n = n->overlay ? nullptr : n->parent)
@@ -3165,7 +3165,7 @@ void ComposeHost::setFocus(LayoutNode* node, bool touched) {
     requestRedraw();
 }
 
-void ComposeHost::showTextInput(bool touched) {
+void KompozHost::showTextInput(bool touched) {
     if (!isTextField(focused_) || !callbacks_.textInput) return;
     auto* f = focused_->modifier.find<FocusableElement>();
     if (f->readOnly) return callbacks_.textInput(false, {}, imeState_, {});  // nothing to type into
@@ -3176,13 +3176,13 @@ void ComposeHost::showTextInput(bool touched) {
     callbacks_.textInput(true, focused_->bounds(), imeState_, options);
 }
 
-void ComposeHost::hideSoftwareKeyboard() {
+void KompozHost::hideSoftwareKeyboard() {
     if (isTextField(focused_) && callbacks_.hideSoftwareKeyboard) callbacks_.hideSoftwareKeyboard();
 }
 
 // When the app itself changes the focused field (clearing it after "submit", filtering input,
 // ...), the platform input method still holds the old text and must be told.
-void ComposeHost::syncTextInput() {
+void KompozHost::syncTextInput() {
     auto* f = focused_ ? focused_->modifier.find<FocusableElement>() : nullptr;
     if (!f) return unechoed_.clear();
     bool sameSelection = !f->selection || TextRange{imeState_.selectionStart, imeState_.selectionEnd} == *f->selection;
@@ -3201,7 +3201,7 @@ void ComposeHost::syncTextInput() {
     if (callbacks_.textInputChanged) callbacks_.textInputChanged(imeState_);
 }
 
-TextEditState ComposeHost::fieldState(const FocusableElement& f) {
+TextEditState KompozHost::fieldState(const FocusableElement& f) {
     if (!f.selection) return TextEditState::caretAtEnd(f.value);
     int length = int(f.value.size());
     return {f.value, std::clamp(f.selection->start, 0, length), std::clamp(f.selection->end, 0, length)};
@@ -3248,14 +3248,14 @@ void mergedLabels(const LayoutNode& n, std::string& out) {
 
 } // namespace
 
-std::optional<MutableInteractionSource> ComposeHost::sourceOf(LayoutNode& node, const ClickableElement* click) {
+std::optional<MutableInteractionSource> KompozHost::sourceOf(LayoutNode& node, const ClickableElement* click) {
     if (!click) return std::nullopt;
     if (click->interactionSource || click->indication.kind != Indication::Kind::Custom) return click->interactionSource;
     if (!node.indicationSource) node.indicationSource.emplace();
     return node.indicationSource;
 }
 
-void ComposeHost::syncIndicationNode(LayoutNode& node, const Indication* indication, const std::optional<MutableInteractionSource>& source) {
+void KompozHost::syncIndicationNode(LayoutNode& node, const Indication* indication, const std::optional<MutableInteractionSource>& source) {
     const IndicationNodeFactory* factory = indication && indication->kind == Indication::Kind::Custom ? indication->factory.get() : nullptr;
     if (!factory || !source) {
         node.indicationNode.reset();
@@ -3276,13 +3276,13 @@ void ComposeHost::syncIndicationNode(LayoutNode& node, const Indication* indicat
     });
 }
 
-int ComposeHost::semanticsIdOf(LayoutNode* node) {
+int KompozHost::semanticsIdOf(LayoutNode* node) {
     auto [it, inserted] = semanticsIds_.try_emplace(node, nextSemanticsId_);
     if (inserted) ++nextSemanticsId_;
     return it->second;
 }
 
-std::vector<SemanticsNode> ComposeHost::semanticsTree() {
+std::vector<SemanticsNode> KompozHost::semanticsTree() {
     std::vector<SemanticsNode> out;
     std::unordered_map<int, float> order;  // the nodes' traversal indexes (set ones)
     // `contentType`: the one around it (a text field's semantics go on its decoration).
@@ -3362,7 +3362,7 @@ std::vector<SemanticsNode> ComposeHost::semanticsTree() {
     return sorted;
 }
 
-bool ComposeHost::performSemanticsAction(int id, SemanticsAction action, float argument) {
+bool KompozHost::performSemanticsAction(int id, SemanticsAction action, float argument) {
     LayoutNode* node = nullptr;
     for (auto& [n, i] : semanticsIds_)
         if (i == id) node = n;
@@ -3416,7 +3416,7 @@ bool ComposeHost::performSemanticsAction(int id, SemanticsAction action, float a
     return false;
 }
 
-bool ComposeHost::performSemanticsAction(int id, SemanticsAction action, const std::string& text) {
+bool KompozHost::performSemanticsAction(int id, SemanticsAction action, const std::string& text) {
     if (action != SemanticsAction::SetText) return false;
     LayoutNode* node = nullptr;
     for (auto& [n, i] : semanticsIds_)
@@ -3431,11 +3431,11 @@ bool ComposeHost::performSemanticsAction(int id, SemanticsAction action, const s
     return true;
 }
 
-void ComposeHost::autofillDone(bool commit) {
+void KompozHost::autofillDone(bool commit) {
     if (callbacks_.autofillDone) callbacks_.autofillDone(commit);
 }
 
-void ComposeHost::nodeRemoved(LayoutNode* node) {
+void KompozHost::nodeRemoved(LayoutNode* node) {
     forgetLayoutReads(*node);
     forgetDrawReads(*node);
     if (mouseSelection_ && mouseSelection_->field == node) mouseSelection_.reset();

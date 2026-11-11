@@ -7,7 +7,7 @@ data class Look(val label: String, val shape: Shape)
 
 // Canvas, drawBehind and drawWithCache, Brush and Path, graphicsLayer, pointerInput gestures,
 // combinedClickable, aspectRatio and scaleIn.
-@Composable
+@Kompozable
 fun DrawingSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography

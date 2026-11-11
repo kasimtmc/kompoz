@@ -7,7 +7,7 @@ Drawing your own graphics with `Canvas` and the drawing modifiers, brushes and p
 `Canvas` is a composable that draws whatever you tell it in a `DrawScope`. Give it a size with its modifier:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Target() {
     val ring = MaterialTheme.colorScheme.primary
     val center = MaterialTheme.colorScheme.error
@@ -41,7 +41,7 @@ They take Compose's parameters, by name as Compose's: a color or a brush, then `
 `translate`, `rotate` (and `rotateRad`), `scale`, `inset`, `clipRect` and `clipPath` take a block: what the block draws is moved, turned, scaled or clipped. `clipRect` and `clipPath` keep what is inside, or with `ClipOp.Difference` what is outside. `withTransform` does several at once, and its `transform(matrix)` takes any `Matrix` (Compose's 4x4, perspective too). As in Compose, the transform goes into the drawing itself: nothing is clipped to the drawing's area, and on the GPU renderer everything stays sharp and exactly anti-aliased however it is turned, stretched or seen in perspective (text is laid out at the size it is shown).
 
 ```kotlin
-@Composable
+@Kompozable
 fun Clock(minutes: Float) {
     val hand = MaterialTheme.colorScheme.onSurface
     Canvas(modifier = Modifier.size(120.dp)) {
@@ -62,7 +62,7 @@ You don't need a `Canvas` to draw on an existing composable. These modifiers dra
 - `drawWithCache(build)` builds objects once per size (paths, brushes) and draws with them every frame.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Highlighted(text: String) {
     val marker = Color(0xFFFFEB3B).copy(alpha = 0.6f)
     Text(text, modifier = Modifier.drawBehind {
@@ -70,8 +70,8 @@ fun Highlighted(text: String) {
     })
 }
 
-@Composable
-fun Faded(content: @Composable () -> Unit) {
+@Kompozable
+fun Faded(content: @Kompozable () -> Unit) {
     Box(modifier = Modifier.drawWithContent {
         drawContent()
         drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.White)))   // a fade over the bottom
@@ -173,7 +173,7 @@ fun heart(s: Size): Path {
     return p
 }
 
-@Composable
+@Kompozable
 fun Heart() {
     val red = Color(0xFFE53935)
     Box(modifier = Modifier.size(64.dp).drawWithCache {
@@ -246,7 +246,7 @@ Box(modifier = Modifier.size(80.dp).graphicsLayer(scaleX = 1.2f, scaleY = 1.2f, 
 The form that takes a lambda is evaluated while drawing, so animated values read there change without recomposing or laying out again. Use it for anything that changes every frame (see [Phases](phases.md#deferring-state-reads)):
 
 ```kotlin
-@Composable
+@Kompozable
 fun Spinner() {
     val angle by rememberInfiniteTransition().animateFloat(0f, 360f, infiniteRepeatable(tween(1200, 0, LinearEasing)))
     Icon(Icons.Filled.Refresh, contentDescription = "Loading", modifier = Modifier.graphicsLayer { rotationZ = angle })
@@ -260,7 +260,7 @@ fun Spinner() {
 `rememberGraphicsLayer()` gives a layer to record drawing into and draw again, as Compose's: in `drawWithContent`, `record(layer) { this@drawWithContent.drawContent() }` records the content (`size = …` for a size of its own), `drawLayer(layer)` draws the recording, and the layer's `alpha`, `scaleX`, `scaleY`, `translationX`, `rotationZ`, `topLeft`… say how. A card and its reflection, the content drawn once and shown twice:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Reflected() {
     val layer = rememberGraphicsLayer()
     Box(modifier = Modifier.size(150.dp, 110.dp).drawWithContent {
@@ -383,7 +383,7 @@ val BadgeIcon = ImageVector.Builder("Badge", 24.dp, 24.dp, 24f, 24f)
     }
     .build()
 
-@Composable
+@Kompozable
 fun Sparkle() {
     Icon(SparkleIcon, contentDescription = null)
     Image(rememberVectorPainter(BadgeIcon), contentDescription = "Badge")

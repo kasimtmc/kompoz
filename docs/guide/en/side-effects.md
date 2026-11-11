@@ -37,7 +37,7 @@ suspend fun loadName(id: Int): String {
     return "User $id"
 }
 
-@Composable
+@Kompozable
 fun UserName(id: Int) {
     var name by remember { mutableStateOf("…") }
     LaunchedEffect(id) { name = loadName(id) }
@@ -58,7 +58,7 @@ A coroutine block captures what it uses by value, as every lambda does here, so 
 #! data class Posts(val count: Int)
 #! suspend fun loadUser(id: Int) = User("Ada")
 #! suspend fun loadPosts(id: Int) = Posts(3)
-@Composable
+@Kompozable
 fun Profile(id: Int) {
     var line by remember { mutableStateOf("…") }
     val scope = rememberCoroutineScope()
@@ -81,7 +81,7 @@ Coroutines run on the UI thread: a long computation in one freezes the UI just a
 
 ```kotlin
 #! std::string readFile(const std::string& path) { return path; }
-@Composable
+@Kompozable
 fun FileView(path: String) {
     var text by remember { mutableStateOf("") }
     LaunchedEffect(path) {
@@ -98,7 +98,7 @@ The work on the worker thread returns its result, and the coroutine, back on the
 `LaunchedEffect(key) { … }` runs its block, a coroutine, when the composable enters the composition, and again whenever `key` changes, cancelling the previous run first. It is cancelled when the composable leaves.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Greeting(user: String, snackbar: SnackbarHostState) {
     LaunchedEffect(user) {
         snackbar.showSnackbar("Welcome back, $user")
@@ -114,7 +114,7 @@ fun Greeting(user: String, snackbar: SnackbarHostState) {
 `LaunchedEffect` starts work from composition. To start work from an event, such as a click, use a `CoroutineScope` from `rememberCoroutineScope`. Its coroutines are cancelled when the composable that made it leaves.
 
 ```kotlin
-@Composable
+@Kompozable
 fun ScrollUpButton(list: LazyListState) {
     val scope = rememberCoroutineScope()
     Button(onClick = { scope.launch { list.animateScrollToItem(0) } }) { Text("Top") }
@@ -128,7 +128,7 @@ For effects that need cleaning up, such as registering and unregistering a liste
 ```kotlin
 #! struct Sensor { void subscribe(std::function<void(float)>) {} void unsubscribe() {} };
 #! Sensor& sensor();
-@Composable
+@Kompozable
 fun Compass() {
     var heading by remember { mutableStateOf(0f) }
     DisposableEffect(Unit) {
@@ -146,7 +146,7 @@ fun Compass() {
 ```kotlin
 #! struct Analytics { void setUserType(const std::string&) {} };
 #! Analytics& analytics();
-@Composable
+@Kompozable
 fun Shop(userType: String) {
     SideEffect { analytics().setUserType(userType) }
     Text("Shop")
@@ -158,7 +158,7 @@ fun Shop(userType: String) {
 A long-running effect keyed to a constant doesn't restart when the composable's parameters change, so it would keep using the values it captured first. `rememberUpdatedState` holds the latest value for it to read:
 
 ```kotlin
-@Composable
+@Kompozable
 fun SplashScreen(onTimeout: () -> Unit) {
     val currentOnTimeout by rememberUpdatedState(onTimeout)
     LaunchedEffect(Unit) {  // not restarted when onTimeout changes
@@ -175,7 +175,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
 
 ```kotlin
 #! suspend fun fetchCount(url: String) = 3
-@Composable
+@Kompozable
 fun Downloads(url: String) {
     val count by produceState(0, url) {
         value = fetchCount(url)
@@ -189,7 +189,7 @@ fun Downloads(url: String) {
 `snapshotFlow { … }.collect { … }` watches states from inside a coroutine: it calls you with the block's value now, and again each time a state the block read changes it to a different value. It goes on until the coroutine is cancelled.
 
 ```kotlin
-@Composable
+@Kompozable
 fun ScrollLogger(list: LazyListState) {
     LaunchedEffect(Unit) {
         snapshotFlow { list.firstVisibleItemIndex }.collect { first ->

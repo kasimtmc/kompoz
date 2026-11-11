@@ -2,7 +2,7 @@
 
 #include "showcase.hpp"
 
-@Composable
+@Kompozable
 fun TextFieldsSection() {
     val cs = MaterialTheme.colorScheme
     var email by remember { mutableStateOf("") }

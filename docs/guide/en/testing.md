@@ -1,13 +1,13 @@
 # Testing
 
-UI tests that run without a window, as Compose's `createComposeRule()`: `ComposeTestRule { … }` composes a composable, find nodes, act on them, and check the result, with a virtual clock that makes animations and coroutines deterministic.
+UI tests that run without a window, as Compose's `createComposeRule()`: `KompozTestRule { … }` composes a composable, find nodes, act on them, and check the result, with a virtual clock that makes animations and coroutines deterministic.
 
 ## A first test
 
-`ComposeTestRule` composes, lays out and draws its content headlessly, with a text measurer of fixed sizes. Find nodes by text, content description or test tag, act on them, and assert:
+`KompozTestRule` composes, lays out and draws its content headlessly, with a text measurer of fixed sizes. Find nodes by text, content description or test tag, act on them, and assert:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Counter() {
     var count by remember { mutableStateOf(0) }
     Column {
@@ -18,7 +18,7 @@ fun Counter() {
 
 @Test
 fun counterIncrements() {
-    val rule = ComposeTestRule { Counter() }
+    val rule = KompozTestRule { Counter() }
     rule.onNodeWithText("Count: 0").assertIsDisplayed()
     rule.onNodeWithText("Add").performClick()
     rule.onNodeWithText("Count: 1").assertIsDisplayed()
@@ -53,7 +53,7 @@ As in Compose, finders use merged semantics: a text inside a clickable answers f
 A test tag is the most robust way to find something whose text changes or is translated:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Search() {
     val query = rememberTextFieldState()
     OutlinedTextField(state = query, modifier = Modifier.testTag("search"), label = { Text("Search") })
@@ -61,7 +61,7 @@ fun Search() {
 
 @Test
 fun typingFillsTheField() {
-    val rule = ComposeTestRule { Search() }
+    val rule = KompozTestRule { Search() }
     rule.onNodeWithTag("search").performTextInput("kompoz")
     rule.onNodeWithText("kompoz").assertExists()
 }
@@ -84,10 +84,10 @@ Each action waits for the UI to settle afterwards.
 `assertExists`, `assertDoesNotExist`, `assertIsDisplayed` (in the window, not clipped away), `assertIsNotDisplayed`, `assertTextEquals`, `assertTextContains`, `assertContentDescriptionEquals`, `assertHasClickAction`, `assertIsEnabled`, `assertIsNotEnabled`, `assertIsSelected` (a selected tab, a ticked checkbox, a switch on), `assertIsOn`, `assertIsOff`. They return the node, so they chain:
 
 ```kotlin
-#! @Composable fun Form() {}
+#! @Kompozable fun Form() {}
 @Test
 fun saves() {
-    val rule = ComposeTestRule { Form() }
+    val rule = KompozTestRule { Form() }
     rule.onNodeWithText("Save").assertIsDisplayed().assertIsEnabled().performClick()
 }
 ```
@@ -103,7 +103,7 @@ The rule's clock is virtual: time moves only when the test says so, so animation
 - `rule.advanceFrame()` runs one frame; `rule.mainClock.advanceTimeBy(ms)` is Compose's name for `rule.advanceTimeBy(ms)`.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Toast(show: Boolean) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(show) {
@@ -118,7 +118,7 @@ fun Toast(show: Boolean) {
 
 @Test
 fun toastGoesAwayAfterTwoSeconds() {
-    val rule = ComposeTestRule { Toast(true) }
+    val rule = KompozTestRule { Toast(true) }
     rule.onNodeWithText("Saved").assertExists()
     rule.mainClock.advanceTimeBy(2100)
     rule.onNodeWithText("Saved").assertDoesNotExist()
@@ -135,7 +135,7 @@ The content lambda can read state that the test owns, so the test can change it 
 @Test
 fun showsTheNewName() {
     val name = mutableStateOf("Ada")
-    val rule = ComposeTestRule { Text("Hello, ${name.value}") }
+    val rule = KompozTestRule { Text("Hello, ${name.value}") }
     rule.onNodeWithText("Hello, Ada").assertExists()
     name.value = "Grace"
     rule.waitForIdle()

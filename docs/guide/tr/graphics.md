@@ -7,7 +7,7 @@
 `Canvas`, bir `DrawScope` içinde ona ne söylerseniz onu çizen bir composable'dır. Boyutunu modifier'ıyla verin:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Target() {
     val ring = MaterialTheme.colorScheme.primary
     val center = MaterialTheme.colorScheme.error
@@ -41,7 +41,7 @@ Compose'un parametrelerini Compose'unki gibi adla alırlar: bir renk ya da fır�
 `translate`, `rotate` (ve `rotateRad`), `scale`, `inset`, `clipRect` ve `clipPath` bir blok alır: bloğun çizdiği taşınır, döndürülür, ölçeklenir ya da kırpılır. `clipRect` ve `clipPath` içeride kalanı, `ClipOp.Difference` ile dışarıda kalanı tutar. `withTransform` birkaçını birden yapar; onun `transform(matrix)`'i herhangi bir `Matrix`'i (Compose'un 4x4'lüğü, perspektif de) alır. Compose'daki gibi dönüşüm çizimin kendisine işler: hiçbir şey çizimin alanına kırpılmaz; GPU renderer'da her şey, nasıl döndürülürse, gerilirse ya da perspektiften görülürse görülsün keskin ve birebir kenar yumuşatmalı kalır (yazı gösterildiği boyutta dizilir).
 
 ```kotlin
-@Composable
+@Kompozable
 fun Clock(minutes: Float) {
     val hand = MaterialTheme.colorScheme.onSurface
     Canvas(modifier = Modifier.size(120.dp)) {
@@ -62,7 +62,7 @@ Var olan bir composable'ın üzerine çizmek için `Canvas`'a ihtiyacınız yok.
 - `drawWithCache(build)` nesneleri (path'ler, fırçalar) boyut başına bir kez kurar ve her karede onlarla çizer.
 
 ```kotlin
-@Composable
+@Kompozable
 fun Highlighted(text: String) {
     val marker = Color(0xFFFFEB3B).copy(alpha = 0.6f)
     Text(text, modifier = Modifier.drawBehind {
@@ -70,8 +70,8 @@ fun Highlighted(text: String) {
     })
 }
 
-@Composable
-fun Faded(content: @Composable () -> Unit) {
+@Kompozable
+fun Faded(content: @Kompozable () -> Unit) {
     Box(modifier = Modifier.drawWithContent {
         drawContent()
         drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.White)))   // alt kısımda bir solma
@@ -173,7 +173,7 @@ fun heart(s: Size): Path {
     return p
 }
 
-@Composable
+@Kompozable
 fun Heart() {
     val red = Color(0xFFE53935)
     Box(modifier = Modifier.size(64.dp).drawWithCache {
@@ -246,7 +246,7 @@ Box(modifier = Modifier.size(80.dp).graphicsLayer(scaleX = 1.2f, scaleY = 1.2f, 
 Lambda alan biçimi çizim sırasında değerlendirilir; bu yüzden orada okunan animasyonlu değerler yeniden kompoze etmeden ya da yeniden yerleştirmeden değişir. Her karede değişen her şey için onu kullanın (bkz. [Aşamalar](phases.md#durum-okumalarını-ertelemek)):
 
 ```kotlin
-@Composable
+@Kompozable
 fun Spinner() {
     val angle by rememberInfiniteTransition().animateFloat(0f, 360f, infiniteRepeatable(tween(1200, 0, LinearEasing)))
     Icon(Icons.Filled.Refresh, contentDescription = "Loading", modifier = Modifier.graphicsLayer { rotationZ = angle })
@@ -260,7 +260,7 @@ fun Spinner() {
 `rememberGraphicsLayer()`, Compose'daki gibi, çizimin içine kaydedilip yeniden çizileceği bir katman verir: `drawWithContent` içinde `record(layer) { this@drawWithContent.drawContent() }` içeriği kaydeder (`size = …` ile kendi boyutunda), `drawLayer(layer)` kaydı çizer; katmanın `alpha`, `scaleX`, `scaleY`, `translationX`, `rotationZ`, `topLeft`… özellikleri nasıl çizileceğini söyler. Bir kart ve yansıması, içerik bir kez çizilip iki kez gösterilir:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Reflected() {
     val layer = rememberGraphicsLayer()
     Box(modifier = Modifier.size(150.dp, 110.dp).drawWithContent {
@@ -383,7 +383,7 @@ val BadgeIcon = ImageVector.Builder("Rozet", 24.dp, 24.dp, 24f, 24f)
     }
     .build()
 
-@Composable
+@Kompozable
 fun Sparkle() {
     Icon(SparkleIcon, contentDescription = null)
     Image(rememberVectorPainter(BadgeIcon), contentDescription = "Rozet")

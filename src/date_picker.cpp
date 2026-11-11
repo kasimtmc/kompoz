@@ -113,7 +113,7 @@ enum class Band { None, Start, Inside, End };
 
 void DayCell(std::function<void()> onClick, year_month_day date, bool selected, bool today, Band band, bool enabled,
              const DatePickerStrings& strings, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     Modifier circle = Modifier().size(40);
     if (selected) circle = circle.background(cs.primary, CircleShape);
@@ -162,7 +162,7 @@ year_month_day sameDayIn(year_month_day date, year_month month) {
 // Six weeks of a month, starting on the strings' first day of the week.
 void MonthGrid(year_month month, year_month_day today, const DatePickerStrings& strings, const DaySelection& days,
                CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto [offset, count] = monthLayout(month, strings);
     detail::Column(Modifier().fillMaxWidth().padding(12, 0), [&] {
         for (int week = 0; week < 6; ++week)
@@ -184,7 +184,7 @@ void MonthGrid(year_month month, year_month_day today, const DatePickerStrings& 
 }
 
 void WeekdayLabels(const DatePickerStrings& strings, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     detail::Row(Modifier().fillMaxWidth().padding(12, 0), [&] {
         for (int k = 0; k < 7; ++k)
             detail::Box(Modifier().weight(1).height(48), Alignment::Center, [&] {
@@ -196,7 +196,7 @@ void WeekdayLabels(const DatePickerStrings& strings, CallSite site = CallSite::c
 // The month on show with arrows and a swipeable pager, or (from its name) a grid of years.
 void Calendar(std::shared_ptr<MonthRange> d, year_month_day today, const DatePickerStrings& strings, const DaySelection& days,
               CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     year_month shown = d->shown.get();
@@ -228,7 +228,7 @@ void Calendar(std::shared_ptr<MonthRange> d, year_month_day today, const DatePic
     });
 
     // The month and the arrows in the navigation content color (Compose's navigationContentColor).
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
     detail::Row(Modifier().fillMaxWidth().height(56).padding(12, 0), {.verticalAlignment = Alignment::CenterVertically}, [&] {
         detail::Row(Modifier().clip(RoundedCornerShape(20)).clickable([yearPicking] { yearPicking.set(!yearPicking.get()); }).padding(12, 8),
             {.horizontalArrangement = Arrangement::spacedBy(4), .verticalAlignment = Alignment::CenterVertically}, [&] {
@@ -384,7 +384,7 @@ std::string upper(std::string s) {
 void DateTextField(std::optional<year_month_day> initial, const std::string& label, const DatePickerStrings& strings,
                    std::pair<int, int> years, std::function<std::string(year_month_day)> check,
                    std::function<void(std::optional<year_month_day>)> onDate, const Modifier& modifier, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto text = remember([&] { return mutableStateOf(initial ? digitsOf(*initial, strings.inputPattern) : std::string()); });
     auto error = remember([] { return mutableStateOf(std::string()); });
     std::string pattern = strings.inputPattern;
@@ -431,7 +431,7 @@ void DateTextField(std::optional<year_month_day> initial, const std::string& lab
 // The typed date (Compose's DateInputContent): picked once it is whole and valid, the calendar
 // then opening on its month.
 void DateInputField(const DatePickerState& state, const DatePickerStrings& strings, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     DateTextField(state.selectedDate(), strings.inputLabel, strings, state.yearRange(), {}, [state](std::optional<year_month_day> date) {
         state.setSelectedDate(date);
         if (date) state.setDisplayedMonth(date->year() / date->month());
@@ -442,7 +442,7 @@ void DateInputField(const DatePickerState& state, const DatePickerStrings& strin
 // valid date is kept here: a start mistyped for a moment doesn't lose the end typed already (the
 // state holds no end without a start).
 void DateRangeInputFields(const DateRangePickerState& state, const DatePickerStrings& strings, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto typed = remember([&] { return std::make_shared<std::pair<std::optional<year_month_day>, std::optional<year_month_day>>>(
                                     state.selectedStartDate(), state.selectedEndDate()); });
     detail::Row(Modifier().fillMaxWidth().padding(24, 10, 24, 0), {.horizontalArrangement = Arrangement::spacedBy(8)}, [&] {
@@ -464,7 +464,7 @@ void DateRangeInputFields(const DateRangePickerState& state, const DatePickerStr
 } // namespace
 
 void detail::DatePicker(const DatePickerState& state, const Modifier& modifier, DatePickerOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     DatePickerStrings strings = options.strings.value_or(LocalStrings.current().datePicker);
     std::optional<year_month_day> selected = state.selectedDate();
@@ -476,7 +476,7 @@ void detail::DatePicker(const DatePickerState& state, const Modifier& modifier, 
                           if (auto d = state.selectedDate()) state.setSelectedDate(sameDayIn(*d, m));
                       }};
     bool typing = state.displayMode() == DisplayMode::Input;
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
         detail::Column(modifier.widthIn(0, 360).fillMaxWidth(), [&] {
             detail::Column(Modifier().fillMaxWidth().padding(24, 16, 12, 12), [&] {
                 detail::Text(strings.title, {.font = typography().labelLarge, .color = cs.onSurfaceVariant});
@@ -485,7 +485,7 @@ void detail::DatePicker(const DatePickerState& state, const Modifier& modifier, 
                     detail::Text(selected ? headline(strings, *selected) : typing ? strings.inputNoSelection : strings.noSelection, Modifier().weight(1),
                          {.fontSize = 32, .color = cs.onSurface, .maxLines = 1, .overflow = TextOverflow::Ellipsis});
                     if (options.showModeToggle)  // the pencil to type the date, the calendar to pick it
-                        CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+                        KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
                             detail::IconButton([state, typing] { state.setDisplayMode(typing ? DisplayMode::Picker : DisplayMode::Input); }, [&] {
                                 detail::Icon(typing ? Icons::Filled::DateRange : Icons::Filled::Edit, typing ? strings.switchToCalendar : strings.switchToInput);
                             });
@@ -550,7 +550,7 @@ std::optional<DateRangePickerState> Saver<DateRangePickerState>::restore(const S
 }
 
 void detail::DateRangePicker(const DateRangePickerState& state, const Modifier& modifier, DatePickerOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     DatePickerStrings strings = options.strings.value_or(LocalStrings.current().datePicker);
     auto d = state.data_;
@@ -606,7 +606,7 @@ void detail::DateRangePicker(const DateRangePickerState& state, const Modifier& 
                       .maxLines = 1, .overflow = TextOverflow::Ellipsis});
             });
     };
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
         detail::Column(modifier.widthIn(0, 360).fillMaxWidth(), [&] {
             detail::Column(Modifier().fillMaxWidth().padding(16, 16, 12, 8), [&] {
                 detail::Text(strings.rangeTitle, Modifier().padding(8, 0, 0, 0), {.font = typography().labelLarge, .color = cs.onSurfaceVariant});
@@ -619,7 +619,7 @@ void detail::DateRangePicker(const DateRangePickerState& state, const Modifier& 
                         tab(true, end, strings.endDate);
                     });
                     if (options.showModeToggle)
-                        CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+                        KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
                             detail::IconButton([state, typing] { state.setDisplayMode(typing ? DisplayMode::Picker : DisplayMode::Input); }, [&] {
                                 detail::Icon(typing ? Icons::Filled::DateRange : Icons::Filled::Edit, typing ? strings.switchToCalendar : strings.switchToInput);
                             });
@@ -635,7 +635,7 @@ void detail::DateRangePicker(const DateRangePickerState& state, const Modifier& 
 
 void detail::DatePickerDialog(std::function<void()> onDismissRequest, const Content& confirmButton, const Content& dismissButton,
                       const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // 360 dp wide, as Compose's (not the platform's dialog width, 48 dp in from each side).
     detail::Dialog(std::move(onDismissRequest), [&] {

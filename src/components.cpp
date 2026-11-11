@@ -15,7 +15,7 @@ namespace kompoz {
 namespace {
 
 void provide(Color color, const Font& font, const Content& content) {
-    if (content) CompositionLocalProvider({LocalContentColor.provides(color), LocalTextStyle.provides(font)}, content);
+    if (content) KompozitionLocalProvider({LocalContentColor.provides(color), LocalTextStyle.provides(font)}, content);
 }
 
 enum class ChipKind { Assist, Suggestion, Filter, Input };
@@ -24,7 +24,7 @@ enum class ChipKind { Assist, Suggestion, Filter, Input };
 // spring) and fades in (the slow effects one) when it comes, and its room shrinks away (the
 // default effects spring) when it goes.
 void chipIcon(const Content& icon, Color color, bool animated, CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     if (!animated) return provide(color, typography().labelLarge, icon);
     const MotionScheme& motion = motionScheme();
     auto alpha = animateFloatAsState(icon ? 1.f : 0.f, icon ? motion.slowEffectsSpec : snap());  // (read as it is drawn)
@@ -37,7 +37,7 @@ void chipIcon(const Content& icon, Color color, bool animated, CallSite site = C
 // Elevated: on surfaceContainerLow with a shadow instead of a border.
 void chip(ChipKind kind, bool selected, std::function<void()> onClick, const Content& label, const ChipOptions& o,
           const Modifier& modifier, const CallSite& site, bool elevated = false) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     bool on = o.enabled, selectable = kind == ChipKind::Filter || kind == ChipKind::Input;
     Color faded = cs.onSurface.copy(0.12f);
@@ -69,7 +69,7 @@ void chip(ChipKind kind, bool selected, std::function<void()> onClick, const Con
 } // namespace
 
 void detail::ListItem(const ListItemSlots& slots, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     // Compose 1.4's ListItemLayout: 16 dp at the sides and between the parts; three lines (12 dp
@@ -108,7 +108,7 @@ void detail::ListItem(const ListItemSlots& slots, const Modifier& modifier, Call
         return Size{width, height};
     };
     Color container = slots.containerColor.value_or(cs.surface);
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurface)}, [&] {
         kompoz::Layout(modifier.semantics({.mergeDescendants = true}).fillMaxWidth().background(container), [&] {
             if (leading) detail::Box(Modifier().padding(0, 0, 16, 0), [&] { provide(cs.onSurfaceVariant, LocalTextStyle.current(), slots.leading); });
             if (overline) detail::Box(Modifier(), [&] { provide(cs.onSurfaceVariant, t.labelSmall, slots.overline); });
@@ -133,7 +133,7 @@ enum class ListItemKind { Click, Select, Toggle };
 // Compose's InteractiveListItem: the state's shape (morphing) and colors, the row taking the tap.
 void interactiveListItem(ListItemKind kind, bool selected, std::function<void()> onClick, std::function<void(bool)> onCheckedChange,
                          const ListItemSlots& slots, const Modifier& modifier, const InteractiveListItemOptions& o, const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     const Typography& t = typography();
     auto own = remember([] { return MutableInteractionSource(); });
@@ -226,7 +226,7 @@ void detail::ElevatedFilterChip(bool selected, std::function<void()> onClick, co
 
 void detail::RadioButton(bool selected, std::function<void()> onClick, const Modifier& modifier, bool enabled,
                  std::optional<MutableInteractionSource> interactionSource, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // Compose 1.4's: the color by the default effects spring (disabled: the surface's text faded,
     // at once), the dot's radius by the fast spatial one.
@@ -468,14 +468,14 @@ std::shared_ptr<SliderState::Data> sliderData(float value, std::function<void(fl
 } // namespace
 
 void detail::Slider(float value, std::function<void(float)> onValueChange, const Modifier& modifier, SliderOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // Right to left the track starts at the right.
     slider(false, LocalLayoutDirection.current() == LayoutDirection::Rtl, sliderData(value, std::move(onValueChange), options), modifier,
            options);
 }
 
 void detail::Slider(const SliderState& state, const Modifier& modifier, SliderOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     slider(false, LocalLayoutDirection.current() == LayoutDirection::Rtl, state.data_, modifier, options);
 }
 
@@ -495,7 +495,7 @@ SliderState detail::rememberSliderState(float value, int steps, float valueFrom,
 
 void detail::VerticalSlider(float value, std::function<void(float)> onValueChange, const Modifier& modifier, SliderOptions options,
                     bool reverseDirection, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     slider(true, !reverseDirection, sliderData(value, std::move(onValueChange), options), modifier, options);
 }
 
@@ -514,7 +514,7 @@ SliderColors classicColors() {
 }
 
 void CircleThumb(const SliderState& state, float radius, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Color c = state.colors().value_or(classicColors()).thumb(state.enabled());
     bool halo = state.isPressed();
     detail::Box(Modifier().size(2 * radius).drawBehind([c, halo, radius](DrawScope& d) {
@@ -524,21 +524,21 @@ void CircleThumb(const SliderState& state, float radius, CallSite site) {
 }
 
 void Thumb(const SliderState& state, Size size, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     float thick = state.isPressed() ? size.width / 2 : size.width;  // across the bar
     detail::Box(state.vertical() ? Modifier().size(size.height, thick).background(c, CircleShape) : Modifier().size(thick, size.height).background(c, CircleShape));
 }
 
 void ShapeThumb(const SliderState& state, Shape shape, Size size, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     auto grow = animateFloatAsState(state.isPressed() ? 1.15f : 1.f, 120);  // (read as it is drawn)
     detail::Box(detail::animatedScale(Modifier().size(size.width, size.height), grow).background(c, shape));
 }
 
 void IconThumb(const SliderState& state, const ImageVector& icon, float size, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     auto grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
     detail::Box(detail::animatedScale(Modifier().size(size), grow).background(c, CircleShape), Alignment::Center,
@@ -546,7 +546,7 @@ void IconThumb(const SliderState& state, const ImageVector& icon, float size, Ca
 }
 
 void ValueThumb(const SliderState& state, std::function<std::string(float)> label, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     Color c = state.colors().value_or(colors()).thumb(state.enabled());
     std::string text = label ? label(state.value()) : std::format("{:.0f}", state.value());
     auto grow = animateFloatAsState(state.isPressed() ? 1.1f : 1.f, 120);
@@ -554,7 +554,7 @@ void ValueThumb(const SliderState& state, std::function<std::string(float)> labe
 }
 
 void ClassicTrack(const SliderState& state, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     SliderColors colors = state.colors().value_or(classicColors());
     bool enabled = state.enabled(), vertical = state.vertical(), flipped = state.data_->flipped;
     float fraction = state.valueAsFraction();
@@ -578,7 +578,7 @@ void ClassicTrack(const SliderState& state, CallSite site) {
 }
 
 void Track(const SliderState& state, bool drawStopIndicator, float thumbTrackGapSize, float trackInsideCornerSize, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     SliderColors colors = state.colors().value_or(SliderDefaults::colors());
     bool enabled = state.enabled(), vertical = state.vertical(), flipped = state.data_->flipped;
     float fraction = state.valueAsFraction();
@@ -833,13 +833,13 @@ std::shared_ptr<RangeSliderState::Data> rangeSliderData(std::pair<float, float> 
 
 void detail::RangeSlider(std::pair<float, float> value, std::function<void(std::pair<float, float>)> onValueChange, const Modifier& modifier,
                  SliderOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     rangeSlider(LocalLayoutDirection.current() == LayoutDirection::Rtl, rangeSliderData(value, std::move(onValueChange), options), modifier,
                 options);
 }
 
 void detail::RangeSlider(const RangeSliderState& state, const Modifier& modifier, SliderOptions options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     rangeSlider(LocalLayoutDirection.current() == LayoutDirection::Rtl, state.data_, modifier, options);
 }
 
@@ -860,7 +860,7 @@ RangeSliderState detail::rememberRangeSliderState(float activeRangeStart, float 
 namespace SliderDefaults {
 
 void ClassicTrack(const RangeSliderState& state, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     SliderColors colors = state.colors().value_or(classicColors());
     bool enabled = state.enabled(), flipped = state.data_->flipped;
     float from = state.startFraction(), to = state.endFraction();
@@ -877,7 +877,7 @@ void ClassicTrack(const RangeSliderState& state, CallSite site) {
 }
 
 void Track(const RangeSliderState& state, bool drawStopIndicator, float thumbTrackGapSize, float trackInsideCornerSize, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     SliderColors colors = state.colors().value_or(SliderDefaults::colors());
     bool enabled = state.enabled(), flipped = state.data_->flipped;
     float from = state.startFraction(), to = state.endFraction();
@@ -980,7 +980,7 @@ void segment(bool selected, const std::function<Modifier(const Modifier&)>& clic
         }))
             .padding(12, 0),
         Alignment::Center, [&] {
-            CompositionLocalProvider({LocalContentColor.provides(content), LocalTextStyle.provides(typography().labelLarge)}, [&] {
+            KompozitionLocalProvider({LocalContentColor.provides(content), LocalTextStyle.provides(typography().labelLarge)}, [&] {
                 Layout(Modifier(), [&] {
                     if (options.icon)
                         options.icon();
@@ -1014,7 +1014,7 @@ struct ButtonGroupItemElement final : ModifierElement {
 } // namespace
 
 Modifier ButtonGroupScope::animateWidth(const MutableInteractionSource& source, CallSite site) const {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto item = std::make_shared<ButtonGroupItemElement>();
     item->expansion = animateFloatAsState(source.collectIsPressedAsState() ? 1.f : 0.f, motionScheme().fastSpatialSpec);
     return Modifier().then(std::move(item));
@@ -1030,7 +1030,7 @@ void detail::ButtonGroup(const std::function<void(ButtonGroupScope&)>& content, 
 
 void detail::ButtonGroup(const Modifier& modifier, const ButtonGroupOptions& options, const std::function<void(ButtonGroupScope&)>& content,
                          CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     ButtonGroupScope group;
     ::kompoz::Layout(modifier, [&] { content(group); }, [options](const std::vector<Measurable>& children, const Constraints& c) {
         size_t n = children.size();
@@ -1126,7 +1126,7 @@ void groupOverflow(const GroupItems& items, size_t first, const MutableState<boo
 } // namespace
 
 void detail::ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifier& modifier, const ButtonGroupOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     GroupItems latest = remember([] { return std::make_shared<std::vector<ButtonGroupItem>>(); });
     *latest = items;
     size_t look = items.size();  // what the buttons show: their slots are composed again when it changes
@@ -1134,13 +1134,13 @@ void detail::ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifi
         look = look * 1000003u ^ std::hash<std::string>{}(item.label) ^ size_t(bool(item.icon)) * 31u ^ size_t(item.checked ? 1 + *item.checked : 0) ^
                size_t(item.enabled) * 7u;
     auto open = remember([] { return mutableStateOf(false); });
-    ::kompoz::SubcomposeLayout(modifier, [latest, look, open, options](SubcomposeMeasureScope& s, const Constraints& c) {
+    ::kompoz::SubkompozLayout(modifier, [latest, look, open, options](SubkompozMeasureScope& s, const Constraints& c) {
         size_t n = latest->size();
         // Each one's own width as a button, measured out of sight.
         std::vector<float> widths(n);
         for (size_t i = 0; i < n; ++i) {
             // Never placed: neither drawn nor told to accessibility services.
-            auto measured = s.subcompose("w" + std::to_string(i), look, [latest, i] { groupButton(latest, i, Modifier(), std::nullopt); });
+            auto measured = s.subkompoz("w" + std::to_string(i), look, [latest, i] { groupButton(latest, i, Modifier(), std::nullopt); });
             detail::ProbeMeasure probe;
             for (const Measurable& m : measured) widths[i] = std::max(widths[i], m.measure({0, kInfinity, 0, c.maxHeight}).width);
         }
@@ -1153,7 +1153,7 @@ void detail::ButtonGroup(const std::vector<ButtonGroupItem>& items, const Modifi
             float used = 48;
             for (shown = 0; shown < n && used + widths[shown] + spacing <= room; ++shown) used += widths[shown] + spacing;
         }
-        auto group = s.subcompose(std::string("group"), look * 31u + shown, [latest, shown, open, options] {
+        auto group = s.subkompoz(std::string("group"), look * 31u + shown, [latest, shown, open, options] {
             detail::ButtonGroup(Modifier(), options, [&](ButtonGroupScope& g) {
                 for (size_t i = 0; i < shown; ++i) {
                     auto source = remember([] { return MutableInteractionSource(); });
@@ -1181,12 +1181,12 @@ Shape SegmentedButtonDefaults::itemShape(int index, int count) {
 }
 
 void detail::SingleChoiceSegmentedButtonRow(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     segmentedRow(modifier.selectableGroup(), content);
 }
 
 void detail::MultiChoiceSegmentedButtonRow(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     segmentedRow(modifier, content);
 }
 
@@ -1197,7 +1197,7 @@ void detail::SegmentedButton(bool selected, std::function<void()> onClick, const
 
 void detail::SegmentedButton(bool selected, std::function<void()> onClick, const Content& label, const Modifier& modifier,
                              const SegmentedButtonOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     segment(selected, [&](const Modifier& m) {
         return m.selectable(selected, std::move(onClick), SemanticsRole::RadioButton,
                             {.enabled = options.enabled, .interactionSource = options.interactionSource});
@@ -1206,7 +1206,7 @@ void detail::SegmentedButton(bool selected, std::function<void()> onClick, const
 
 void detail::SegmentedButton(bool checked, std::function<void(bool)> onCheckedChange, const Content& label, const Modifier& modifier,
                              const SegmentedButtonOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     segment(checked, [&](const Modifier& m) {
         return m.toggleable(checked, std::move(onCheckedChange), SemanticsRole::Checkbox,
                             {.enabled = options.enabled, .interactionSource = options.interactionSource});
@@ -1216,7 +1216,7 @@ void detail::SegmentedButton(bool checked, std::function<void(bool)> onCheckedCh
 namespace {
 
 // Secondary rows show the selected tab in onSurface.
-const CompositionLocal<bool> LocalSecondaryTabRow{false};
+const KompozitionLocal<bool> LocalSecondaryTabRow{false};
 
 struct TabRowStyle {
     bool secondary = false, scrollable = false;
@@ -1227,7 +1227,7 @@ struct TabRowStyle {
 // Primary indicators are as wide as the tab's content, secondary ones as the tab. Scrollable
 // rows give each tab its own width; the others share the row's.
 void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs, TabRowStyle style, const CallSite& site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     // Where each tab's indicator goes (x, width): measured by the layout, which writes it here.
     using Spans = std::vector<std::pair<float, float>>;
@@ -1285,7 +1285,7 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
             d.drawRoundRect(indicator, {x, h - 3}, Size{width, 3}, CornerRadius(1.5f));
     };
     auto row = [&](const Modifier& m) {
-        detail::Composer::require().emit(
+        detail::Kompozer::require().emit(
             detail::keyOf(CallSite::current()),
             [&](LayoutNode& node) {
                 node.modifier = m.drawWithContent(drawIndicator);
@@ -1293,7 +1293,7 @@ void tabRow(int selectedTabIndex, const Modifier& modifier, const Content& tabs,
                 node.drawContent = {};
             },
             [&] {
-                CompositionLocalProvider({LocalSecondaryTabRow.provides(secondary), LocalContentColor.provides(secondary ? cs.onSurface : cs.primary)},
+                KompozitionLocalProvider({LocalSecondaryTabRow.provides(secondary), LocalContentColor.provides(secondary ? cs.onSurface : cs.primary)},
                                          tabs);
             });
     };
@@ -1367,7 +1367,7 @@ void detail::Tab(bool selected, std::function<void()> onClick, const Content& te
 
 void detail::Tab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
                  const TabOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto content = tabColor(selected, options);
     // Compose's TabBaselineLayout: the text 16 dp in from the sides; alone, it or the icon in the
     // middle of 48 dp; together in 72, the text's last baseline 17 dp (14 + the indicator's 3; 9
@@ -1394,11 +1394,11 @@ void detail::Tab(bool selected, std::function<void()> onClick, const Content& te
     };
     detail::Column(tabTap(modifier, selected, std::move(onClick), options).fillMaxWidth(),
            {.verticalArrangement = Arrangement::Center, .horizontalAlignment = Alignment::CenterHorizontally}, [&] {
-               CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
+               KompozitionLocalProvider({LocalContentColor.provides(content)}, [&] {
                    ::kompoz::Layout(Modifier(), [&] {
                        if (text)
                            detail::Box(Modifier().padding(16, 0), [&] {
-                               CompositionLocalProvider({LocalTextStyle.provides(typography().titleSmall)}, text);
+                               KompozitionLocalProvider({LocalTextStyle.provides(typography().titleSmall)}, text);
                            });
                        if (icon) detail::Box(Modifier(), icon);
                    }, policy);
@@ -1413,11 +1413,11 @@ void detail::LeadingIconTab(bool selected, std::function<void()> onClick, const 
 
 void detail::LeadingIconTab(bool selected, std::function<void()> onClick, const Content& text, const Content& icon, const Modifier& modifier,
                             const TabOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto content = tabColor(selected, options);
     detail::Row(tabTap(modifier.height(48), selected, std::move(onClick), options).padding(16, 0).fillMaxWidth(),
         {.horizontalArrangement = Arrangement::Center, .verticalAlignment = Alignment::CenterVertically}, [&] {
-            CompositionLocalProvider({LocalContentColor.provides(content), LocalTextStyle.provides(typography().titleSmall)}, [&] {
+            KompozitionLocalProvider({LocalContentColor.provides(content), LocalTextStyle.provides(typography().titleSmall)}, [&] {
                 if (icon) icon();
                 detail::Spacer(Modifier().width(8));
                 if (text) text();
@@ -1426,7 +1426,7 @@ void detail::LeadingIconTab(bool selected, std::function<void()> onClick, const 
 }
 
 void detail::VerticalDragHandle(const Modifier& modifier, std::optional<MutableInteractionSource> interactionSource, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     auto own = remember([] { return MutableInteractionSource(); });
     MutableInteractionSource source = interactionSource.value_or(own);
@@ -1495,7 +1495,7 @@ SwipeToDismissBoxState detail::rememberSwipeToDismissBoxState(std::function<bool
 
 void detail::SwipeToDismissBox(SwipeToDismissBoxState state, const Content& backgroundContent, const Content& content,
                        SwipeToDismissOptions options, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto d = state.data_;
     auto coroutines = rememberCoroutineScope();
     // How fast the drag went at its end (along the offset): the last 100 ms of it.
@@ -1571,20 +1571,20 @@ void detail::SwipeToDismissBox(SwipeToDismissBoxState state, const Content& back
 }
 
 void detail::Badge(const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     if (!content) {
         detail::Box(modifier.size(6).background(cs.error, CircleShape));
         return;
     }
-    CompositionLocalProvider({LocalContentColor.provides(cs.onError), LocalTextStyle.provides(typography().labelSmall)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onError), LocalTextStyle.provides(typography().labelSmall)}, [&] {
         detail::Row(modifier.heightIn(16).widthIn(16).background(cs.error, 8).padding(4, 0),
             {.horizontalArrangement = Arrangement::Center, .verticalAlignment = Alignment::CenterVertically}, content);
     });
 }
 
 void detail::BadgedBox(const Content& badge, const Modifier& modifier, const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     // children: the anchor, then the badge on its top-end corner (outside its bounds).
     auto policy = [](LayoutNode& node, const Constraints& c) {
         if (node.children.size() < 2) return Size{};
@@ -1597,7 +1597,7 @@ void detail::BadgedBox(const Content& badge, const Modifier& modifier, const Con
         node.children[1]->place(anchor.width - (large ? 12.f : 6.f), -badge.height + (large ? 14.f : 6.f));
         return c.constrain(anchor);
     };
-    detail::Composer::require().emit(
+    detail::Kompozer::require().emit(
         detail::keyOf(CallSite::current()),
         [&](LayoutNode& node) {
             node.modifier = modifier;
@@ -1635,10 +1635,10 @@ Modifier exiting(const Modifier& m, const std::optional<BottomAppBarScrollBehavi
 } // namespace
 
 void detail::FlexibleBottomAppBar(const Modifier& modifier, const Content& content, const FlexibleBottomAppBarOptions& options, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = bottomBarInsets(options.windowInsets, options.insets);
-    CompositionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(cs.onSurfaceVariant)}, [&] {
         detail::Row(exiting(modifier.fillMaxWidth(), options.scrollBehavior)
                 .background(options.containerColor.value_or(cs.surfaceContainer))
                 .padding(insets.start, 0, insets.end, insets.bottom)
@@ -1649,14 +1649,14 @@ void detail::FlexibleBottomAppBar(const Modifier& modifier, const Content& conte
 }
 
 void detail::BottomAppBar(const BottomAppBarSlots& slots, const Modifier& modifier, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
     PaddingValues insets = bottomBarInsets(slots.windowInsets, slots.insets);
     Color container = slots.containerColor.value_or(cs.surfaceContainer);
     // The content form's color is its container's own (Compose's contentColorFor), the actions'
     // onSurfaceVariant (their icons' token).
     Color content = slots.contentColor.value_or(slots.content ? cs.contentColorFor(container).value_or(cs.onSurface) : cs.onSurfaceVariant);
-    CompositionLocalProvider({LocalContentColor.provides(content)}, [&] {
+    KompozitionLocalProvider({LocalContentColor.provides(content)}, [&] {
         detail::Row(exiting(modifier.fillMaxWidth(), slots.scrollBehavior)
                 .background(container)
                 .padding(insets.start, 0, insets.end, insets.bottom)

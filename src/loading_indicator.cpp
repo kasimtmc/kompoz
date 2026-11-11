@@ -80,7 +80,7 @@ Path morph(Outline a, Outline b, float t, float turn, Offset center, float radiu
 
 void indicatorNode(const Modifier& modifier, std::optional<Color> container, Color color,
                    std::function<Path(Offset, float, const LayoutNode&)> shape, std::string semantics, const CallSite& site) {
-    detail::Composer::require().emit(detail::keyOf(site), [&](LayoutNode& node) {
+    detail::Kompozer::require().emit(detail::keyOf(site), [&](LayoutNode& node) {
         node.modifier = modifier;
         node.measurePolicy = [](LayoutNode&, const Constraints& c) {
             return c.constrain({LoadingIndicatorDefaults::ContainerSize, LoadingIndicatorDefaults::ContainerSize});
@@ -124,17 +124,17 @@ void determinate(float progress, const Modifier& modifier, std::optional<Color> 
 } // namespace
 
 void detail::LoadingIndicator(const Modifier& modifier, std::optional<Color> color, CallSite site) {
-    composable(site, modifier, color, [=] { indeterminate(modifier, std::nullopt, color.value_or(colorScheme().primary), CallSite::current()); });
+    kompozable(site, modifier, color, [=] { indeterminate(modifier, std::nullopt, color.value_or(colorScheme().primary), CallSite::current()); });
 }
 
 void detail::LoadingIndicator(float progress, const Modifier& modifier, std::optional<Color> color, CallSite site) {
-    composable(site, progress, modifier, color,
+    kompozable(site, progress, modifier, color,
                [=] { determinate(progress, modifier, std::nullopt, color.value_or(colorScheme().primary), CallSite::current()); });
 }
 
 void detail::ContainedLoadingIndicator(const Modifier& modifier, std::optional<Color> indicatorColor, std::optional<Color> containerColor,
                                        CallSite site) {
-    composable(site, modifier, indicatorColor, containerColor, [=] {
+    kompozable(site, modifier, indicatorColor, containerColor, [=] {
         const ColorScheme& cs = colorScheme();
         indeterminate(modifier, containerColor.value_or(cs.primaryContainer), indicatorColor.value_or(cs.onPrimaryContainer),
                       CallSite::current());
@@ -143,7 +143,7 @@ void detail::ContainedLoadingIndicator(const Modifier& modifier, std::optional<C
 
 void detail::ContainedLoadingIndicator(float progress, const Modifier& modifier, std::optional<Color> indicatorColor,
                                        std::optional<Color> containerColor, CallSite site) {
-    composable(site, progress, modifier, indicatorColor, containerColor, [=] {
+    kompozable(site, progress, modifier, indicatorColor, containerColor, [=] {
         const ColorScheme& cs = colorScheme();
         determinate(progress, modifier, containerColor.value_or(cs.primaryContainer), indicatorColor.value_or(cs.onPrimaryContainer),
                     CallSite::current());

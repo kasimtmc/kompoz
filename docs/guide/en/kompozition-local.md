@@ -1,13 +1,13 @@
-# CompositionLocal
+# KompozitionLocal
 
-A `CompositionLocal` hands a value down the composition tree without passing it through every function in between. The theme's colors, the text style and the layout direction reach every component this way.
+A `KompozitionLocal` hands a value down the composition tree without passing it through every function in between. The theme's colors, the text style and the layout direction reach every component this way.
 
 ## Reading a local
 
 Every local has a value at every point in the tree: what the nearest provider above gives, or else its default. `current` reads it:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Caption(text: String) {
     val tint = LocalContentColor.current   // the color text and icons use here
     Text(text, color = tint, style = MaterialTheme.typography.labelSmall)
@@ -20,12 +20,12 @@ The theme is read through locals too, as in Compose: `MaterialTheme.colorScheme`
 
 ## Providing a value
 
-`CompositionLocalProvider` gives one or more locals a value for everything inside its content:
+`KompozitionLocalProvider` gives one or more locals a value for everything inside its content:
 
 ```kotlin
-@Composable
+@Kompozable
 fun Warning(message: String) {
-    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
+    KompozitionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
         Row {
             Icon(Icons.Filled.Info, contentDescription = null)   // tinted with the error color
             Text(message)                                        // so is the text
@@ -34,7 +34,7 @@ fun Warning(message: String) {
 }
 ```
 
-The value only applies inside the content lambda; outside it, the local has its previous value. Up to three locals can be given at once, `CompositionLocalProvider(LocalA provides a, LocalB provides b) { … }`. Providers nest: an inner one overrides an outer one for its own content.
+The value only applies inside the content lambda; outside it, the local has its previous value. Up to three locals can be given at once, `KompozitionLocalProvider(LocalA provides a, LocalB provides b) { … }`. Providers nest: an inner one overrides an outer one for its own content.
 
 `LocalX providesDefault value` gives a value only where no provider above has given one: a library's way of setting a default that an app can still override.
 
@@ -45,16 +45,16 @@ A local is known by which one it is, so define it once, as a top-level `val`, wi
 ```kotlin
 data class Spacing(val small: Dp = 4.dp, val medium: Dp = 8.dp, val large: Dp = 16.dp)
 
-val LocalSpacing = staticCompositionLocalOf { Spacing() }
+val LocalSpacing = staticKompozitionLocalOf { Spacing() }
 
-@Composable
+@Kompozable
 fun Titled(title: String) {
     Column(modifier = Modifier.padding(LocalSpacing.current.large)) { Text(title) }
 }
 
-@Composable
-fun Compact(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalSpacing provides Spacing(2.dp, 4.dp, 8.dp), content = content)
+@Kompozable
+fun Compact(content: @Kompozable () -> Unit) {
+    KompozitionLocalProvider(LocalSpacing provides Spacing(2.dp, 4.dp, 8.dp), content = content)
 }
 ```
 
@@ -63,10 +63,10 @@ The default is made only when the local is read without a provider. When there i
 ```kotlin
 data class User(val name: String)
 
-val LocalUser = compositionLocalOf<User> { error("LocalUser was not provided") }
+val LocalUser = kompozitionLocalOf<User> { error("LocalUser was not provided") }
 ```
 
-`compositionLocalOf` and `staticCompositionLocalOf` are both there, as in Compose; in Kompoz both kinds recompose only the scopes that read the local.
+`kompozitionLocalOf` and `staticKompozitionLocalOf` are both there, as in Compose; in Kompoz both kinds recompose only the scopes that read the local.
 
 A data class (or a C++ type with `operator==`) compares by value: when a provider gives an equal value, nothing recomposes.
 
@@ -101,7 +101,7 @@ A local isn't a replacement for state hoisting: it hands values down, not events
 
 ## Passing locals to another composition
 
-Content composed elsewhere, such as in a popup, already gets the locals of the place it is called from. If you need to carry them by hand, `currentCompositionLocalContext` captures the locals at a point, and `CompositionLocalProvider(context) { … }` provides them again.
+Content composed elsewhere, such as in a popup, already gets the locals of the place it is called from. If you need to carry them by hand, `currentKompozitionLocalContext` captures the locals at a point, and `KompozitionLocalProvider(context) { … }` provides them again.
 
 ## See also
 

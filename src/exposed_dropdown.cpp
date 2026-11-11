@@ -11,13 +11,13 @@ namespace kompoz {
 namespace {
 
 // The box's width, for its menu.
-const CompositionLocal<float> LocalExposedDropdownWidth{0.f};
+const KompozitionLocal<float> LocalExposedDropdownWidth{0.f};
 
 } // namespace
 
 void detail::ExposedDropdownMenuBox(bool expanded, std::function<void(bool)> onExpandedChange, const Modifier& modifier,
                             const Content& content, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto width = remember([] { return mutableStateOf(0.f); });
     auto latest = rememberUpdatedState(std::pair(expanded, std::move(onExpandedChange)));
     // A tap on the field (not one an icon button in it took) opens or closes the menu; the
@@ -28,12 +28,12 @@ void detail::ExposedDropdownMenuBox(bool expanded, std::function<void(bool)> onE
                                            if (change) change(!open);
                                        }});
     }),
-        [&] { CompositionLocalProvider({LocalExposedDropdownWidth.provides(width.get())}, content); });
+        [&] { KompozitionLocalProvider({LocalExposedDropdownWidth.provides(width.get())}, content); });
 }
 
 void detail::ExposedDropdownMenu(bool expanded, std::function<void()> onDismissRequest, const Content& content, const Modifier& modifier,
                          CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto scroll = rememberScrollState();
     float maxHeight = std::max(160.f, LocalWindowSize.current().height / 2 - 64);
     detail::DropdownMenu(expanded, std::move(onDismissRequest), content,
@@ -43,7 +43,7 @@ void detail::ExposedDropdownMenu(bool expanded, std::function<void()> onDismissR
 namespace ExposedDropdownMenuDefaults {
 
 void TrailingIcon(bool expanded, CallSite site) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto turn = animateFloatAsState(expanded ? 180.f : 0.f, tween(150));  // (read as it is drawn)
     detail::Icon(Icons::Filled::ArrowDropDown, expanded ? LocalStrings.current().close : LocalStrings.current().open,
          Modifier().graphicsLayer([turn](GraphicsLayerScope& l) { l.rotationZ = turn.value(); }));

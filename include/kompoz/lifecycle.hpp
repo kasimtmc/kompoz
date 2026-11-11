@@ -56,7 +56,7 @@ public:
 };
 
 // The nearest owner: a navigation entry's inside a NavHost, else the app's (the host's).
-extern const CompositionLocal<std::shared_ptr<LifecycleOwner>> LocalLifecycleOwner;
+extern const KompozitionLocal<std::shared_ptr<LifecycleOwner>> LocalLifecycleOwner;
 std::shared_ptr<LifecycleOwner> currentLifecycleOwner();  // inside a composition
 
 // Runs `onEvent` when the owner's lifecycle has `event` (also the ones it is already past,
@@ -90,7 +90,7 @@ void LifecycleResumeEffect(const K& key, std::function<std::function<void()>()> 
 template <class T>
 T collectAsStateWithLifecycle(const StateFlow<T>& flow, LifecycleState minActiveState = LifecycleState::Started,
                               CallSite site = CallSite::current()) {
-    ComposableScope scope(site);
+    KompozableScope scope(site);
     auto owner = currentLifecycleOwner();
     auto& state = remember([&] { return mutableStateOf(flow.value()); });
     detail::Dispatcher* dispatcher = &detail::currentDispatcher();

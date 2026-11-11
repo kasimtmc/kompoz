@@ -144,8 +144,8 @@ TextLayoutResult TextLayoutMeasurer::measure(const AnnotatedString& text, const 
 }
 
 TextLayoutMeasurer rememberTextMeasurer(CallSite site) {
-    ComposableScope scope(site);
-    ComposeHost& host = detail::Composer::require().host();
+    KompozableScope scope(site);
+    KompozHost& host = detail::Kompozer::require().host();
     return TextLayoutMeasurer(host.textMeasurer(), LocalTextStyle.current(), LocalContentColor.current(), colorScheme().primary,
                               LocalLayoutDirection.current() == LayoutDirection::Rtl, host.density().density);
 }

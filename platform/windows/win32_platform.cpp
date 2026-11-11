@@ -379,7 +379,7 @@ public:
         m.language = preferredLanguage();
         return m;
     }
-    void metricsUpdated(ComposeHost&) override {
+    void metricsUpdated(KompozHost&) override {
         if (wallpaper_) wallpaper_->setDarkTheme(dark_);  // (a dark variant)
     }
     void pixelSize(int* width, int* height) const override { *width = width_, *height = height_; }
@@ -416,7 +416,7 @@ public:
         return info;
     }
 
-    void attach(ComposeHost&, ComposeHost::Callbacks& callbacks) override {
+    void attach(KompozHost&, KompozHost::Callbacks& callbacks) override {
         Win32Platform* self = this;
         auto notifier = [self](std::atomic<bool>& flag) {
             return Notifier{.notify = [self, &flag] {
@@ -447,7 +447,7 @@ public:
         };
     }
 
-    void handled(ComposeHost& h, const Event& e) override {
+    void handled(KompozHost& h, const Event& e) override {
         switch (e.type) {
         case EventType::AccentChanged:
             if (accent_) {
@@ -469,7 +469,7 @@ public:
         }
     }
 
-    void composed(ComposeHost& h, bool redraw, int64_t frameTime) override {
+    void composed(KompozHost& h, bool redraw, int64_t frameTime) override {
         // keepScreenOn: the display kept on while it is laid out.
         if (bool on = h.keepScreenOn(); on != keptOn_) {
             keptOn_ = on;

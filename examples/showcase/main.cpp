@@ -3,7 +3,7 @@
 
 #include "showcase.hpp"
 
-@Composable
+@Kompozable
 fun ShowcaseApp() {
     val system = isSystemInDarkTheme()
     var dark by remember { mutableStateOf(system) }
@@ -13,7 +13,7 @@ fun ShowcaseApp() {
         if (!darkChosen) dark = system
     }
     val colorSource = rememberSaveable { mutableStateOf(ColorSource.System) }  // Material You where the system has it
-    var showRecompositions by remember { mutableStateOf(false) }
+    var showRekompozitions by remember { mutableStateOf(false) }
     // The screens are routes of a NavHost; the tabs keep their own back stacks (and scroll
     // positions), saved while another tab is shown, as Compose's bottom navigation does.
     val nav = rememberNavController()
@@ -65,7 +65,7 @@ fun ShowcaseApp() {
     val closeDrawer: () -> Unit = { scope.launch { drawer.close() } }
     var notified by remember { mutableStateOf(0) }
 
-    val drawerContent: @Composable () -> Unit = {
+    val drawerContent: @Kompozable () -> Unit = {
         ModalDrawerSheet {
             Text("Kompoz", modifier = Modifier.padding(16.dp, 8.dp, 16.dp, 16.dp), style = MaterialTheme.typography.titleLarge)
             for (i in 0 until 4) {
@@ -92,7 +92,7 @@ fun ShowcaseApp() {
         }
     }
 
-    val topBar: @Composable () -> Unit = {
+    val topBar: @Kompozable () -> Unit = {
         TopAppBar(
             title = { Text("Kompoz") },
             navigationIcon = {
@@ -104,11 +104,11 @@ fun ShowcaseApp() {
                     darkChosen = true
                 }) { Icon(Icons.Filled.DarkMode, contentDescription = "Koyu tema") }
                 IconButton(onClick = {
-                    showRecompositions = !showRecompositions
-                    snackbar.showSnackbar(if (showRecompositions) "Recomposition vurgusu açık" else "Recomposition vurgusu kapalı")
+                    showRekompozitions = !showRekompozitions
+                    snackbar.showSnackbar(if (showRekompozitions) "Recomposition vurgusu açık" else "Recomposition vurgusu kapalı")
                 }) {
                     Icon(Icons.Filled.Visibility, contentDescription = "Recomposition'ları göster",
-                         tint = if (showRecompositions) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+                         tint = if (showRekompozitions) MaterialTheme.colorScheme.primary else LocalContentColor.current)
                 }
                 Box {  // the menu opens below its anchor, this Box
                     IconButton(onClick = { overflow = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Diğer seçenekler") }
@@ -141,7 +141,7 @@ fun ShowcaseApp() {
             scrollBehavior = barScroll)
     }
 
-    val fab: @Composable () -> Unit = {
+    val fab: @Kompozable () -> Unit = {
         if (destination?.hasRoute<routes.Home>() == true) {
             ExtendedFloatingActionButton(
                 onClick = {
@@ -163,7 +163,7 @@ fun ShowcaseApp() {
         }
     }
 
-    val screen: @Composable (PaddingValues) -> Unit = { padding ->
+    val screen: @Kompozable (PaddingValues) -> Unit = { padding ->
         // Clear of the bars; the keyboard only takes what the bottom bar doesn't already cover.
         NavHost(
             navController = nav,
@@ -218,12 +218,12 @@ fun ShowcaseApp() {
     SystemBarsAppearance(!dark)  // dark status bar icons over the light theme
     MaterialTheme(colorScheme = animateColorScheme(scheme)) {
         // The showcase speaks Turkish, and so do the library's own texts in it (LocalStrings).
-        CompositionLocalProvider(
+        KompozitionLocalProvider(
             LocalStrings provides Strings.turkish(),
-            LocalShowRecompositions provides showRecompositions,
+            LocalShowRekompozitions provides showRekompozitions,
             LocalLayoutDirection provides (if (rightToLeft) LayoutDirection.Rtl else LayoutDirection.Ltr),
         ) {
-            val app: @Composable () -> Unit = {
+            val app: @Kompozable () -> Unit = {
                 ModalNavigationDrawer(drawerContent = drawerContent, drawerState = drawer) {
                     // The tabs where they suit the window (currentWindowAdaptiveInfo), as M3
                     // Expressive's: a short bar on a phone (its labels beside the icons when it lies
@@ -277,7 +277,7 @@ fun ShowcaseApp() {
                             CheckboxItem("Sağdan sola", checked = rightToLeft, shortcut = KeyShortcut(Key.R, ctrl = true, shift = true),
                                          onCheckedChange = { rightToLeft = it })
                             Separator()
-                            CheckboxItem("Yeniden çizimleri göster", checked = showRecompositions, onCheckedChange = { showRecompositions = it })
+                            CheckboxItem("Yeniden çizimleri göster", checked = showRekompozitions, onCheckedChange = { showRekompozitions = it })
                         }
                         Menu("Git") {
                             val keys = listOf(Key.One, Key.Two, Key.Three, Key.Four)

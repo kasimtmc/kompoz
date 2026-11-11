@@ -4,7 +4,7 @@
 
 // SelectionContainer: long press a word, drag the handles from text to text, copy;
 // DisableSelection keeps a line out of it.
-@Composable
+@Kompozable
 fun SelectableTextSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -26,7 +26,7 @@ fun SelectableTextSection() {
 }
 
 // ContextMenuArea: a right click on the card opens its menu there; text fields have their own.
-@Composable
+@Kompozable
 fun ContextMenuSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -52,7 +52,7 @@ fun ContextMenuSection() {
 
 // The mouse on the desktop: onPointerEvent (in, out, moving, buttons, the wheel), onClick by
 // button and keys held, TooltipArea.
-@Composable
+@Kompozable
 fun PointerSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -173,7 +173,7 @@ struct OutlineIndication final : IndicationNodeFactory {
 Indication shrinkIndication() { return Indication(std::make_shared<ShrinkIndication>()); }
 Indication outlineIndication(Color color) { return Indication(std::make_shared<OutlineIndication>(color)); }
 
-@Composable
+@Kompozable
 fun CustomIndicationSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -238,7 +238,7 @@ private:
 };
 std::shared_ptr<PillToolbar> pillToolbar(MutableState<int> changes) { return std::make_shared<PillToolbar>(changes); }
 
-@Composable
+@Kompozable
 fun TextToolbarSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -246,7 +246,7 @@ fun TextToolbarSection() {
     val pill = remember { pillToolbar(changes) }
     var text by remember { mutableStateOf("Bir kelimeye uzun basın") }
     Section("LocalTextToolbar · TextToolbar") {
-        CompositionLocalProvider(LocalTextToolbar provides pill) {
+        KompozitionLocalProvider(LocalTextToolbar provides pill) {
             OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth(),
                               singleLine = true, label = { Text("Kendi araç çubuğumuz") })
             SelectionContainer { Text("Bu metin de seçilebilir: uzun basın, kopyala ve tümünü seç çıkar.") }
@@ -298,7 +298,7 @@ std::string keyName(Key key) {
 }
 
 // Pinch and twist the photo; zoomed in, one finger pans it (otherwise it scrolls the page).
-@Composable
+@Kompozable
 fun MultiTouchSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -345,7 +345,7 @@ fun MultiTouchSection() {
 
 // Hardware keyboard: Tab / arrows move focus between clickables, Enter / Space click them, and
 // a focusable() box reports the keys it gets.
-@Composable
+@Kompozable
 fun KeyboardSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -390,7 +390,7 @@ fun KeyboardSection() {
 }
 
 // A card that animates several values together when it gets selected.
-@Composable
+@Kompozable
 fun SelectableCard(index: Int, selected: MutableState<Int>) {
     val cs = MaterialTheme.colorScheme
     val t = updateTransition(selected.value == index)
@@ -415,7 +415,7 @@ data class TaskCard(val id: Int, val text: String, val column: Int)  // column 0
 
 // Drag and drop: cards moved between two columns. A finger holds a card, then drags it (the
 // mouse just drags); the other column lights up as it takes part, more under the pointer.
-@Composable
+@Kompozable
 fun DragAndDropSection() {
     val cs = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography

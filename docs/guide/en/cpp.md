@@ -6,10 +6,10 @@ C++ has no compiler plugin, none of Kotlin's named arguments and no trailing lam
 
 ## Composable functions
 
-In Kotlin, `@Composable` and the Compose compiler plugin give every call its identity. In C++ a composable is a plain function. Calling it from composition is enough:
+In Kotlin, `@Kompozable` and the Compose compiler plugin give every call its identity. In C++ a composable is a plain function. Calling it from composition is enough:
 
 ```kotlin nocheck
-@Composable
+@Kompozable
 fun Greeting(name: String) {
     Text("Hello, $name!")
 }
@@ -27,7 +27,7 @@ For a component that should recompose on its own and be skipped when its argumen
 
 ```cpp
 void Greeting(const std::string& name, CallSite site = CallSite::current()) {
-    composable(site, name, [=] {
+    kompozable(site, name, [=] {
         Text("Hello, " + name + "!");
     });
 }
@@ -181,21 +181,21 @@ Button([scope, list] { scope.launch([list]() -> Task { co_await list.animateScro
 
 ```kotlin nocheck
 val color = LocalContentColor.current
-CompositionLocalProvider(LocalContentColor provides Color.Red) { … }
+KompozitionLocalProvider(LocalContentColor provides Color.Red) { … }
 ```
 
 ```cpp body
 Color color = LocalContentColor.current();
-CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&] { Text("Red"); });
+KompozitionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&] { Text("Red"); });
 ```
 
-`MaterialTheme.colorScheme`, `MaterialTheme.typography` and `MaterialTheme.motionScheme` are `colorScheme()`, `typography()` and `motionScheme()`. There is no theme-wide `Shapes`: components have Material's shapes built in, and you pass your own where a component takes one (`RoundedCornerShape(12)`, `CircleShape`). See [CompositionLocal](composition-local.md).
+`MaterialTheme.colorScheme`, `MaterialTheme.typography` and `MaterialTheme.motionScheme` are `colorScheme()`, `typography()` and `motionScheme()`. There is no theme-wide `Shapes`: components have Material's shapes built in, and you pass your own where a component takes one (`RoundedCornerShape(12)`, `CircleShape`). See [KompozitionLocal](kompozition-local.md).
 
 ## A quick reference
 
 | Compose | Kompoz |
 |---|---|
-| `@Composable fun F()` | `void F()`, or `void F(CallSite site = CallSite::current())` with `composable(site, args…, [=] { … })` |
+| `@Kompozable fun F()` | `void F()`, or `void F(CallSite site = CallSite::current())` with `kompozable(site, args…, [=] { … })` |
 | `remember { x }`, `remember(key) { x }` | `remember([] { return x; })`, `remember(key, [] { return x; })` |
 | `var v by mutableStateOf(0)` | `auto v = mutableStateOf(0);` `v.get()`, `v.set(1)` |
 | `key(id) { … }` | `key(id, [&] { … })` |
@@ -209,7 +209,7 @@ CompositionLocalProvider({LocalContentColor.provides(Color::hex(0xE53935))}, [&]
 | `LazyColumn { items(list) { … } }` | `LazyColumn(Modifier()) { items(list, [=](const T& x) { … }); };` |
 | `val vm: MyViewModel = viewModel()` | `auto vm = viewModel<MyViewModel>();` |
 | `@Preview` | `KOMPOZ_PREVIEW(Name) { … }` |
-| `createComposeRule()` | `kompoz::testing::ComposeTestRule` |
+| `createComposeRule()` | `kompoz::testing::KompozTestRule` |
 
 The README's longer table covers navigation, animation, gestures, text fields and more, and [the API page](api.md) lists every Compose API with its status in Kompoz.
 
