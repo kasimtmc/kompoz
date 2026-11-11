@@ -78,9 +78,18 @@ bool startsClass(std::string_view src, size_t at) {
     while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
     if (k >= src.size()) return false;
     if (src[k] == '(') return true;
-    if (src[k] == ':') {  // a base: Kotlin's is constructed, Base(…)
+    if (src[k] == ':') {
+        // A base: Kotlin's is constructed, Base(…); C++'s has an access (public Base). Interfaces alone
+        // (: A, B): a body as Kotlin's below, or none.
         size_t brace = src.find_first_of("{\n", k);
-        return src.substr(k, (brace == std::string_view::npos ? src.size() : brace) - k).find('(') != std::string_view::npos;
+        std::string_view bases = src.substr(k, (brace == std::string_view::npos ? src.size() : brace) - k);
+        if (bases.find('(') != std::string_view::npos) return true;
+        for (std::string_view access : {"public", "private", "protected", "virtual"}) {
+            for (size_t at = bases.find(access); at != std::string_view::npos; at = bases.find(access, at + 1))
+                if (!identChar(bases[at - 1]) && (at + access.size() >= bases.size() || !identChar(bases[at + access.size()]))) return false;
+        }
+        if (brace == std::string_view::npos || src[brace] == '\n') return true;  // (a class without a body: C++'s has one, or ;)
+        k = brace;
     }
     if (src[k] != '{') return false;
     ++k;
@@ -102,6 +111,21 @@ bool startsSealed(std::string_view src, size_t at) {
     while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
     return (src.substr(k, 5) == "class" && k + 5 < src.size() && !identChar(src[k + 5])) ||
            (src.substr(k, 9) == "interface" && k + 9 < src.size() && !identChar(src[k + 9]));
+}
+
+// Whether Kotlin's interface starts at `at`: [private | internal | public]... [fun] interface Name (C++ has no `interface`).
+bool startsInterface(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    std::string_view w = word();
+    while (w == "private" || w == "internal" || w == "public") w = word();
+    if (w == "fun") w = word();
+    return w == "interface" && !word().empty();
 }
 
 // Whether Kotlin's object starts at `at`: object Name, with no body or an empty one (C++ has no `object`).
@@ -159,6 +183,8 @@ char annotatedDeclaration(std::string_view src, size_t at) {
     }
     if (w == "object") return 'o';
     if (w == "sealed") return 's';
+    if (w == "interface" || (w == "fun" && startsInterface(src, b))) return 'i';
+    if (w == "suspend") return 'f';
     if (w == "class" && startsClass(src, b)) return 'c';
     if (w == "fun") return 'f';
     return ' ';
@@ -192,7 +218,7 @@ bool startsFun(std::string_view src, size_t at) {
         size_t b = k;
         while (k < src.size() && identChar(src[k])) ++k;
         std::string_view w = src.substr(b, k - b);
-        if (w == "private" || w == "internal" || w == "public" || w == "inline") continue;
+        if (w == "private" || w == "internal" || w == "public" || w == "inline" || w == "suspend") continue;
         if (w != "fun") return false;
         while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
         return k < src.size() && identChar(src[k]);
@@ -351,6 +377,7 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
                 if (kind == 'd') f.dataClass = parser.dataClass();
                 else if (kind == 'o') f.object = parser.objectDecl();
                 else if (kind == 's') f.sealed = parser.sealedDecl();
+                else if (kind == 'i') f.interface = parser.interfaceDecl();
                 else if (kind == 'c') f.classDecl = parser.classDecl();
                 else {
                     f.function = parser.function();
@@ -365,7 +392,7 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
                 }
                 f.begin = i;
                 f.end = f.dataClass ? f.dataClass->end.offset : f.object ? f.object->end.offset : f.sealed ? f.sealed->end.offset
-                        : f.classDecl ? f.classDecl->end.offset : f.function->end.offset;
+                        : f.interface ? f.interface->end.offset : f.classDecl ? f.classDecl->end.offset : f.function->end.offset;
                 f.qualifier = qualifier();
                 found.push_back(std::move(f));
                 i = f.end;
@@ -401,6 +428,13 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
                 Found f;
                 f.sealed = parser.sealedDecl();
                 f.begin = i, f.end = f.sealed->end.offset, f.qualifier = qualifier();
+                i = f.end;
+                found.push_back(std::move(f));
+            } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsInterface(src, i)) {
+                Parser parser(src, positionOf(src, i));
+                Found f;
+                f.interface = parser.interfaceDecl();
+                f.begin = i, f.end = f.interface->end.offset, f.qualifier = qualifier();
                 i = f.end;
                 found.push_back(std::move(f));
             } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsClass(src, i)) {
@@ -485,8 +519,9 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
     for (Found& s : found)
         if (s.sealed)
             for (const Found& f : found) {
-                const std::optional<Type>& base = f.dataClass ? f.dataClass->base : f.object ? f.object->base : std::nullopt;
-                if (base && base->name == s.sealed->name) s.sealed->topLevel.push_back(f.name());
+                static const std::vector<Type> none;
+                const std::vector<Type>& supers = f.dataClass ? f.dataClass->supers : f.object ? f.object->supers : none;
+                if (namesSuper(supers, s.sealed->name)) s.sealed->topLevel.push_back(f.name());
             }
     return found;
 }
@@ -498,7 +533,10 @@ void declareIn(Module& module, const Found& f, bool qualified) {
     else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
     else if (f.property) module.properties[f.property->name] = &*f.property;
     else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
-    else if (f.object) module.objects.insert(f.object->name);
+    else if (f.object) {
+        module.objects.insert(f.object->name);
+        module.objectDecls[f.object->name] = &*f.object;
+    } else if (f.interface) module.interfaces[f.interface->name] = &*f.interface;
     else if (f.sealed) {  // its nested subclasses, by their full names (two sealed classes may each have a Loading)
         for (const DataClass& d : f.sealed->dataClasses) module.classes[f.sealed->name + "." + d.name] = &d;
         for (const ObjectDecl& o : f.sealed->objects) module.objects.insert(f.sealed->name + "." + o.name);
@@ -559,6 +597,12 @@ void names(const Node* n, std::set<std::string, std::less<>>& out) {
         names(b.body.get(), out);
     }
 }
+void properties(const ClassProperty& p, std::set<std::string, std::less<>>& out) {
+    if (p.type) typeNames(*p.type, out);
+    names(p.init.get(), out);
+    names(p.getter.get(), out);
+    names(p.setter.get(), out);
+}
 void names(const Found& f, std::set<std::string, std::less<>>& out) {
     if (f.function) {
         for (const Param& p : f.function->params) {
@@ -571,11 +615,9 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
     } else if (f.property) {
         if (f.property->decl->type) typeNames(*f.property->decl->type, out);
         names(f.property->decl.get(), out);
-    } else if (f.object) {  // (an object without members is its name alone)
-        for (const ClassProperty& p : f.object->properties) {
-            if (p.type) typeNames(*p.type, out);
-            names(p.init.get(), out);
-        }
+    } else if (f.object) {  // (an object without members is its name and its interfaces)
+        for (const Type& t : f.object->supers) typeNames(t, out);
+        for (const ClassProperty& p : f.object->properties) properties(p, out);
         for (const Function& m : f.object->methods) {
             for (const Param& p : m.params) {
                 typeNames(p.type, out);
@@ -587,11 +629,26 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
         for (const NodeP& b : f.object->initBlocks) names(b.get(), out);
     } else if (f.sealed) {  // its subclasses: those in it, and those of its file (taken with it)
         for (const DataClass& d : f.sealed->dataClasses)
+            for (const Type& t : d.supers) typeNames(t, out);
+        for (const ObjectDecl& o : f.sealed->objects)
+            for (const Type& t : o.supers) typeNames(t, out);
+        for (const DataClass& d : f.sealed->dataClasses)
             for (const Param& p : d.fields) {
                 typeNames(p.type, out);
                 names(p.defaultValue.get(), out);
             }
         for (const std::string& t : f.sealed->topLevel) out.insert(t);
+    } else if (f.interface) {
+        for (const Type& t : f.interface->bases) typeNames(t, out);
+        for (const ClassProperty& p : f.interface->properties) properties(p, out);
+        for (const Function& m : f.interface->methods) {
+            for (const Param& p : m.params) {
+                typeNames(p.type, out);
+                names(p.defaultValue.get(), out);
+            }
+            if (m.result) typeNames(*m.result, out);
+            names(m.body.get(), out);
+        }
     } else if (f.enumClass) {
         // (nothing: its entries are its own)
     } else if (f.classDecl) {
@@ -601,11 +658,9 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
             names(p.defaultValue.get(), out);
         }
         if (c.base) typeNames(*c.base, out);
+        for (const Type& t : c.interfaces) typeNames(t, out);
         for (const NodeP& a : c.baseArgs) names(a.get(), out);
-        for (const ClassProperty& p : c.properties) {
-            if (p.type) typeNames(*p.type, out);
-            names(p.init.get(), out);
-        }
+        for (const ClassProperty& p : c.properties) properties(p, out);
         for (const Function& m : c.methods) {
             for (const Param& p : m.params) {
                 typeNames(p.type, out);
@@ -616,6 +671,7 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
         }
         for (const NodeP& b : c.initBlocks) names(b.get(), out);
     } else {
+        for (const Type& t : f.dataClass->supers) typeNames(t, out);
         for (const Param& p : f.dataClass->fields) {
             typeNames(p.type, out);
             names(p.defaultValue.get(), out);
@@ -705,7 +761,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
                 for (const Found& f : o.found) {
                     const std::string& name = f.name();
                     if (taken.contains(&f) || !used.contains(name) || module.functions.contains(name) || module.classes.contains(name) ||
-                        module.properties.contains(name) || module.classDecls.contains(name))
+                        module.properties.contains(name) || module.classDecls.contains(name) || module.interfaces.contains(name))
                         continue;
                     // A private val or function only for what is taken from its own file (uses it there).
                     bool isPrivate = (f.property && f.property->isPrivate) || (f.function && f.function->isPrivate);
@@ -747,11 +803,13 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     // before the first definition that uses it (C++ reads in order, Kotlin doesn't), after what it
     // uses; one of another file, from its file.
     std::map<std::string, std::pair<std::string, const Found*>, std::less<>> early;
+    auto isEarly = [](const Found& g) {
+        return g.property || g.classDecl || g.interface || (g.function && !g.function->composable) || (g.object && g.object->hasMembers());
+    };
     for (const Found& g : found)
-        if (g.property || g.classDecl || (g.function && !g.function->composable) || (g.object && g.object->hasMembers())) early[g.name()] = {lineFile, &g};
+        if (isEarly(g)) early[g.name()] = {lineFile, &g};
     for (auto [o, g] : imported)
-        if (g->property || g->classDecl || (g->function && !g->function->composable) || (g->object && g->object->hasMembers()))
-            early[g->name()] = {o->lineFile, g};
+        if (isEarly(*g)) early[g->name()] = {o->lineFile, g};
     std::set<std::string, std::less<>> defined;
     // (`where`: the qualifier of where it is defined, the namespace its calls name)
     auto define = [&](auto&& self, const std::string& name, const std::string& where) -> void {
@@ -766,6 +824,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         out.setFile(v->second.first);
         if (g.property) generateProperty(out, *g.property, module);
         else if (g.classDecl) generateClassDecl(out, *g.classDecl, module);
+        else if (g.interface) generateInterface(out, *g.interface, module);
         else if (g.object) generateObject(out, *g.object, module);
         else generateDefinition(out, *g.function, module);
         out.setFile(lineFile);
@@ -777,6 +836,12 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     auto prelude = [&] {
         if (std::exchange(preludeDone, true)) return;
         out.text("\n#include <kompoz/kotlin.hpp>\n");
+        // Interfaces declared first: a data class or an object implementing one names it (its
+        // object's type is made only where one is converted to it, after the interface's definition).
+        for (auto [o, g] : imported)
+            if (g->interface) declareInterface(out, *g->interface);
+        for (const Found& g : found)
+            if (g.interface) declareInterface(out, *g.interface);
         for (auto [o, g] : imported) {  // (from their own files: #line says which)
             out.setFile(o->lineFile);
             if (g->enumClass) generateEnum(out, *g->enumClass);
@@ -812,7 +877,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         for (const std::string& w : cppIdentifiers) {
             // (a data class or object named there wants the prelude by then; it needs no declaration of its own)
             if (!(module.functions.contains(w) || module.classDecls.contains(w) || module.properties.contains(w) || module.classes.contains(w) ||
-                  module.objects.contains(w)))
+                  module.objects.contains(w) || module.interfaces.contains(w)))
                 continue;
             size_t use = cppFirstUse.at(w);
             bool definedBefore = false;
@@ -854,7 +919,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
         const Found& f = found[k];
         passUntil(f.begin);
         if (k == 0) prelude();
-        if (f.property || f.classDecl || (f.function && !f.function->composable) || (f.object && f.object->hasMembers())) {
+        if (isEarly(f)) {
             define(define, f.name(), f.qualifier);
         } else if (f.function) {
             // The function itself declared, and what it uses declared or defined, before it.
@@ -916,8 +981,27 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
     std::string out;
     size_t done = 0;
     bool prelude = false;
+    std::string interfaces;  // (declared with the #include: a data class implementing one may come first)
+    for (const Found& f : found)
+        if (f.interface) {
+            Output o("");
+            declareInterface(o, *f.interface);
+            std::istringstream lines(std::move(o).str());
+            for (std::string line; std::getline(lines, line);)
+                if (line.find("#line") == std::string::npos) interfaces += ' ' + line;
+        }
+    // A sealed class with the last of its subclasses that come after it in the file (its variant's are complete there).
+    std::map<size_t, size_t> sealedAt;  // a sealed class's index -> where it goes
+    for (size_t k = 0; k < found.size(); ++k)
+        if (found[k].sealed && !found[k].failed)
+            for (size_t j = k + 1; j < found.size(); ++j)
+                if ((found[j].dataClass || found[j].object) &&
+                    std::find(found[k].sealed->topLevel.begin(), found[k].sealed->topLevel.end(), found[j].name()) != found[k].sealed->topLevel.end())
+                    sealedAt[k] = j;
+    std::map<size_t, std::string> deferred;  // what goes with each
     std::string pending;  // what single-line declarations need, not placed yet
-    for (const Found& f : found) {
+    for (size_t index = 0; index < found.size(); ++index) {
+        const Found& f = found[index];
         out.append(src.substr(done, f.begin - done));
         // What C++ needs of it, on one line: its #line directives left out, its lines joined.
         std::string cpp;
@@ -930,6 +1014,7 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
             else if (f.classDecl) generateClassDecl(o, *f.classDecl, module);
             else if (f.object) generateObject(o, *f.object, module);
             else if (f.sealed) generateSealed(o, *f.sealed, module);
+            else if (f.interface) generateInterface(o, *f.interface, module);
             else if (f.enumClass) generateEnum(o, *f.enumClass);
             std::string text = std::move(o).str();
             std::istringstream lines(text);
@@ -938,7 +1023,9 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
                 if (b != std::string::npos && line.compare(b, 5, "#line") == 0) continue;
                 cpp += line + ' ';
             }
+            if (auto later = sealedAt.find(index); later != sealedAt.end()) deferred[later->second] += std::exchange(cpp, std::string());
         }
+        if (auto with = deferred.find(index); with != deferred.end()) cpp += with->second;
         // On its lines but the last (what follows it there keeps its columns): kotlin.hpp's #include
         // before the first, as the translation has it, then what C++ needs of it, the rest blank.
         std::string_view text = src.substr(f.begin, f.end - f.begin);
@@ -946,6 +1033,7 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
         std::vector<std::string> payloads;
         if (lineCount > 0 && !prelude) {
             payloads.push_back("#include <kompoz/kotlin.hpp>");
+            if (!interfaces.empty()) payloads.push_back(interfaces);
             prelude = true;
         }
         // (one of a single line has none to spare: it goes with the next that has)

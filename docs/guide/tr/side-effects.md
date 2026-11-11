@@ -27,14 +27,14 @@ Bir coroutine'de bekleyebileceğiniz şeyler:
 | `awaitFrame()` | `withFrameNanos { }` | Bir sonraki kareyi; onun zamanını nanosaniye olarak verir. |
 | `withBackground { work }` | `withContext(Dispatchers.IO) { }` | `work` bir işçi iş parçacığında çalışırken; onun döndürdüğünü verir. |
 | `anim.animateTo(1f)` | `animateTo(1f)` | Bir animasyonun bitmesini (bkz. [Animasyon](animation.md)). |
-| `TaskOf<T>` döndüren bir fonksiyon | bir `suspend fun` | Sonucunu vermesini. |
+| sizin bir `suspend fun`'ınız | bir `suspend fun` | Sonucunu vermesini. |
 
-Sizin bekleyen bir fonksiyonunuz şimdilik C++ ile yazılır: `co_await` ve `co_return` kullanan, `TaskOf<T>` (ya da `Task`) döndüren bir coroutine. Bir coroutine bloğu onu Kotlin'in bir `suspend fun`'ı çağırdığı gibi çağırır, kompozc da onu bekler; çağıranın parçası olarak çalışır ve onunla birlikte iptal edilir:
+Sizin bekleyen bir fonksiyonunuz Kotlin'deki gibi bir `suspend fun`'dır; bir sınıfınki ve bir arayüzünki de olabilir. Onu bir coroutine bloğu ya da başka bir `suspend fun` çağırır, kompozc da onu bekler; çağıranın parçası olarak çalışır ve onunla birlikte iptal edilir. Başka bir yerden çağrılması, Kotlin'deki gibi bir hatadır:
 
 ```kotlin
-TaskOf<std::string> loadName(int id) {
-    co_await delay(std::chrono::milliseconds(300));
-    co_return "Kullanıcı " + std::to_string(id);
+suspend fun loadName(id: Int): String {
+    delay(300)
+    return "Kullanıcı $id"
 }
 
 @Composable
@@ -45,6 +45,8 @@ fun UserName(id: Int) {
 }
 ```
 
+C++'ta bir `suspend fun`, `TaskOf<T>` (bir şey vermiyorsa `Task`) döndüren bir coroutine'dir; C++'ta böyle yazılmış biri de Kotlin'den aynı biçimde çağrılır.
+
 Bir coroutine bloğu, buradaki her lambda gibi kullandığını değerle yakalar; bu yüzden hiçbir zaman yok olmuş bir şeye başvuru tutmaz; yakaladıkları o çalıştığı sürece tutulur.
 
 ### İşler, async ve yapılandırılmış kapsamlar
@@ -52,9 +54,10 @@ Bir coroutine bloğu, buradaki her lambda gibi kullandığını değerle yakalar
 `launch` bir `Job` döndürür: onu `cancel()` edebilir, `isActive()`, `isCompleted()` ya da `isCancelled()` diye sorabilir ya da bir coroutine'de `job.join()` ile bitmesini bekleyebilirsiniz. `async { … }` bir coroutine başlatır (bloğu bekleyen bir fonksiyon çağırır) ve bir `Deferred<T>` döndürür; onun `await()`'i değerini verir ya da attığını atar, böylece iki iş aynı anda yürüyebilir:
 
 ```kotlin
-#! struct User { std::string name; }; struct Posts { int count = 0; };
-#! TaskOf<User> loadUser(int) { co_return User{"Ada"}; }
-#! TaskOf<Posts> loadPosts(int) { co_return Posts{3}; }
+#! data class User(val name: String)
+#! data class Posts(val count: Int)
+#! suspend fun loadUser(id: Int) = User("Ada")
+#! suspend fun loadPosts(id: Int) = Posts(3)
 @Composable
 fun Profile(id: Int) {
     var line by remember { mutableStateOf("…") }
@@ -171,7 +174,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
 `produceState(initial, key) { … }`, bir coroutine'in sonucunu kompozisyonun okuduğu bir değere çevirir. Coroutine `value`'yu ayarlar ve `key` değişince yeniden başlatılır:
 
 ```kotlin
-#! TaskOf<int> fetchCount(const std::string&) { co_return 3; }
+#! suspend fun fetchCount(url: String) = 3
 @Composable
 fun Downloads(url: String) {
     val count by produceState(0, url) {

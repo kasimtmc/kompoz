@@ -21,6 +21,8 @@ struct Module {
     std::map<std::string, const Property*, std::less<>> properties;  // top-level vals
     std::map<std::string, const ClassDecl*, std::less<>> classDecls;  // classes (constructed with their parameters in order)
     std::set<std::string, std::less<>> objects;  // objects: a name that is a type and its one value
+    std::map<std::string, const ObjectDecl*, std::less<>> objectDecls;  // the objects declared so (not a sealed class's nested ones)
+    std::map<std::string, const InterfaceDecl*, std::less<>> interfaces;
     // How a call names each of the file's (or another file's, defined here) functions and vals: its
     // namespace, "::" at the top (a name of all of Kompoz's, label or shape, is not it then).
     std::map<std::string, std::string, std::less<>> qualifiers;
@@ -59,6 +61,10 @@ void generateSealed(Output& out, const SealedDecl& s, const Module& module);
 void generateClass(Output& out, const DataClass& c, const Module& module);
 // A top-level val: a constant of the namespace.
 void generateProperty(Output& out, const Property& p, const Module& module);
+// An interface: a handle to an object implementing it (its abstract C++ class, Name::Object).
+void generateInterface(Output& out, const InterfaceDecl& i, const Module& module);
+// Its name declared (data classes and objects implementing it name it before it is defined).
+void declareInterface(Output& out, const InterfaceDecl& i);
 // A class: a C++ class with its constructor, members and functions.
 void generateClassDecl(Output& out, const ClassDecl& c, const Module& module);
 // Declarations: what every @Composable becomes before any is defined, defaults included.

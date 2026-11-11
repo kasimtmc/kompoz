@@ -70,6 +70,35 @@ fun TodoScreen() {
 
 Bir `ViewModel`'a bağımlılık vermek için fabrika alan aşırı yüklemeyi kullanın: `viewModel<T>(key, factory)`; fabrika onu bağımlılıklarıyla oluşturur (C++'ta `std::make_shared<T>(repository)`).
 
+Bir `ViewModel`'ın durumu `by mutableStateOf(…)` özellikleri de olabilir: kompozisyonda her durum gibi okunur, `private set` ile onları yalnızca kendisi değiştirir. Bağımlılıkları arayüz olabilir, varsayılan olarak sahte biri verilir; onların `suspend fun`'ları eşyordamlarında beklenir:
+
+```kotlin
+interface NoteRepository {
+    suspend fun notes(): List<String>
+}
+
+class FakeNotes : NoteRepository {
+    override suspend fun notes() = listOf("Belgeleri yaz", "Yayımla")
+}
+
+class NotesViewModel(private val repo: NoteRepository = FakeNotes()) : ViewModel() {
+    var notes by mutableStateOf(emptyList<String>())
+        private set
+
+    init {
+        viewModelScope.launch { notes = repo.notes() }
+    }
+}
+
+@Composable
+fun NotesScreen() {
+    val vm = viewModel<NotesViewModel>()
+    Column {
+        for (note in vm.notes) Text(note)
+    }
+}
+```
+
 ## Flow'lar
 
 Bir `ViewModel` durumunu bir `StateFlow` olarak dışarı açar; arayüz onu `collectAsState()` ile okur ve değer değiştiğinde yeniden kompoze eder.

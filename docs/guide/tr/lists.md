@@ -278,10 +278,10 @@ fun CollapsingHeader() {
 
 ## Çekip yenileme
 
-`PullToRefreshBox`, kaydırılan bir kaba Material'ın çekip yenileme göstergesini ekler (buradaki `fetchNews` sizin C++ ile yazdığınız bekleyen bir fonksiyondur: bkz. [Yan etkiler](side-effects.md)):
+`PullToRefreshBox`, kaydırılan bir kaba Material'ın çekip yenileme göstergesini ekler (buradaki `fetchNews` sizin bir `suspend fun`'ınızdır: bkz. [Yan etkiler](side-effects.md)):
 
 ```kotlin
-#! TaskOf<std::vector<std::string>> fetchNews() { co_return std::vector<std::string>{}; }
+#! suspend fun fetchNews(): List<String> = emptyList()
 @Composable
 fun News() {
     var news by remember { mutableStateOf(listOf("First")) }

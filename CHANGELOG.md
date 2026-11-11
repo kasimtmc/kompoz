@@ -1143,6 +1143,23 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Kotlin interfaces**: kompozc reads `interface Name : A, B { … }`: properties and functions, abstract or with a
+  body (`fun describe() = "$name: ${count()}"`, `val title get() = …`), implemented by classes (`override val` in the
+  constructor too), `ViewModel`s, data classes (their fields are the properties), objects (`Name.describe()` reaches the
+  interface's own functions) and `object : Name { … }` expressions, and `fun interface Check { fun test(s: String): Boolean }`
+  made from a lambda (`Check { it.isNotEmpty() }`). A value of an interface is a handle to the object it was made from (a
+  copy is the same one, `==` too; a data class's compares its value), `is`, `as` and `as?` ask what it is, and smart casts
+  follow them. A `List<Name>` declared so takes the values a `listOf(…)` gives.
+- **A class's properties by delegates and with accessors**: `var count by mutableStateOf(0)` with `private set`,
+  `val doubled by derivedStateOf { count * 2 }`, `val greeting by lazy { … }`, `val isValid get() = …` and
+  `set(value) { field = … }`, in classes, `ViewModel`s and objects: read and set by their names inside, through `name()`
+  and `setName(v)` outside, so a composable reading one recomposes when it changes. `by lazy` is new in kotlin.hpp
+  (`kt::lazy`). `shelf.picks++` and `shelf.picks += 2` set a property through its setter.
+- **suspend fun**: at the top level, in classes, objects and interfaces, a coroutine (`TaskOf<T>`, `Task` when it gives
+  nothing; its expression's type when none is written: `suspend fun twice(x: Int) = load(x) + load(x)`), awaited
+  where a coroutine block or another suspend fun calls it; called anywhere else it is kompozc's error, as Kotlin's.
+  `scope.async { load(id) }` gives the call's task, as before. The guide's state holders, `ViewModel` state and
+  suspending functions are now in Kotlin.
 - **Kotlin sealed classes and `is`**: kompozc reads `sealed class` and `sealed interface` with their subclasses
   inside them (`UiState.Ready`) or next to them in the file (`data class Broken(…) : LoadState()`), `data object`s among them
   (`toString()` is the name). A sealed type is a value holding one of its cases (a `std::variant`): `==` compares it,

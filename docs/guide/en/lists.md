@@ -278,10 +278,10 @@ fun CollapsingHeader() {
 
 ## Pull to refresh
 
-`PullToRefreshBox` adds Material's pull-to-refresh indicator to a scrolling container (`fetchNews` here is a suspending function of yours, written in C++: see [Side effects](side-effects.md)):
+`PullToRefreshBox` adds Material's pull-to-refresh indicator to a scrolling container (`fetchNews` here is a `suspend fun` of yours: see [Side effects](side-effects.md)):
 
 ```kotlin
-#! TaskOf<std::vector<std::string>> fetchNews() { co_return std::vector<std::string>{}; }
+#! suspend fun fetchNews(): List<String> = emptyList()
 @Composable
 fun News() {
     var news by remember { mutableStateOf(listOf("First")) }

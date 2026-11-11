@@ -115,6 +115,8 @@ struct Function {
     NodeP body;                      // a Block; or an expression body (= expr) as a Return in a Block
     bool expressionBody = false;
     bool overrides = false;          // override fun (a class's)
+    bool isSuspend = false;          // suspend fun: a coroutine (Task, TaskOf<T>)
+    bool isAbstract = false;         // an interface's fun without a body
     std::vector<std::string> annotations;  // besides @Composable (Preview, ...)
     std::map<std::string, std::string> annotationArgs;  // @Preview(widthDp = 400): "widthDp" -> "400" (the text of each)
     Pos pos;                         // the @ of @Composable (or where it starts)
@@ -142,8 +144,17 @@ struct EnumClass {
 struct ClassProperty {
     std::string name;
     std::optional<Type> type;  // none: the value's
-    NodeP init;
+    NodeP init;                // the value; by …: the delegate
     bool isVar = false, isPrivate = false;
+    bool delegated = false;     // val/var x by delegate
+    bool overrides = false;     // override val/var (an interface's)
+    bool privateSetter = false; // var x … private set
+    NodeP getter;               // get() = … / get() { … }: a Block (an expression one as its Return)
+    NodeP setter;               // set(v) { … }: a Block, `field` the stored value
+    std::string setterParam;    // set(v)'s name
+    // Whether it is read through functions of its own (x(), setX(v)) rather than a field: a delegate,
+    // an accessor, or an interface's property.
+    bool accessed() const { return delegated || overrides || getter || setter || privateSetter; }
     Pos pos;
 };
 struct ClassDecl {
@@ -152,8 +163,10 @@ struct ClassDecl {
     std::vector<Param> ctorParams;
     std::vector<char> ctorKinds;      // one per parameter: ' ' plain, 'v' val, 'm' var
     std::vector<bool> ctorPrivate;    // private val x
+    std::vector<bool> ctorOverride;   // override val x (an interface's property)
     std::optional<Type> base;
     std::vector<NodeP> baseArgs;      // : Base(args)
+    std::vector<Type> interfaces;     // : Base(), A, B (those without a constructor call)
     std::vector<ClassProperty> properties;
     std::vector<Function> methods;
     std::vector<size_t> order;        // members in declaration order: an index into properties (even) or methods (odd): i * 2 + kind
@@ -165,9 +178,10 @@ struct ClassDecl {
 // A data class: data class Name(val a: Int, var b: String = "").
 struct DataClass {
     std::string name;
-    std::optional<Type> base;  // : Sealed() (a sealed class's subclass)
+    std::vector<Type> supers;  // : Sealed(), A, B: a sealed class or interface it is a case of, interfaces
     std::vector<Param> fields;
     std::vector<bool> mutableFields;  // var (else val)
+    std::vector<bool> overridingFields;  // override val (an interface's property)
     std::vector<std::string> annotations;  // @Serializable: a route
     Pos pos;
     Pos end;
@@ -178,7 +192,7 @@ struct DataClass {
 // or a marker's type).
 struct ObjectDecl {
     std::string name;
-    std::optional<Type> base;  // : Sealed() (a sealed class's subclass: data object too)
+    std::vector<Type> supers;  // : Sealed(), A, B (as a data class's)
     std::vector<std::string> annotations;
     std::vector<ClassProperty> properties;
     std::vector<Function> methods;
@@ -201,5 +215,26 @@ struct SealedDecl {
     Pos pos;
     Pos end;
 };
+
+// interface Name : A, B { val a: T; fun f(): R; fun g() = …; val b: T get() = … }: what classes, objects
+// and data classes implementing it have, its functions and properties without a body abstract.
+// fun interface Name { fun f(…) }: made from a lambda too (Name { … }).
+struct InterfaceDecl {
+    std::string name;
+    bool isFun = false;
+    std::vector<Type> bases;
+    std::vector<ClassProperty> properties;
+    std::vector<Function> methods;
+    std::vector<size_t> order;  // members in declaration order, as ClassDecl's
+    Pos pos;
+    Pos end;
+};
+
+// Whether one of `supers` is `name` (a sealed class's case names it).
+inline bool namesSuper(const std::vector<Type>& supers, const std::string& name) {
+    for (const Type& t : supers)
+        if (t.name == name) return true;
+    return false;
+}
 
 }  // namespace kompozc

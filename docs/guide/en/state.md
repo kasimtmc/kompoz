@@ -230,23 +230,23 @@ The rule of thumb, as in Compose:
 
 ### State holders
 
-When a screen's state and logic grow, gather them in a class: a *state holder*. A plain class kept with `remember` suits UI logic (which panel is open, a form's fields); a `ViewModel` suits state that outlives the screen and talks to the rest of the app. Kompoz's own components do this: `LazyListState`, `DrawerState` and `SnackbarHostState` are state holders made by `rememberLazyListState()` and friends. Such a class is written in C++, next to your composables:
+When a screen's state and logic grow, gather them in a class: a *state holder*. A plain class kept with `remember` suits UI logic (which panel is open, a form's fields); a `ViewModel` suits state that outlives the screen and talks to the rest of the app. Kompoz's own components do this: `LazyListState`, `DrawerState` and `SnackbarHostState` are state holders made by `rememberLazyListState()` and friends. Such a class is written next to your composables, as in Kotlin: its properties `by mutableStateOf(…)` are states, read and set by their names, and a composable reading one recomposes when it changes:
 
 ```kotlin
 class SearchState {
-public:
-    MutableState<std::string> query = mutableStateOf(std::string());
-    MutableState<bool> expanded = mutableStateOf(false);
-    void clear() const {
-        query.set("");
-        expanded.set(false);
+    var query by mutableStateOf("")
+    var expanded by mutableStateOf(false)
+
+    fun clear() {
+        query = ""
+        expanded = false
     }
-};
+}
 
 @Composable
 fun SearchScreen() {
     val search = remember { SearchState() }
-    Text(search.query.value)
+    Text(search.query)
 }
 ```
 

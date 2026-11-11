@@ -601,6 +601,9 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 373. Compose'un `destination.hierarchy.any { it.hasRoute<Tab>() }`'ı ve `destination?.hasRoute<Home>()`'u, `navOptions { popUpTo<Home> { saveState = true }; launchSingleTop = true }`, adlarıyla türlü `composable<Item>(deepLinks = listOf(navDeepLink<Item>("…"))) { }` ve `navigation<Graph>(startDestination = …) { }`, Compose 1.4'ün `NavigationSuiteScaffold(navigationItems = { NavigationSuiteItem(selected = …, onClick = …, icon = { }, label = { }, badge = { }) }, navigationSuiteType = …)`'ı, `KeyShortcut(Key.D, ctrl = true)` ile Compose Multiplatform'un `MenuBar { Menu("…") { Item(…); CheckboxItem(…); RadioButtonItem(…); Separator(); Menu("…") { } } }`'ı, `data.visuals.actionLabel`, `Key.DirectionLeft` / `MoveHome` / `Spacebar` ✅
 374. Kotlin'in üyeli `object`'i (`object AppIcons { val Add = … }`, `const val`, `var`, özel üyeler, işlevler, `init`), içe aktarılmış bir renk nesnesi (`TopAppBarDefaults.` olmadan `topAppBarColors(…)`), `String + her değer` ✅
 375. Kotlin'in `sealed class` / `sealed interface`'i (alt sınıfları içinde ya da yanında, `data object`'ler), `is` / `!is`, `as` / `as?`, `when` dallarında, `if` ve `&&`'teki `is`'ten sonra akıllı dönüşümler, `else`'siz bütün durumları kapsayan bir `when` ✅
+376. Kotlin'in `interface`'i (soyut ve gövdeli özellikler ve işlevler, başka arayüzleri genişletir); onu sınıflar, `ViewModel`'lar, data class'lar, object'ler ve `object : Ad { }` uygular; bir lambdadan `fun interface`, arayüzlerde `is` / `as` ✅
+377. Bir sınıfın ve bir object'in `by mutableStateOf(…)` (`private set` ile), `by derivedStateOf { }`, `by lazy { }` özellikleri, `get()` ve `set(value) { field = … }` ile ✅
+378. Üst düzeyde, sınıflarda, object'lerde ve arayüzlerde `suspend fun` (türü yazılı ya da ifadesininki) ✅
 
 ## Sıradakiler
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <functional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -122,7 +123,7 @@ const std::set<std::string, std::less<>> kKtFunctions = {
     // kotlin.math's (a Float in, a Float out), and Compose's Rect(left, top, right, bottom) / Rect(offset, size) and
     // CornerSize(percent) / CornerSize(dp): Kotlin's meanings over the C++ structs' fields.
     "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "sqrt", "abs", "min", "max", "floor", "ceil",
-    "round", "truncate", "sign", "pow", "hypot", "exp", "ln", "log2", "log10", "Rect", "CornerSize", "PaddingValues"};
+    "round", "truncate", "sign", "pow", "hypot", "exp", "ln", "log2", "log10", "Rect", "CornerSize", "PaddingValues", "lazy"};
 // Compose's extension functions on a flow that Kompoz has as free functions with a call site of their own:
 // vm.items.collectAsStateWithLifecycle() -> ::kompoz::collectAsStateWithLifecycle(vm.items).
 const std::set<std::string, std::less<>> kFreeMembers = {"collectAsStateWithLifecycle"};
@@ -327,9 +328,13 @@ public:
         if (!f.composable) {
             // A plain function: defined in each file that uses it (inline), its type the body's when
             // it is an expression and none is written; an extension's receiver comes first.
-            out_.text(std::string(f.isPrivate ? "static " : "inline ") + (f.result ? type(*f.result) : f.expressionBody ? "auto" : "void") +
-                      " " + cppName(f.name) + "(");
-            if (f.receiver) out_.text("const " + type(*f.receiver) + "& kompoz_receiver_1" + (f.params.empty() ? "" : ", "));
+            // A suspend fun is a coroutine: Task, or TaskOf<T> (its expression's when no type is written), its
+            // parameters by value (its frame outlives the call).
+            std::string result = f.result ? type(*f.result) : f.expressionBody ? "auto" : "void";
+            if (f.isSuspend && (f.result || !f.expressionBody)) result = result == "void" ? "::kompoz::Task" : "::kompoz::TaskOf<" + result + ">";
+            out_.text(std::string(f.isSuspend ? "[[nodiscard]] " : "") + (f.isPrivate ? "static " : "inline ") + result + " " + cppName(f.name) + "(");
+            if (f.receiver)
+                out_.text((f.isSuspend ? type(*f.receiver) : "const " + type(*f.receiver) + "&") + " kompoz_receiver_1" + (f.params.empty() ? "" : ", "));
         } else {
             out_.text((unit ? std::string("void") : type(*f.result)) + " " + f.name + "(");
         }
@@ -338,7 +343,7 @@ public:
         while (firstDefault > 0 && f.params[firstDefault - 1].defaultValue) --firstDefault;
         for (size_t i = 0; i < f.params.size(); ++i) {
             const Param& p = f.params[i];
-            out_.text((i ? ", " : "") + paramType(p.type) + " " + cppName(p.name));
+            out_.text((i ? ", " : "") + paramTypeOf(p, f.isSuspend) + " " + cppName(p.name));
             if (defaults && i >= firstDefault) {
                 out_.text(" = ");
                 scopes_.emplace_back();
@@ -349,6 +354,405 @@ public:
         if (f.composable)  // (a value-returning one too: a group of its own, as Compose gives every call)
             out_.text(std::string(f.params.empty() ? "" : ", ") + "::kompoz::CallSite site" + (defaults ? " = ::kompoz::CallSite::current()" : ""));
         out_.text(")");
+        if (f.isSuspend && !f.result && f.expressionBody) {
+            out_.text(" -> ::kompoz::kt::TaskFor<decltype(");
+            typing(*f.body->kids[0]->kids[0], true);
+            out_.text(")>");
+        }
+    }
+
+    // ---- Interfaces, accessors, suspend functions ----
+
+    const InterfaceDecl* interfaceNamed(const std::string& name) const {
+        auto i = module_.interfaces.find(name);
+        return i == module_.interfaces.end() ? nullptr : i->second;
+    }
+    // The interfaces among `types` (the rest left: the sealed class a data class is a case of) and those they
+    // extend, each once, nearest first.
+    std::vector<const InterfaceDecl*> allInterfaces(const std::vector<Type>& types) const {
+        std::vector<const InterfaceDecl*> out;
+        std::vector<const Type*> todo;
+        for (const Type& t : types) todo.push_back(&t);
+        for (size_t i = 0; i < todo.size() && i < 256; ++i)
+            if (const InterfaceDecl* d = interfaceNamed(todo[i]->name); d && std::find(out.begin(), out.end(), d) == out.end()) {
+                out.push_back(d);
+                for (const Type& b : d->bases) todo.push_back(&b);
+            }
+        return out;
+    }
+    // A member of interfaces: the property or function of the name, the interface that declares it first
+    // (nearest first), and whether one of them gives it a body (a getter, a function's).
+    struct InterfaceMember {
+        const InterfaceDecl* in = nullptr;
+        const ClassProperty* property = nullptr;
+        const Function* method = nullptr;
+        bool hasBody = false;
+    };
+    using InterfaceMembers = std::vector<std::pair<std::string, InterfaceMember>>;
+    InterfaceMembers interfaceMembers(const std::vector<Type>& types) const {
+        InterfaceMembers out;
+        auto find = [&](const std::string& n) -> InterfaceMember* {
+            for (auto& [k, v] : out)
+                if (k == n) return &v;
+            return nullptr;
+        };
+        for (const InterfaceDecl* d : allInterfaces(types)) {
+            for (const ClassProperty& p : d->properties) {
+                InterfaceMember* m = find(p.name);
+                if (!m) m = &out.emplace_back(p.name, InterfaceMember{d, &p, nullptr, false}).second;
+                m->hasBody = m->hasBody || p.getter;
+            }
+            for (const Function& f : d->methods) {
+                InterfaceMember* m = find(f.name);
+                if (!m) m = &out.emplace_back(f.name, InterfaceMember{d, nullptr, &f, false}).second;
+                m->hasBody = m->hasBody || !f.isAbstract;
+            }
+        }
+        return out;
+    }
+    static const InterfaceMember* memberNamed(const InterfaceMembers& members, const std::string& name) {
+        for (auto& [n, m] : members)
+            if (n == name) return &m;
+        return nullptr;
+    }
+    std::string objectOf(const InterfaceDecl& d) const { return qualified(d.name) + "::Object"; }
+    // A parameter's type: by value in a coroutine (its frame outlives the call), else as paramType says.
+    std::string paramTypeOf(const Param& p, bool byValue) { return byValue ? type(p.type) : paramType(p.type); }
+    // The type an interface's member gives, for an override's declaration: decltype of the call on the
+    // interface's object (`object`: that type as it is spelled where the override is).
+    std::string memberType(const std::string& object, const InterfaceMember& m) {
+        std::string call = "std::declval<const " + object + "&>()." + cppName(m.property ? m.property->name : m.method->name) + "(";
+        if (m.method)
+            for (size_t i = 0; i < m.method->params.size(); ++i)
+                call += (i ? ", " : "") + std::string("std::declval<") + paramTypeOf(m.method->params[i], m.method->isSuspend) + ">()";
+        return "decltype(" + call + "))";
+    }
+
+    // A function's head, `prefix` before it (" virtual ", " static "): R name(params) [const] [-> T]`suffix`, its
+    // parameters declared by the caller. A suspend fun's result is its coroutine (Task, TaskOf<T>), its parameters
+    // by value; `inherited`: what an override gives (an interface's function's); a result written nowhere is
+    // deduced (auto, `deduce`) or, where it can't be (a virtual one, a coroutine), its expression's (decltype).
+    void functionHead(const Function& m, const std::string& prefix, bool isConst, const std::string& suffix, const std::string& inherited,
+                      bool defaults, bool deduce) {
+        bool unitResult = m.result ? m.result->name == "Unit" : !m.expressionBody;
+        std::string result = "auto";
+        int trailing = 0;  // 1: inherited, 2: the expression's
+        if (m.result || !m.expressionBody) {
+            std::string t = unitResult ? "void" : type(*m.result);
+            result = !m.isSuspend ? t : unitResult ? "::kompoz::Task" : "::kompoz::TaskOf<" + t + ">";
+        } else if (!inherited.empty()) {
+            trailing = 1;
+        } else if (!deduce || m.isSuspend) {
+            trailing = 2;
+        }
+        out_.text((m.isSuspend ? " [[nodiscard]]" : "") + prefix + result + " " + cppName(m.name) + "(");
+        for (size_t i = 0; i < m.params.size(); ++i) {
+            const Param& p = m.params[i];
+            out_.text((i ? ", " : "") + paramTypeOf(p, m.isSuspend) + " " + cppName(p.name));
+            if (defaults && p.defaultValue) {
+                out_.text(" = ");
+                expr(*p.defaultValue, &p.type);
+            }
+        }
+        out_.text(std::string(")") + (isConst ? " const" : ""));
+        if (trailing == 1) out_.text(" -> " + inherited);
+        if (trailing == 2) {
+            out_.text(std::string(" -> ") + (m.isSuspend ? "::kompoz::kt::TaskFor<decltype(" : "std::remove_cvref_t<decltype("));
+            typing(*m.body->kids[0]->kids[0], m.isSuspend);  // (an expression body: a Return)
+            out_.text(")>");
+        }
+        out_.text(suffix);
+    }
+    // An expression written for its type (decltype): in a suspend fun's, each call as what it gives once awaited.
+    // In an interface's object, its own members are reached through a declval of it (not `this`, which a
+    // declaration's type doesn't have).
+    void typing(const Node& e, bool awaited) {
+        bool wasSuspend = std::exchange(suspend_, false), wasTyping = std::exchange(awaitedTypes_, awaited);
+        std::string wasSelf = std::exchange(selfPrefix_, interfaceSelf_.empty() ? std::string() : "std::declval<const " + interfaceSelf_ + "&>().");
+        expr(e);
+        suspend_ = wasSuspend, awaitedTypes_ = wasTyping, selfPrefix_ = wasSelf;
+    }
+    // A function's body, a coroutine's for a suspend fun (a Unit one ends with co_return).
+    void functionBody(const Function& m) {
+        const Type* wasResult = std::exchange(currentResult_, m.result ? &*m.result : nullptr);
+        bool wasSuspend = std::exchange(suspend_, m.isSuspend);
+        out_.text(" {");
+        statements(*m.body, false);
+        if (m.isSuspend && !m.expressionBody && (!m.result || m.result->name == "Unit")) out_.text(" co_return;");
+        out_.text(" }");
+        suspend_ = wasSuspend;
+        currentResult_ = wasResult;
+    }
+
+    // Whether a property's accessors read `field` (the value it keeps).
+    static bool usesField(const ClassProperty& p) {
+        std::set<std::string, std::less<>> used;
+        usedNames(p.getter.get(), used);
+        usedNames(p.setter.get(), used);
+        return used.contains("field");
+    }
+    // Whether a property read through accessors keeps a value (kompoz_value_<name>): one given a value, one
+    // without a getter (the default one reads it), one whose accessors read `field`. (A delegated one keeps
+    // its delegate, kompoz_by_<name>.)
+    static bool stores(const ClassProperty& p) { return !p.delegated && (p.init || !p.getter || usesField(p)); }
+    static std::string storageOf(const ClassProperty& p) { return (p.delegated ? "kompoz_by_" : "kompoz_value_") + p.name; }
+
+    // The members of a class, an object or an interface read through functions, known by name in its body:
+    // the delegated ones (their delegate), those with accessors (an object's: get, set, private set; a class's:
+    // an interface's too), and the interfaces' properties it doesn't declare (`own`: its fields of other names).
+    void declareMembers(const std::vector<ClassProperty>& properties, const std::vector<Type>& interfaces, bool isObject,
+                        const std::vector<std::string>& accessedParams = {}, const std::set<std::string, std::less<>>& own = {}) {
+        for (const std::string& n : accessedParams) declare(n, Accessor);
+        for (const ClassProperty& p : properties)
+            if (p.delegated) declare(p.name, MemberDelegated);
+            else if (isObject ? p.getter || p.setter || p.privateSetter : p.accessed()) declare(p.name, Accessor);
+        for (auto& [name, m] : interfaceMembers(interfaces)) {
+            bool declared = own.contains(name) || scopes_.back().contains(name) ||
+                            std::any_of(properties.begin(), properties.end(), [&](const ClassProperty& p) { return p.name == name; });
+            if (m.property && !declared && (!isObject || m.hasBody)) declare(name, Accessor);
+        }
+    }
+
+    // A property's functions: its getter, name(), and a var's setter, setName(v) (private with `private set`);
+    // `isStatic`: an object's. An override of an interface's property gives what it does; the getter reads
+    // the delegate, the value kept, or runs get() (its `field` the value kept), the setter likewise.
+    template <class Access>
+    void accessorFunctions(const ClassProperty& p, const InterfaceMember* base, bool isStatic, Access& access) {
+        if (p.overrides && (!base || !base->property)) throw CompileError(p.pos, p.name + " overrides no property of the interfaces");
+        std::string storage = storageOf(p);
+        std::string q = isStatic ? " static " : " ", c = isStatic ? "" : " const";
+        bool isOverride = !isStatic && p.overrides;
+        const Type* baseType = base && base->property && base->property->type ? &*base->property->type : nullptr;
+        std::string t = p.type ? type(*p.type) : baseType ? type(*baseType) : "";
+        access(!p.isPrivate);
+        out_.at(p.pos);
+        if (!t.empty()) {
+            out_.text(q + t + " " + cppName(p.name) + "()" + c);
+        } else if (isOverride) {
+            out_.text(q + "auto " + cppName(p.name) + "()" + c + " -> " + memberType(objectOf(*base->in), *base));
+        } else if (p.delegated) {
+            out_.text(q + "decltype(auto) " + cppName(p.name) + "()" + c);
+        } else if (!p.getter) {
+            out_.text(q + "std::remove_cvref_t<decltype(" + storage + ")> " + cppName(p.name) + "()" + c);
+        } else {
+            out_.text(q + "auto " + cppName(p.name) + "()" + c);
+        }
+        out_.text(std::string(isOverride ? " override" : "") + " {");
+        if (p.delegated) {
+            out_.text(" return ::kompoz::kt::delegated(" + storage + ");");
+        } else if (p.getter) {
+            std::string was = std::exchange(fieldOf_, storage);
+            scopes_.emplace_back();
+            declare("field", BackingField);
+            statements(*p.getter, false);
+            scopes_.pop_back();
+            fieldOf_ = was;
+        } else {
+            out_.text(" return " + storage + ";");
+        }
+        out_.text(" }");
+        if (!p.isVar) return;
+        access(!(p.isPrivate || p.privateSetter));
+        std::string pt = p.type ? paramType(*p.type) : baseType ? paramType(*baseType)
+                         : p.delegated ? "const std::remove_cvref_t<decltype(::kompoz::kt::delegated(" + storage + "))>&"
+                                       : "const std::remove_cvref_t<decltype(" + storage + ")>&";
+        std::string v = p.setter ? cppName(p.setterParam) : "kompoz_v";
+        out_.text(q + "void " + setterOf(p.name) + "(" + pt + " " + v + ")" + c + (isOverride && base->property->isVar ? " override" : "") + " {");
+        if (p.delegated) {
+            out_.text(" " + storage + ".set(" + v + ");");
+        } else if (p.setter) {
+            std::string was = std::exchange(fieldOf_, storage);
+            scopes_.emplace_back();
+            declare(p.setterParam, Local);
+            declare("field", BackingField);
+            statements(*p.setter, false);
+            scopes_.pop_back();
+            fieldOf_ = was;
+        } else {
+            out_.text(" " + storage + " = " + v + ";");
+        }
+        out_.text(" }");
+    }
+
+    // What a data class's value or an object is where one of its interfaces is wanted: a class template
+    // (kompoz_Object, made only where it is converted, after the interfaces' definitions: they are only
+    // declared before it), its abstract members the value's or the object's; kompoz_shared() makes one (an
+    // object's: its one), kompoz_from(o) gives the value back (`x as Item`).
+    void interfaceAdapter(const std::string& name, const std::vector<Type>& supers, bool isObject, const std::function<bool(const std::string&)>& has,
+                          Pos pos) {
+        std::vector<const InterfaceDecl*> direct;
+        for (const Type& t : supers)
+            if (const InterfaceDecl* d = interfaceNamed(t.name)) direct.push_back(d);
+        if (direct.empty()) return;
+        auto later = [](const std::string& t) { return "::kompoz::kt::Later<kompoz_D, " + t + ">"; };
+        std::string bases;
+        for (const InterfaceDecl* d : direct) bases += std::string(bases.empty() ? " " : ", ") + "public virtual " + later(qualified(d->name)) + "::Object";
+        std::string value = isObject ? later(name) + "{}" : "value";
+        out_.text(" template <class kompoz_D = void> struct kompoz_Object :" + bases + " {");
+        if (!isObject) out_.text(" mutable " + later(name) + " value; explicit kompoz_Object(const " + later(name) + "& v) : value(v) {}");
+        for (auto& [n, m] : interfaceMembers(supers)) {
+            if (!has(n)) {
+                if (m.hasBody) continue;  // (the interface's own)
+                throw CompileError(pos, name + " doesn't implement " + m.in->name + "." + n);
+            }
+            std::string object = "typename " + later(qualified(m.in->name)) + "::Object";
+            if (m.property) {
+                out_.text(" auto " + cppName(n) + "() const -> " + memberType(object, m) + " override { return KOMPOZ_KT_GET((" + value + "), " +
+                          cppName(n) + "); }");
+                if (m.property->isVar) {
+                    if (!m.property->type) throw CompileError(m.property->pos, n + " needs a type");
+                    out_.text(" void " + setterOf(n) + "(" + paramType(*m.property->type) + " kompoz_v) const override { KOMPOZ_KT_SET((" + value + "), " +
+                              cppName(n) + ", " + setterOf(n) + ", (kompoz_v)); }");
+                }
+            } else {
+                if (!isObject) throw CompileError(pos, name + ": a data class has no functions here, so it can't implement " + m.in->name + "." + n);
+                out_.text(" auto " + cppName(n) + "(");
+                std::string args;
+                for (size_t i = 0; i < m.method->params.size(); ++i) {
+                    const Param& p = m.method->params[i];
+                    out_.text((i ? ", " : "") + paramTypeOf(p, m.method->isSuspend) + " " + cppName(p.name));
+                    args += (i ? ", " : "") + cppName(p.name);
+                }
+                out_.text(") const -> " + memberType(object, m) + " override { return " + later(name) + "::" + cppName(n) + "(" + args + "); }");
+            }
+        }
+        out_.text(" std::string toString() const override { return ::kompoz::kt::str(" + value + "); }");
+        if (!isObject)
+            out_.text(" bool kompoz_equals(const ::kompoz::kt::InterfaceObject& o) const override { auto* other = dynamic_cast<const kompoz_Object*>(&o); "
+                      "return other && other->value == value; }");
+        out_.text(" }; using Object = kompoz_Object<>;");
+        if (isObject) {
+            out_.text(" template <class kompoz_D = void> static std::shared_ptr<kompoz_Object<kompoz_D>> kompoz_shared() { static const auto object = "
+                      "std::make_shared<kompoz_Object<kompoz_D>>(); return object; }");
+            out_.text(" template <class kompoz_O> static " + name + " kompoz_from(const std::shared_ptr<kompoz_O>&) { return {}; }");
+        } else {
+            out_.text(" template <class kompoz_D = void> std::shared_ptr<kompoz_Object<kompoz_D>> kompoz_shared() const { return "
+                      "std::make_shared<kompoz_Object<kompoz_D>>(*this); }");
+            out_.text(" template <class kompoz_O> static " + name + " kompoz_from(const std::shared_ptr<kompoz_O>& o) { return o->value; }");
+        }
+        // The interfaces' members with bodies that it doesn't declare, reached as its own (Item("a").shown(), Name.shown()).
+        std::string q = isObject ? " static " : " ", c = isObject ? "" : " const";
+        for (auto& [n, m] : interfaceMembers(supers)) {
+            if (!m.hasBody || has(n)) continue;
+            if (m.method)
+                out_.text(" template <class... kompoz_A>" + q + "decltype(auto) " + cppName(n) + "(kompoz_A&&... a)" + c + " { return kompoz_shared<::kompoz::kt::Later<std::tuple<kompoz_A...>, void>>()->" +
+                          cppName(n) + "(std::forward<kompoz_A>(a)...); }");
+            else
+                out_.text(" template <class kompoz_D = void>" + q + "decltype(auto) " + cppName(n) + "()" + c + " { return kompoz_shared<kompoz_D>()->" + cppName(n) +
+                          "(); }");
+        }
+    }
+
+    // interface Name : A { val a: T; fun f(): R; fun g() = … }: a handle (as a class's: copies are the same object,
+    // == too, a data class's equal values) to an object deriving from Name::Object, an abstract class: its
+    // properties getters (a var's a setter too), abstract or the interface's own get(), its functions virtual,
+    // abstract or with their bodies; deriving from InterfaceObject and the interfaces' it extends, virtually.
+    // Made from what implements it: a class's handle, a ViewModel's pointer, a data class or an object (their
+    // kompoz_shared()); a fun interface's from a lambda too (kompoz_lambda). C++ calls its functions on it.
+    void interfaceDefinition(const InterfaceDecl& i) {
+        std::string bases = "public virtual ::kompoz::kt::InterfaceObject";
+        for (const Type& b : i.bases) {
+            const InterfaceDecl* d = interfaceNamed(b.name);
+            if (!d) throw CompileError(b.pos, b.name + " isn't an interface written in Kotlin here");
+            bases += ", public virtual " + objectOf(*d);
+        }
+        InterfaceMembers inherited = interfaceMembers(i.bases);
+        out_.at(i.pos);
+        out_.text("class " + i.name + " { public: struct Object : " + bases + " {");
+        bool wasInClass = std::exchange(inClass_, true);
+        interfaceSelf_ = "Object";
+        for (const Function& m : i.methods) interfaceMethods_.insert(m.name);
+        for (auto& [n, m] : inherited)
+            if (m.method) interfaceMethods_.insert(n);
+        scopes_.emplace_back();
+        for (const ClassProperty& p : i.properties) declare(p.name, Accessor);
+        for (auto& [n, m] : inherited)
+            if (m.property && !scopes_.back().contains(n)) declare(n, Accessor);
+        for (size_t index : i.order) {
+            if (index % 2 == 0) {
+                const ClassProperty& p = i.properties[index / 2];
+                const InterfaceMember* base = memberNamed(inherited, p.name);
+                if (p.overrides && (!base || !base->property)) throw CompileError(p.pos, p.name + " overrides no property of " + i.name + "'s interfaces");
+                const Type* typed = p.type ? &*p.type : base && base->property->type ? &*base->property->type : nullptr;
+                out_.at(p.pos);
+                if (!p.getter) {
+                    if (!typed) throw CompileError(p.pos, p.name + " needs a type");
+                    out_.text(" virtual " + type(*typed) + " " + cppName(p.name) + "() const = 0;");
+                } else {
+                    out_.text(" virtual " + (typed ? type(*typed) : std::string("auto")) + " " + cppName(p.name) + "() const");
+                    if (!typed) {
+                        if (!(p.getter->kids.size() == 1 && p.getter->kids[0]->kind == Node::Return && !p.getter->kids[0]->kids.empty()))
+                            throw CompileError(p.pos, p.name + " needs a type");
+                        out_.text(" -> std::remove_cvref_t<decltype(");
+                        typing(*p.getter->kids[0]->kids[0], false);
+                        out_.text(")>");
+                    }
+                    out_.text(std::string(p.overrides ? " override" : "") + " {");
+                    statements(*p.getter, false);
+                    out_.text(" }");
+                }
+                if (p.isVar) {
+                    if (!typed) throw CompileError(p.pos, p.name + " needs a type");
+                    out_.text(" virtual void " + setterOf(p.name) + "(" + paramType(*typed) + ") const = 0;");
+                }
+            } else {
+                const Function& m = i.methods[index / 2];
+                const InterfaceMember* base = memberNamed(inherited, m.name);
+                if (base && !base->method) base = nullptr;
+                if (m.overrides && !base) throw CompileError(m.pos, m.name + " overrides no function of " + i.name + "'s interfaces");
+                out_.at(m.pos);
+                scopes_.emplace_back();
+                for (const Param& p : m.params) declare(p.name, Local);
+                functionHead(m, " virtual ", true, m.isAbstract ? " = 0" : base ? " override" : "", base ? memberType(objectOf(*base->in), *base) : "", true,
+                             false);
+                if (m.isAbstract) out_.text(";");
+                else functionBody(m);
+                scopes_.pop_back();
+            }
+        }
+        scopes_.pop_back();
+        inClass_ = wasInClass;
+        interfaceSelf_.clear();
+        interfaceMethods_.clear();
+        const std::string& n = i.name;
+        out_.text(" }; " + n + "() = default;");
+        out_.text(" template <class T> requires requires(const T& t) { { t.kompoz_shared() } -> std::convertible_to<std::shared_ptr<Object>>; } " + n +
+                  "(const T& t) : kompoz_object_(t.kompoz_shared()) {}");
+        out_.text(" template <class T> requires std::convertible_to<std::shared_ptr<T>, std::shared_ptr<Object>> " + n +
+                  "(std::shared_ptr<T> p) : kompoz_object_(std::move(p)) {}");
+        out_.text(" " + n + "(::kompoz::kt::FromObject, std::shared_ptr<Object> o) : kompoz_object_(std::move(o)) {}");
+        out_.text(" static " + n + " kompoz_from(std::shared_ptr<Object> o) { return " + n + "(::kompoz::kt::FromObject{}, std::move(o)); }");
+        out_.text(" Object& kompoz_object() const { return *kompoz_object_; }");
+        out_.text(" const std::shared_ptr<Object>& kompoz_shared() const { return kompoz_object_; }");
+        out_.text(" bool operator==(const " + n + "& o) const { return ::kompoz::kt::sameObject(kompoz_object_.get(), o.kompoz_object_.get()); }");
+        out_.text(" std::string toString() const { return kompoz_object_ ? kompoz_object_->toString() : std::string(\"null\"); }");
+        // C++ calls its functions on the handle (Kotlin's code reaches the object: kt::deref).
+        for (const Function& m : i.methods) {
+            if (m.name == "toString" || m.name == "equals" || m.name == "hashCode") continue;
+            out_.text(" decltype(auto) " + cppName(m.name) + "(");
+            std::string args;
+            for (size_t k = 0; k < m.params.size(); ++k) {
+                out_.text((k ? ", " : "") + paramTypeOf(m.params[k], m.isSuspend) + " " + cppName(m.params[k].name));
+                args += (k ? ", " : "") + cppName(m.params[k].name);
+            }
+            out_.text(") const { return kompoz_object_->" + cppName(m.name) + "(" + args + "); }");
+        }
+        if (i.isFun) {  // Name { … }: an object whose one abstract function runs the lambda
+            const Function* m = nullptr;
+            for (const Function& f : i.methods)
+                if (f.isAbstract) m = &f;
+            if (m->isSuspend) throw CompileError(m->pos, "a fun interface's suspend fun isn't supported");
+            std::string params, args;
+            for (size_t k = 0; k < m->params.size(); ++k) {
+                params += (k ? ", " : "") + paramType(m->params[k].type) + " " + cppName(m->params[k].name);
+                args += (k ? ", " : "") + cppName(m->params[k].name);
+            }
+            InterfaceMember im{&i, nullptr, m, false};
+            out_.text(" template <class F> static " + n + " kompoz_lambda(F f) { struct Lambda : Object { F f; explicit Lambda(F g) : f(std::move(g)) {} auto " +
+                      cppName(m->name) + "(" + params + ") const -> " + memberType("Object", im) + " override { return f(" + args + "); } }; return " + n +
+                      "(::kompoz::kt::FromObject{}, std::make_shared<Lambda>(std::move(f))); }");
+        }
+        out_.text(" private: std::shared_ptr<Object> kompoz_object_; };\n");
     }
 
     void classDefinition(const DataClass& k) {
@@ -377,7 +781,11 @@ public:
         out_.text(" template <class = void> std::string toString() const { return ::kompoz::kt::str(\"" + k.name + "(\"");
         for (size_t i = 0; i < k.fields.size(); ++i)
             out_.text(", \"" + std::string(i ? ", " : "") + k.fields[i].name + "=\", " + cppName(k.fields[i].name));
-        out_.text(", \")\"); } };\n");
+        out_.text(", \")\"); }");
+        interfaceAdapter(k.name, k.supers, false, [&](const std::string& n) {
+            return std::any_of(k.fields.begin(), k.fields.end(), [&](const Param& f) { return f.name == n; });
+        }, k.pos);
+        out_.text(" };\n");
     }
 
     // Name(a = 1, b = "x") for a class: its constructor's parameters in their order (defaults left to it).
@@ -414,21 +822,42 @@ public:
         out_.text(")");
     }
 
-    // class Name(val a: T, b: U) : Base(b) { val c = …; fun f() { … } }: a C++ class, its constructor's
-    // class Name(val a: T, b: U) : Base(b) { val c = …; fun f() { … } }: a C++ class. One with a base is that
+    // class Name(val a: T, b: U) : Base(b), A { val c = …; fun f() { … } }: a C++ class. One with a base is that
     // class itself (the base's owner hands it out: viewModel<T>()); one without is a handle to its object
     // (Name::Object, shared by its copies), as a Kotlin object is reached through references: a copy is
     // the same object (== too), a lambda capturing it keeps it, a `const Name&` parameter changes it.
     // Either way the constructor's val/var parameters and the properties are members (typed as written,
     // else as their value is; initialized in the constructor in their order), init blocks the
     // constructor's body, the functions inline, const, their members mutable (Kotlin's references never
-    // make an object const), an override as its base's. Kotlin code reaches a handle's object through
-    // kt::deref (kompoz_object()); C++ calls the handle's functions, which forward.
+    // make an object const), an override of a C++ base's as it is there. Its interfaces' objects are bases
+    // (virtual); a property by a delegate, with get() or set(), or an interface's, is read through functions
+    // (name(), setName(v)) keeping its delegate or value aside. Kotlin code reaches a handle's object
+    // through kt::deref (kompoz_object()); C++ calls the handle's functions, which forward.
     void classDeclDefinition(const ClassDecl& k) {
         bool handle = !k.base;
+        std::string bases;  // its interfaces' objects
+        for (const Type& t : k.interfaces) {
+            const InterfaceDecl* d = interfaceNamed(t.name);
+            if (!d) throw CompileError(t.pos, t.name + " isn't an interface written in Kotlin here; a base class is constructed: " + t.name + "()");
+            bases += std::string(bases.empty() ? "" : ", ") + "public virtual " + objectOf(*d);
+        }
+        InterfaceMembers inherited = interfaceMembers(k.interfaces);
         out_.at(k.pos);
-        out_.text("class " + k.name + (k.base ? " : public " + plainType(*k.base) : std::string()) + " {");
+        out_.text("class " + k.name + (k.base ? " : public " + plainType(*k.base) + (bases.empty() ? std::string() : ", " + bases) : std::string()) +
+                  " {");
         bool wasInClass = std::exchange(inClass_, true);
+        // Its members read through functions, by their names in all of it.
+        scopes_.emplace_back();
+        {
+            std::vector<std::string> accessedParams;
+            std::set<std::string, std::less<>> fields;
+            for (size_t i = 0; i < k.ctorParams.size(); ++i)
+                if (k.ctorKinds[i] != ' ') {
+                    if (k.ctorOverride[i]) accessedParams.push_back(k.ctorParams[i].name);
+                    else fields.insert(k.ctorParams[i].name);
+                }
+            declareMembers(k.properties, k.interfaces, false, accessedParams, fields);
+        }
         scopes_.emplace_back();
         // Plain constructor parameters: only the constructor and the initializers see them.
         std::set<std::string, std::less<>> plainParams;
@@ -440,20 +869,29 @@ public:
             isPublic = wantPublic;
         };
         out_.text(" public:");
-        if (handle) out_.text(" struct Object {");
-        // The members: the constructor's val/var parameters, then the properties.
+        if (handle) out_.text(" struct Object" + (bases.empty() ? std::string() : " : " + bases) + " {");
+        // The members: the constructor's val/var parameters, then the properties (one read through functions
+        // keeps its value or delegate aside, private: kompoz_value_<name>, kompoz_by_<name>).
+        auto paramStorage = [&](size_t i) { return k.ctorOverride[i] ? "kompoz_value_" + k.ctorParams[i].name : cppName(k.ctorParams[i].name); };
         for (size_t i = 0; i < k.ctorParams.size(); ++i) {
             if (k.ctorKinds[i] == ' ') continue;
-            access(!k.ctorPrivate[i]);
+            access(!k.ctorPrivate[i] && !k.ctorOverride[i]);
             out_.at(k.ctorParams[i].pos);
-            out_.text(" mutable " + type(k.ctorParams[i].type) + " " + cppName(k.ctorParams[i].name) + ";");
+            out_.text(" mutable " + type(k.ctorParams[i].type) + " " + paramStorage(i) + ";");
         }
+        auto propertyStorage = [&](const ClassProperty& p) { return p.accessed() ? storageOf(p) : cppName(p.name); };
         for (const ClassProperty& p : k.properties) {
-            access(!p.isPrivate);
+            if (p.accessed() && !p.delegated && !stores(p)) continue;  // (a getter's alone)
+            access(!p.accessed() && !p.isPrivate);
             out_.at(p.pos);
-            if (p.type) {
-                out_.text(" mutable " + type(*p.type) + " " + cppName(p.name) + ";");
+            const InterfaceMember* base = p.overrides ? memberNamed(inherited, p.name) : nullptr;
+            const Type* baseType = base && base->property && base->property->type ? &*base->property->type : nullptr;
+            if (p.type && !p.delegated) {
+                out_.text(" mutable " + type(*p.type) + " " + propertyStorage(p) + ";");
+            } else if (baseType && !p.delegated) {
+                out_.text(" mutable " + type(*baseType) + " " + propertyStorage(p) + ";");
             } else {
+                if (!p.init) throw CompileError(p.pos, "give " + p.name + " a type");
                 // Its value's type (the value is written again, unevaluated): one that reads a plain
                 // constructor parameter can't be, the parameter isn't here yet.
                 std::set<std::string, std::less<>> used;
@@ -461,9 +899,13 @@ public:
                 for (const std::string& n : used)
                     if (plainParams.contains(n))
                         throw CompileError(p.pos, "give " + p.name + " a type: its value reads the constructor's parameter " + n);
+                // (a delegate's lambda, which C++ can't write here, stands for what it gives: derivedStateOf { count * 2 })
                 out_.text(" mutable std::remove_cvref_t<decltype(");
+                bool wasTyping = std::exchange(classTyping_, p.delegated);
+                const Type* wasValue = std::exchange(delegateValue_, p.delegated && p.type ? &*p.type : nullptr);
                 expr(*p.init);
-                out_.text(")> " + cppName(p.name) + ";");
+                classTyping_ = wasTyping, delegateValue_ = wasValue;
+                out_.text(")> " + propertyStorage(p) + ";");
             }
         }
         // The constructor: Base(args), the members in order, the init blocks. (A val/var parameter is
@@ -502,13 +944,13 @@ public:
         }
         for (size_t i = 0; i < k.ctorParams.size(); ++i) {
             if (k.ctorKinds[i] == ' ') continue;
-            out_.text(std::string(any ? ", " : " : ") + cppName(k.ctorParams[i].name) + "(std::move(kompoz_" + k.ctorParams[i].name + "))");
+            out_.text(std::string(any ? ", " : " : ") + paramStorage(i) + "(std::move(kompoz_" + k.ctorParams[i].name + "))");
             any = true;
         }
         for (const ClassProperty& p : k.properties) {
             if (!p.init) continue;
-            out_.text(std::string(any ? ", " : " : ") + cppName(p.name) + "(");
-            expr(*p.init, p.type ? &*p.type : nullptr);
+            out_.text(std::string(any ? ", " : " : ") + propertyStorage(p) + "(");
+            expr(*p.init, p.type && !p.delegated ? &*p.type : nullptr);
             out_.text(")");
             any = true;
         }
@@ -516,33 +958,51 @@ public:
         for (const NodeP& b : k.initBlocks) statements(*b, false);
         out_.text(" }");
         scopes_.pop_back();
+        // The functions of the properties read through them: an override parameter's, then the properties'.
+        for (size_t i = 0; i < k.ctorParams.size(); ++i) {
+            if (!k.ctorOverride[i]) continue;
+            const Param& p = k.ctorParams[i];
+            const InterfaceMember* base = memberNamed(inherited, p.name);
+            if (!base || !base->property) throw CompileError(p.pos, p.name + " overrides no property of " + k.name + "'s interfaces");
+            access(!k.ctorPrivate[i]);
+            out_.at(p.pos);
+            out_.text(" " + type(p.type) + " " + cppName(p.name) + "() const override { return kompoz_value_" + p.name + "; }");
+            if (k.ctorKinds[i] == 'm')
+                out_.text(" void " + setterOf(p.name) + "(" + paramType(p.type) + " kompoz_v) const" + (base->property->isVar ? " override" : "") +
+                          " { kompoz_value_" + p.name + " = kompoz_v; }");
+        }
+        for (const ClassProperty& p : k.properties)
+            if (p.accessed()) accessorFunctions(p, memberNamed(inherited, p.name), false, access);
         // Its functions, each seeing its parameters and, by their names, the class's members.
-        auto methodHead = [&](const Function& m, bool forwarder) {
-            out_.text(" " + (m.result ? type(*m.result) : m.expressionBody ? std::string(forwarder ? "decltype(auto)" : "auto") : std::string("void")) +
-                      " " + cppName(m.name) + "(");
-            for (size_t i = 0; i < m.params.size(); ++i) {
-                const Param& p = m.params[i];
-                out_.text((i ? ", " : "") + paramType(p.type) + " " + cppName(p.name));
-                if (p.defaultValue && forwarder == handle) {  // (the defaults where the call arrives)
-                    out_.text(" = ");
-                    expr(*p.defaultValue);
-                }
-            }
-            out_.text(")");
-        };
+        bool ownToString = false;
         for (const Function& m : k.methods) {
+            if (m.isAbstract) throw CompileError(m.pos, m.name + " needs a body (an abstract class isn't supported: an interface is)");
             access(!m.isPrivate);
             out_.at(m.pos);
-            methodHead(m, false);
-            out_.text(std::string(m.overrides ? " override" : " const") + " {");
+            const InterfaceMember* base = memberNamed(inherited, m.name);
+            if (base && !base->method) base = nullptr;
+            bool any = m.name == "toString" || m.name == "equals" || m.name == "hashCode";  // (Kotlin's Any's)
+            ownToString = ownToString || m.name == "toString";
+            bool isConst = true;
+            std::string suffix, inheritedType;
+            if (base) {
+                suffix = " override", inheritedType = memberType(objectOf(*base->in), *base);
+            } else if (any) {
+                if (m.name == "toString" && !bases.empty()) suffix = " override", inheritedType = "std::string";
+            } else if (m.overrides) {  // a C++ base's (a ViewModel's onCleared)
+                isConst = false, suffix = " override";
+            }
             scopes_.emplace_back();
             for (const Param& p : m.params) declare(p.name, Local);
-            const Type* wasResult = std::exchange(currentResult_, m.result ? &*m.result : nullptr);
-            statements(*m.body, false);
-            currentResult_ = wasResult;
+            functionHead(m, " ", isConst, suffix, inheritedType, !handle, true);
+            functionBody(m);
             scopes_.pop_back();
-            out_.text(" }");
         }
+        if (!bases.empty() && !ownToString) {
+            access(true);
+            out_.text(" std::string toString() const override { return ::kompoz::kt::InterfaceObject::identity(\"" + k.name + "\", this); }");
+        }
+        scopes_.pop_back();
         if (handle) {
             access(true);
             out_.text(" };");  // (Object)
@@ -553,13 +1013,29 @@ public:
             out_.text(") : kompoz_object_(std::make_shared<Object>(");
             for (size_t i = 0; i < k.ctorParams.size(); ++i) out_.text((i ? ", " : "") + cppName(k.ctorParams[i].name));
             out_.text(")) {}");
+            out_.text(" " + k.name + "(::kompoz::kt::FromObject, std::shared_ptr<Object> o) : kompoz_object_(std::move(o)) {}");
+            out_.text(" static " + k.name + " kompoz_from(std::shared_ptr<Object> o) { return " + k.name + "(::kompoz::kt::FromObject{}, std::move(o)); }");
             out_.text(" Object& kompoz_object() const { return *kompoz_object_; }");
+            out_.text(" const std::shared_ptr<Object>& kompoz_shared() const { return kompoz_object_; }");
             out_.text(" bool operator==(const " + k.name + "& o) const { return kompoz_object_ == o.kompoz_object_; }");
+            if (!bases.empty() || ownToString) out_.text(" std::string toString() const { return kompoz_object_->toString(); }");
             for (const Function& m : k.methods) {
-                if (m.isPrivate) continue;
+                if (m.isPrivate || m.name == "toString") continue;
                 out_.at(m.pos);
-                methodHead(m, true);
-                out_.text(" const { return kompoz_object_->" + cppName(m.name) + "(");
+                bool unitResult = m.result ? m.result->name == "Unit" : !m.expressionBody;
+                std::string result = m.result || !m.expressionBody ? (unitResult ? (m.isSuspend ? "::kompoz::Task" : "void")
+                                                                                 : m.isSuspend ? "::kompoz::TaskOf<" + type(*m.result) + ">" : type(*m.result))
+                                                                   : "decltype(auto)";
+                out_.text(" " + result + " " + cppName(m.name) + "(");
+                for (size_t i = 0; i < m.params.size(); ++i) {
+                    const Param& p = m.params[i];
+                    out_.text((i ? ", " : "") + paramTypeOf(p, m.isSuspend) + " " + cppName(p.name));
+                    if (p.defaultValue) {  // (the defaults where the call arrives)
+                        out_.text(" = ");
+                        expr(*p.defaultValue);
+                    }
+                }
+                out_.text(") const { return kompoz_object_->" + cppName(m.name) + "(");
                 for (size_t i = 0; i < m.params.size(); ++i) out_.text((i ? ", " : "") + cppName(m.params[i].name));
                 out_.text("); }");
             }
@@ -600,53 +1076,55 @@ public:
         out_.text(" };\n");
     }
 
-    // object Name { … } with members: a struct of its own, its members static (Kotlin's object is one
-    // value: Name.a is Name::a, Name.f() is Name::f()), its init blocks run once, as the program starts.
+    // object Name { … }: a struct of its own, its members static (Kotlin's object is one value: Name.a is
+    // Name::a, Name.f() is Name::f()), its init blocks run once, as the program starts; a property by a
+    // delegate or with accessors read through static functions (Name.a is Name::a()). One implementing
+    // interfaces is converted to them through its kompoz_Object (interfaceAdapter), the interfaces' functions
+    // it doesn't declare reached as its own (static, forwarded to that object).
     void objectDefinition(const ObjectDecl& o) {
         bool route = std::find(o.annotations.begin(), o.annotations.end(), "Serializable") != o.annotations.end();
+        bool ownToString = std::any_of(o.methods.begin(), o.methods.end(), [](const Function& m) { return m.name == "toString"; });
         out_.at(o.pos);
         out_.text("struct " + o.name + " {" + (route ? " KOMPOZ_ROUTE(" + o.name + ")" : std::string()) + " bool operator==(const " +
                   o.name + "&) const = default;");
+        if (!ownToString) out_.text(" template <class = void> std::string toString() const { return \"" + o.name + "\"; }");
         bool isPublic = true;
         auto access = [&](bool wantPublic) {
             if (wantPublic != isPublic) out_.text(wantPublic ? " public:" : " private:");
             isPublic = wantPublic;
         };
+        InterfaceMembers inherited = interfaceMembers(o.supers);
+        scopes_.emplace_back();
+        declareMembers(o.properties, o.supers, true);
         for (size_t index : o.order) {
             if (index % 2 == 0) {  // val / var: a static member, its type the value's unless one is written
                 const ClassProperty& p = o.properties[index / 2];
-                access(!p.isPrivate);
+                bool accessed = p.delegated || p.getter || p.setter || p.privateSetter;
+                if (accessed && !p.delegated && !stores(p)) {
+                    accessorFunctions(p, memberNamed(inherited, p.name), true, access);
+                    continue;
+                }
+                access(!accessed && !p.isPrivate);
                 out_.at(p.pos);
-                out_.text(std::string(" static inline ") + (p.isVar ? "" : "const ") + (p.type ? type(*p.type) : std::string("auto")) + " " +
-                          cppName(p.name) + " = ");
+                std::string t = p.type && !p.delegated ? type(*p.type) : std::string("auto");
+                out_.text(std::string(" static inline ") + (p.isVar || accessed ? "" : "const ") + t + " " + (accessed ? storageOf(p) : cppName(p.name)) + " = ");
                 global_ = true;
                 scopes_.emplace_back();
-                expr(*p.init, p.type ? &*p.type : nullptr);
+                if (p.init) expr(*p.init, p.type && !p.delegated ? &*p.type : nullptr);
+                else out_.text(t + "{}");
                 scopes_.pop_back();
                 global_ = false;
                 out_.text(";");
+                if (accessed) accessorFunctions(p, memberNamed(inherited, p.name), true, access);
             } else {  // fun: a static function
                 const Function& m = o.methods[index / 2];
                 access(!m.isPrivate);
                 out_.at(m.pos);
-                out_.text(" static " + (m.result ? type(*m.result) : m.expressionBody ? std::string("auto") : std::string("void")) + " " +
-                          cppName(m.name) + "(");
-                for (size_t i = 0; i < m.params.size(); ++i) {
-                    const Param& p = m.params[i];
-                    out_.text((i ? ", " : "") + paramType(p.type) + " " + cppName(p.name));
-                    if (p.defaultValue) {
-                        out_.text(" = ");
-                        expr(*p.defaultValue);
-                    }
-                }
-                out_.text(") {");
                 scopes_.emplace_back();
                 for (const Param& p : m.params) declare(p.name, Local);
-                const Type* wasResult = std::exchange(currentResult_, m.result ? &*m.result : nullptr);
-                statements(*m.body, false);
-                currentResult_ = wasResult;
+                functionHead(m, " static ", false, "", "", true, true);
+                functionBody(m);
                 scopes_.pop_back();
-                out_.text(" }");
             }
         }
         for (size_t i = 0; i < o.initBlocks.size(); ++i) {
@@ -657,7 +1135,27 @@ public:
             scopes_.pop_back();
             out_.text(" return true; }();");
         }
+        scopes_.pop_back();
+        access(true);
+        auto own = [&](const std::string& n) {
+            return std::any_of(o.properties.begin(), o.properties.end(), [&](const ClassProperty& p) { return p.name == n; }) ||
+                   std::any_of(o.methods.begin(), o.methods.end(), [&](const Function& m) { return m.name == n; });
+        };
+        interfaceAdapter(o.name, o.supers, true, own, o.pos);
         out_.text(" };\n");
+    }
+
+    // Whether Name.member of an object is read through a static function (Name::member()): a property by a
+    // delegate or with accessors, or an interface's with a getter that it doesn't declare.
+    bool objectAccessor(const std::string& object, const std::string& member) const {
+        auto o = module_.objectDecls.find(object);
+        if (o == module_.objectDecls.end()) return false;
+        for (const ClassProperty& p : o->second->properties)
+            if (p.name == member) return p.delegated || p.getter || p.setter || p.privateSetter;
+        for (const Function& f : o->second->methods)
+            if (f.name == member) return false;
+        const InterfaceMember* m = memberNamed(interfaceMembers(o->second->supers), member);
+        return m && m->property && m->hasBody;
     }
 
     // val name = value at the top: a constant of the namespace (private: of the file), its type the
@@ -679,17 +1177,20 @@ public:
         bool unit = !f.result || f.result->name == "Unit";
         currentResult_ = f.result ? &*f.result : nullptr;
         if (!f.composable) {  // (no declaration before it: its defaults are here)
+            scopes_.emplace_back();
+            for (const Param& p : f.params) declare(p.name, Local);  // (a suspend fun's result type may read them)
             signature(f, true);
             out_.text(" {");
-            scopes_.emplace_back();
-            for (const Param& p : f.params) declare(p.name, Local);
             if (f.receiver) {  // its members reached by their names, as a lambda's receiver's
                 receivers_.push_back(qualified(f.receiver->name));
                 receiverConst_.push_back(true);
                 receiverLabels_.push_back({});
                 out_.text(" [[maybe_unused]] auto* kompoz_this_1 = &kompoz_receiver_1;");
             }
+            bool wasSuspend = std::exchange(suspend_, f.isSuspend);
             statements(*f.body, false);
+            if (f.isSuspend && !f.expressionBody && (!f.result || f.result->name == "Unit")) out_.text(" co_return;");
+            suspend_ = wasSuspend;
             receivers_.clear();
             receiverConst_.clear();
             receiverLabels_.clear();
@@ -732,7 +1233,11 @@ public:
     }
 
 private:
-    enum VarKind { Local, Delegated, Callable };  // (Callable: a local of a function type, val f: (Int) -> Unit = { … })
+    // Local: a local (Callable: one of a function type, val f: (Int) -> Unit = { … }); Delegated: a local by a delegate
+    // (var x by remember { … }: reading it reads the state); MemberDelegated: a class's or object's property by a
+    // delegate, held in kompoz_by_<name>; Accessor: a member read and set through its functions (name(), setName(v));
+    // BackingField: `field` in an accessor (fieldOf_).
+    enum VarKind { Local, Delegated, Callable, MemberDelegated, Accessor, BackingField };
 
     void declare(const std::string& name, VarKind kind) { scopes_.back()[name] = kind; }
     const VarKind* lookup(const std::string& name) const {
@@ -797,7 +1302,20 @@ private:
                 if (e.kind == Node::When) return whenStatement(e, tail);
                 if (e.kind == Node::Unary && (e.text == "++" || e.text == "--")) {
                     if (const Node* target = e.kids[0].get(); delegatedName(*target)) {
-                        out_.text(cppName(target->text) + ".set(::kompoz::kt::value(" + cppName(target->text) + ") " + e.text[0] + " 1);");
+                        out_.text(held(target->text) + ".set(::kompoz::kt::value(" + held(target->text) + ") " + e.text[0] + " 1);");
+                        return;
+                    }
+                    if (const Node* target = e.kids[0].get(); target->kind == Node::Member && !target->flag && target->text != "value" &&
+                                                              target->text != "size" && target->text != "length") {
+                        // shelf.picks++: the property set to its value plus one (through its setter, where it has one)
+                        out_.text("{ auto&& kompoz_o = ");
+                        expr(*target->kids[0]);
+                        out_.text("; KOMPOZ_KT_SET((kompoz_o), " + cppName(target->text) + ", " + setterOf(target->text) + ", (KOMPOZ_KT_GET((kompoz_o), " +
+                                  cppName(target->text) + ") " + e.text[0] + " 1)); }");
+                        return;
+                    }
+                    if (const Node* target = e.kids[0].get(); accessorName(*target)) {  // count++ on a property with a setter
+                        out_.text(setterOf(target->text) + "(" + cppName(target->text) + "() " + e.text[0] + " 1);");
                         return;
                     }
                 }
@@ -844,7 +1362,22 @@ private:
     bool delegatedName(const Node& n) const {
         if (n.kind != Node::Name) return false;
         const VarKind* k = lookup(n.text);
-        return k && *k == Delegated;
+        return k && (*k == Delegated || *k == MemberDelegated);
+    }
+    bool accessorName(const Node& n) const {
+        if (n.kind != Node::Name) return false;
+        const VarKind* k = lookup(n.text);
+        return k && *k == Accessor;
+    }
+    // What holds a delegated name's delegate: the local, or a member's kompoz_by_<name>.
+    std::string held(const std::string& name) const {
+        const VarKind* k = lookup(name);
+        return k && *k == MemberDelegated ? "kompoz_by_" + name : cppName(name);
+    }
+    static std::string setterOf(const std::string& name) {
+        std::string set = "set" + name;
+        set[3] = char(std::toupper(static_cast<unsigned char>(set[3])));
+        return set;
     }
 
     void declaration(const Node& d) {
@@ -893,7 +1426,13 @@ private:
             }
         };
         if (delegatedName(target)) {  // x = v on a delegated x: the state set
-            out_.text(cppName(target.text) + ".set(");
+            out_.text(held(target.text) + ".set(");
+            rhs();
+            out_.text(");");
+            return;
+        }
+        if (accessorName(target)) {  // x = v on a member with a setter (a class's own or an interface's property)
+            out_.text(setterOf(target.text) + "(");
             rhs();
             out_.text(");");
             return;
@@ -906,11 +1445,16 @@ private:
             return;
         }
         // obj.name = v, or name = v on a receiver's member: the property set (its setter where it has one: setName)
-        auto setter = [&](const std::string& name) {
-            std::string set = "set" + name;
-            set[3] = char(std::toupper(static_cast<unsigned char>(set[3])));
-            return set;
-        };
+        auto setter = setterOf;
+        if (op != "=" && target.kind == Node::Member && !target.flag && target.text != "value") {  // shelf.picks += 2: through its setter
+            out_.text("{ auto&& kompoz_o = ");
+            expr(*target.kids[0]);
+            out_.text("; KOMPOZ_KT_SET((kompoz_o), " + cppName(target.text) + ", " + setterOf(target.text) + ", (KOMPOZ_KT_GET((kompoz_o), " +
+                      cppName(target.text) + ") " + op.substr(0, op.size() - 1) + " (");
+            expr(*a.kids[1]);
+            out_.text("))); }");
+            return;
+        }
         if (op == "=" && target.kind == Node::Member && !target.flag && target.text != "value") {
             out_.text("KOMPOZ_KT_SET((");
             expr(*target.kids[0]);
@@ -1179,6 +1723,13 @@ private:
                     out_.text(", ::kompoz::kt::VoidMark{})))");
                     return;
                 }
+                if (awaitedTypes_ && awaitable(e)) {  // a suspend fun's result type, taken from its expression
+                    out_.text("::kompoz::kt::awaitedType((");
+                    call(e);
+                    out_.text(", ::kompoz::kt::VoidMark{}))");
+                    return;
+                }
+                expectedCall_ = expected;
                 return call(e);
             case Node::Member: return member(e);
             case Node::Index:
@@ -1222,7 +1773,9 @@ private:
 
     void name(const Node& e) {
         if (const VarKind* k = lookup(e.text)) {
-            if (*k == Delegated) out_.text("::kompoz::kt::delegated(" + cppName(e.text) + ")");
+            if (*k == Delegated || *k == MemberDelegated) out_.text("::kompoz::kt::delegated(" + held(e.text) + ")");
+            else if (*k == Accessor) out_.text(selfPrefix_ + cppName(e.text) + "()");
+            else if (*k == BackingField) out_.text(fieldOf_);
             else out_.text(cppName(e.text));
             return;
         }
@@ -1388,6 +1941,10 @@ private:
                 out_.text("{}");
                 return;
             }
+            if (&e != calleeNode_ && objectAccessor(dotted(obj), e.text)) {  // Settings.dark (by mutableStateOf): its getter
+                out_.text("()");
+                return;
+            }
             // WindowInsets.statusBars, a class's static function read as Compose's property: called.
             std::string type = dotted(obj);
             if (size_t dot = type.rfind('.'); dot != std::string::npos) type = type.substr(dot + 1);
@@ -1417,8 +1974,21 @@ private:
     }
 
     void call(const Node& c) {
+        const Type* expected = std::exchange(expectedCall_, nullptr);
         const Node& callee = companionless(*c.kids[0]);
         std::string calleeName = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
+        if (!selfPrefix_.empty() && callee.kind == Node::Name && !lookup(callee.text) && interfaceMethods_.contains(callee.text))
+            out_.text(selfPrefix_);  // (an interface's own function, in a declaration's type)
+        if (callee.kind == Node::Name && !lookup(callee.text) && c.lambda && c.kids.size() == 1)
+            if (const InterfaceDecl* i = interfaceNamed(callee.text); i && i->isFun) {  // Validator { it.isNotEmpty() }: a fun interface's object
+                const Function* m = nullptr;
+                for (const Function& f : i->methods)
+                    if (f.isAbstract) m = &f;
+                out_.text(qualified(i->name) + "::kompoz_lambda(");
+                lambda(*c.lambda, m->result && m->result->name != "Unit");
+                out_.text(")");
+                return;
+            }
         // A local of the callee's name is not what is called when the call has a trailing lambda or named
         // arguments (a value can't take them): items(items, key = { }) { } calls the function, as Kotlin does.
         if (const VarKind* k = callee.kind == Node::Name ? lookup(callee.text) : nullptr; k && *k == Callable && c.lambda) {
@@ -1500,8 +2070,11 @@ private:
             if (module_.structs && !c.lambda && !capitalized(callee.text) && callee.text.ends_with("Colors"))
                 if (auto a = module_.structs->aliases.find(callee.text); a != module_.structs->aliases.end() && a->second.size() == 1)
                     if (const auto* fields = module_.structs->find(*a->second.begin()); fields && structCall(c, *a->second.begin(), *fields)) return;
-            if (kKtFunctions.contains(callee.text) || (suspend_ && callee.text == "delay")) {
+            if (kKtFunctions.contains(callee.text) || ((suspend_ || awaitedTypes_) && callee.text == "delay")) {
                 out_.text("::kompoz::kt::" + callee.text);
+                static const std::set<std::string, std::less<>> collections = {"listOf", "mutableListOf", "arrayListOf", "setOf", "mutableSetOf"};
+                if (c.typeArgs.empty() && c.kids.size() > 1 && expected && expected->args.size() == 1 && collections.contains(callee.text))
+                    out_.text("<" + type(expected->args[0]) + ">");  // (val tags: List<Titled> = listOf(Tag("a")): of the type wanted)
                 typeArguments(c);  // listOf<String>()
                 return arguments(c, calleeName, false);
             }
@@ -1646,6 +2219,7 @@ private:
             bool measures = (calleeName == "layout" || calleeName == "Layout") && c.lambda->flag && !c.lambda->names.empty();
             if (calleeName == "layout" || measures) type = measures ? &measureScope : &placementScope;
             inline_ = kInlineLambdas.contains(calleeName);
+            taskBlock_ = calleeName == "async";  // (its block gives the task a suspend fun's call is: scope.async { load(id) })
             lambda(*c.lambda, kValueLambdas.contains(calleeName) || measures, kSuspendLambdas.contains(calleeName), calleeName == "produceState",
                    type, calleeName);
         }
@@ -1746,6 +2320,8 @@ private:
     // `receiver`: an extension's, written before it (x.card()); else an extension called by its
     // name alone has the receiver it is called in (this).
     void moduleCall(const Node& c, const Function& f, const Node* receiver = nullptr) {
+        if (f.isSuspend && !suspend_ && !awaitedTypes_ && !inTaskBlock_)
+            throw CompileError(c.pos, f.name + " is a suspend fun: call it in a coroutine (LaunchedEffect { }, scope.launch { }, another suspend fun)");
         std::vector<const Node*> given(f.params.size(), nullptr);
         size_t next = 0;
         for (size_t i = 0; i + 1 < c.kids.size(); ++i) {
@@ -1791,7 +2367,30 @@ private:
     // to it (a pointer, so a lambda inside that keeps it sees the same one, as Kotlin's would).
     void lambda(const Node& l, bool value, bool suspend = false, bool produceState = false, const std::string* receiver = nullptr,
                 const std::string& label = {}) {
-        bool wasSuspend = std::exchange(suspend_, suspend);
+        if (classTyping_) {
+            taskBlock_ = false;
+            // A class's delegate's type, at the class's scope: its lambda as a function giving what the lambda
+            // does (the property's type, or its one expression's: derivedStateOf { count * 2 }).
+            out_.text("::kompoz::kt::returning<");
+            if (delegateValue_) {
+                out_.text(type(*delegateValue_));
+            } else {
+                const Node* last = l.kids.size() == 1 ? l.kids[0].get() : nullptr;
+                const Node* e = !last ? nullptr : last->kind == Node::ExprStmt ? last->kids[0].get()
+                                               : last->kind == Node::Return && !last->kids.empty() ? last->kids[0].get() : nullptr;
+                if (!e || l.flag || usesIt(e)) throw CompileError(l.pos, "give the property a type: its delegate's lambda isn't one expression");
+                bool wasGlobal = std::exchange(global_, true);
+                classTyping_ = false;
+                out_.text("std::remove_cvref_t<decltype(");
+                expr(*e);
+                out_.text(")>");
+                classTyping_ = true, global_ = wasGlobal;
+            }
+            out_.text(">()");
+            return;
+        }
+        bool wasSuspend = std::exchange(suspend_, suspend), wasTyping = std::exchange(awaitedTypes_, false);
+        bool wasTaskBlock = std::exchange(inTaskBlock_, std::exchange(taskBlock_, false));
         // A read-only receiver around (a "const X" one: an AnimatedContentScope, a ToggleFloatingActionButtonScope) is
         // kept by a copy where the lambda may outlive the block (a graphicsLayer's reads checkedProgress as it draws):
         // kt::heldReceiver copies what can be copied, the pointer stays for the rest.
@@ -1871,6 +2470,8 @@ private:
         }
         out_.text(" }");
         suspend_ = wasSuspend;
+        awaitedTypes_ = wasTyping;
+        inTaskBlock_ = wasTaskBlock;
     }
 
     // The names a node uses (to find the locals an object's functions reach).
@@ -1936,19 +2537,29 @@ private:
 
     void objectExpression(const Node& o) {
         if (std::string base = plainType(*o.type); base == "::kompoz::Painter" || base == "Painter") return painterObject(o);
+        // object : Named { override val name = …; override fun f() = … }: one of a Kotlin interface's, its handle given
+        const InterfaceDecl* iface = interfaceNamed(o.type->name);
+        InterfaceMembers members = iface ? interfaceMembers({*o.type}) : InterfaceMembers();
         for (auto& m : o.kids) {
-            if (m->flag) throw CompileError(m->pos, "an object's property (override val) here: a Painter's intrinsicSize only; the rest are functions");
+            if (m->flag && !iface) throw CompileError(m->pos, "an object's property (override val) here: a Painter's intrinsicSize only; the rest are functions");
             if (m->kids.size() > 1) throw CompileError(m->pos, "an object's function with a receiver here: a Painter's DrawScope.onDraw() only");
+            if (iface) {
+                const InterfaceMember* im = memberNamed(members, m->text);
+                if (!im || (m->flag ? !im->property : !im->method)) throw CompileError(m->pos, m->text + " overrides nothing of " + iface->name);
+            }
         }
+        for (auto& [n, im] : members)
+            if (!im.hasBody && std::none_of(o.kids.begin(), o.kids.end(), [&](const NodeP& m) { return m->text == n; }))
+                throw CompileError(o.pos, "the object doesn't implement " + im.in->name + "." + n);
         std::set<std::string, std::less<>> used;
         for (auto& m : o.kids) usedNames(m.get(), used);
         std::vector<std::pair<std::string, VarKind>> captured;
         for (const std::string& n : used)
-            if (const VarKind* k = lookup(n)) captured.emplace_back(n, *k);
+            if (const VarKind* k = lookup(n); k && (*k == Local || *k == Delegated || *k == Callable)) captured.emplace_back(n, *k);
         out_.text(capture("[=]") + "() {");
         // (each held one's type named outside the class: inside, the name is the member's)
         for (auto& [n, k] : captured) out_.text(" using kompoz_type_" + n + " = std::remove_cvref_t<decltype(" + cppName(n) + ")>;");
-        out_.text(" struct kompoz_object : " + plainType(*o.type) + " {");
+        out_.text(" struct kompoz_object : " + (iface ? "public virtual " + objectOf(*iface) : plainType(*o.type)) + " {");
         for (auto& [n, k] : captured) out_.text(" kompoz_type_" + n + " " + cppName(n) + ";");
         if (!captured.empty()) {
             out_.text(" kompoz_object(");
@@ -1968,14 +2579,17 @@ private:
         bool wasSuspend = std::exchange(suspend_, false), wasGlobal = std::exchange(global_, false);
         for (auto& m : o.kids) {
             out_.at(m->pos);
-            out_.text(" " + (m->type ? type(*m->type) : std::string("void")) + " " + cppName(m->text) + "(");
+            out_.text(" " + (iface ? std::string("auto") : m->type ? type(*m->type) : std::string("void")) + " " + cppName(m->text) + "(");
             scopes_.assign(1, {});
+            for (auto& [n, im] : members)  // (the interface's properties, read through its getters)
+                if (im.property) declare(n, Accessor);
             for (auto& [n, k] : captured) declare(n, k);
             for (size_t i = 0; i < m->names.size(); ++i) {
-                out_.text((i ? ", " : "") + type(m->typeArgs[i]) + " " + cppName(m->names[i]));
+                out_.text((i ? ", " : "") + (iface ? paramType(m->typeArgs[i]) : type(m->typeArgs[i])) + " " + cppName(m->names[i]));
                 declare(m->names[i], Local);
             }
-            out_.text(") override {");
+            if (iface) out_.text(") const -> " + memberType(objectOf(*memberNamed(members, m->text)->in), *memberNamed(members, m->text)) + " override {");
+            else out_.text(") override {");
             statements(*m->kids[0], false);
             out_.text(" }");
         }
@@ -1985,9 +2599,9 @@ private:
         receiverLabels_ = std::move(receiverLabels);
         lambdaLabels_ = std::move(lambdaLabels);
         suspend_ = wasSuspend, global_ = wasGlobal;
-        out_.text(" }; return std::make_shared<kompoz_object>(");
+        out_.text(" }; return " + (iface ? qualified(iface->name) + "(" : std::string()) + "std::make_shared<kompoz_object>(");
         for (size_t i = 0; i < captured.size(); ++i) out_.text((i ? ", " : "") + cppName(captured[i].first));
-        out_.text("); }()");
+        out_.text(std::string(iface ? ")" : "") + "); }()");
     }
 
     // a[i] (a[i, j]) as C++ writes it: the element itself, to assign to or count up.
@@ -2009,7 +2623,11 @@ private:
             out_.text(")");
         } else if ((u.text == "++" || u.text == "--") && delegatedName(x)) {
             // nextId++ as a value on a state: the state set, the old (postfix) or new (prefix) value given.
-            out_.text(std::string("::kompoz::kt::") + (u.flag ? "post" : "pre") + (u.text == "++" ? "Increment(" : "Decrement(") + cppName(x.text) + ")");
+            out_.text(std::string("::kompoz::kt::") + (u.flag ? "post" : "pre") + (u.text == "++" ? "Increment(" : "Decrement(") + held(x.text) + ")");
+        } else if ((u.text == "++" || u.text == "--") && accessorName(x)) {  // the same through a property's setter
+            std::string get = cppName(x.text) + "()", set = setterOf(x.text);
+            out_.text(capture("[&]") + "() { auto kompoz_old = " + get + "; " + set + "(kompoz_old " + u.text[0] + " 1); return " +
+                      (u.flag ? std::string("kompoz_old") : get) + "; }()");
         } else if (u.flag) {
             if (x.kind == Node::Index) indexed(x);  // counts[k]++: the element itself
             else expr(x);
@@ -2155,6 +2773,15 @@ private:
     bool inClass_ = false;  // in a class's body: its members are reached by their names
     const Type* currentResult_ = nullptr;  // the function being defined's result type (flow { } takes its T from Flow<T>)
     bool inline_ = false;  // the lambda written next is an inline function's (kInlineLambdas)
+    bool awaitedTypes_ = false;  // in a suspend fun's result type (decltype): calls give what they give once awaited
+    bool taskBlock_ = false, inTaskBlock_ = false;  // the lambda written next is async's (it gives a task), and in it
+    bool classTyping_ = false;   // in a class's delegated property's type (decltype at the class's scope)
+    const Type* delegateValue_ = nullptr;  // and that property's type, written
+    const Type* expectedCall_ = nullptr;  // what the call written next is expected to give (val tags: List<Titled> = listOf(…))
+    std::string fieldOf_;        // in a property's accessor: what `field` is
+    std::string interfaceSelf_;  // in an interface's object: its name (Object)
+    std::set<std::string, std::less<>> interfaceMethods_;  // and its functions, its interfaces' too
+    std::string selfPrefix_;     // in a type written there: how its members are reached
     std::vector<std::map<std::string, VarKind, std::less<>>> scopes_;
 };
 
@@ -2168,7 +2795,7 @@ void generateEnum(Output& out, const EnumClass& e) {
 }
 
 void generateObject(Output& out, const ObjectDecl& o, const Module& module) {
-    if (o.hasMembers()) {
+    if (o.hasMembers() || std::any_of(o.supers.begin(), o.supers.end(), [&](const Type& t) { return module.interfaces.contains(t.name); })) {
         Generator g(out, module);
         g.objectDefinition(o);
         return;
@@ -2198,6 +2825,16 @@ void generatePrototype(Output& out, const Function& f, const Module& module) {
 void generateProperty(Output& out, const Property& p, const Module& module) {
     Generator g(out, module);
     g.property(p);
+}
+
+void generateInterface(Output& out, const InterfaceDecl& i, const Module& module) {
+    Generator g(out, module);
+    g.interfaceDefinition(i);
+}
+
+void declareInterface(Output& out, const InterfaceDecl& i) {
+    out.at(i.pos);
+    out.text("class " + i.name + ";\n");
 }
 
 void generateClassDecl(Output& out, const ClassDecl& c, const Module& module) {

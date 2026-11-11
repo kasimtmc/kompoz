@@ -1,6 +1,7 @@
 #include "parser.hpp"
 
 #include <set>
+#include <utility>
 
 namespace kompozc {
 
@@ -148,10 +149,11 @@ Function Parser::function() {
         annotations(&names, &f.annotationArgs);
         more = false;
         while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("inline") || isIdent("override") ||
-               isIdent("protected") || isIdent("open")) {
+               isIdent("protected") || isIdent("open") || isIdent("suspend")) {
             std::string word = take().text;
             if (word == "private") f.isPrivate = true;
             if (word == "override") f.overrides = true;
+            if (word == "suspend") f.isSuspend = true;
             more = true;
         }
     }
@@ -160,7 +162,6 @@ Function Parser::function() {
         if (n == "Composable") f.composable = true;
         else f.annotations.push_back(n);
     }
-    if (isIdent("suspend")) fail("a suspend fun isn't supported yet: write it in C++, a coroutine returning TaskOf<T>");
     if (!isIdent("fun")) fail("expected 'fun'");
     take();
     // fun name, or fun Receiver.name (an extension)
@@ -177,9 +178,12 @@ Function Parser::function() {
         f.receiver->pos = at;
         for (size_t i = 0; i < parts.size(); ++i) f.receiver->name += (i ? "." : "") + parts[i];
     }
+    if (f.composable && f.isSuspend) fail(f.pos, "a @Composable function can't be suspend");
     f.params = params();
     if (acceptOp(":")) f.result = type();
-    if (isOp("=")) {  // fun x() = expression
+    if (abstractMembers_ && !isOp("=") && !opAfterNewlines("{")) {  // an interface's fun without a body
+        f.isAbstract = true;
+    } else if (isOp("=")) {  // fun x() = expression
         Pos at = take().pos;
         skipNewlines();
         auto ret = make(Node::Return, at);
@@ -209,9 +213,12 @@ ClassDecl Parser::classDecl() {
         take();
         while (!isOp(")")) {
             annotations(nullptr);
-            bool isPrivate = false;
-            while (isIdent("private") || isIdent("public") || isIdent("internal") || isIdent("protected"))
-                isPrivate = take().text == "private" || isPrivate;
+            bool isPrivate = false, overrides = false;
+            while (isIdent("private") || isIdent("public") || isIdent("internal") || isIdent("protected") || isIdent("override")) {
+                std::string word = take().text;
+                isPrivate = word == "private" || isPrivate;
+                overrides = word == "override" || overrides;
+            }
             char kind = ' ';
             if (isIdent("val") || isIdent("var")) kind = take().text == "val" ? 'v' : 'm';
             Param p;
@@ -221,15 +228,24 @@ ClassDecl Parser::classDecl() {
             p.type = type();
             if (acceptOp("=")) p.defaultValue = expression();
             c.ctorParams.push_back(std::move(p));
+            if (overrides && kind == ' ') fail(p.pos, "override needs val or var");
             c.ctorKinds.push_back(kind);
             c.ctorPrivate.push_back(isPrivate);
+            c.ctorOverride.push_back(overrides);
             if (!acceptOp(",")) break;
         }
         expectOp(")");
     }
-    if (acceptOp(":")) {  // : Base(args)
-        c.base = type();
-        if (isOp("(")) {
+    if (acceptOp(":")) {  // : Base(args), A, B: the base class constructed, the interfaces named
+        do {
+            skipNewlines();
+            Type t = type();
+            if (!isOp("(")) {
+                c.interfaces.push_back(std::move(t));
+                continue;
+            }
+            if (c.base) fail(t.pos, "a class has one base class (" + c.base->name + "); the others are interfaces, without ()");
+            c.base = std::move(t);
             NewlineMode mode(newlines_, false);
             take();
             while (!isOp(")")) {
@@ -237,7 +253,7 @@ ClassDecl Parser::classDecl() {
                 if (!acceptOp(",")) break;
             }
             expectOp(")");
-        }
+        } while (acceptOp(","));
     }
     if (opAfterNewlines("{")) {
         skipNewlines();
@@ -261,36 +277,116 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
         }
         // A property, or a function (its modifiers read by function()).
         size_t save = index_;
-        bool isPrivate = false;
+        bool isPrivate = false, overrides = false;
         annotations(nullptr);
         while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected") || isIdent("open") ||
-               isIdent("override") || isIdent("const"))
-            isPrivate = take().text == "private" || isPrivate;
+               isIdent("override") || isIdent("const")) {
+            std::string word = take().text;
+            isPrivate = word == "private" || isPrivate;
+            overrides = word == "override" || overrides;
+        }
+        std::string a = kind == "object" || kind == "interface" ? "an " + kind : "a " + kind;
         if (isIdent("val") || isIdent("var")) {
             ClassProperty p;
             p.pos = cur().pos;
             p.isVar = take().text == "var";
             p.isPrivate = isPrivate;
+            p.overrides = overrides;
             p.name = expectIdent();
             if (acceptOp(":")) p.type = type();
-            if (isIdent("by")) fail("a" + std::string(kind == "object" ? "n " : " ") + kind + "'s property by … isn't supported");
-            if (acceptOp("=")) {
+            if (isIdent("by")) {  // var x by mutableStateOf(0): read and set through the delegate
+                if (kind == "interface") fail(a + "'s property can't be delegated (by …)");
+                take();
+                skipNewlines();
+                p.delegated = true;
+                p.init = expression();
+            } else if (acceptOp("=")) {
+                if (kind == "interface") fail(a + "'s property has no value: a getter (get() = …) or none (abstract)");
                 skipNewlines();
                 p.init = expression();
-            } else if (!p.type || kind == "object") {
-                fail("a" + std::string(kind == "object" ? "n " : " ") + kind + "'s property needs a value" + (kind == "object" ? "" : " or a type"));
             }
+            accessors(p);
+            if (p.delegated && (p.getter || p.setter)) fail(p.pos, p.name + ": a delegated property has no get() or set() of its own");
+            if (p.setter && !p.isVar) fail(p.pos, p.name + ": a val has no set()");
+            if (!p.init && !p.getter && !p.type) fail(p.pos, a + "'s property needs a value, a type or a getter");
+            if (kind == "object" && !p.init && !p.getter) fail(p.pos, a + "'s property needs a value or a getter");
+            if (p.getter && p.init) fail(p.pos, p.name + ": a property with get() has no value of its own here");
+            if (p.isVar && p.getter && !p.setter && kind != "interface") fail(p.pos, p.name + ": a var with get() needs set(v) { … } too here");
             order.push_back(properties.size() * 2);
             properties.push_back(std::move(p));
         } else {
             index_ = save;  // (function() reads the modifiers itself)
+            bool wasAbstract = std::exchange(abstractMembers_, kind == "interface");
             Function f = function();
-            if (f.composable) fail(f.pos, "a" + std::string(kind == "object" ? "n " : " ") + kind + "'s function can't be @Composable here: write it at the top level");
+            abstractMembers_ = wasAbstract;
+            if (f.composable) fail(f.pos, a + "'s function can't be @Composable here: write it at the top level");
             order.push_back(methods.size() * 2 + 1);
             methods.push_back(std::move(f));
         }
     }
     expectOp("}");
+}
+
+// After a property: get() = … / get() { … }, set(v) { … } / set(v) = …, [private] set, each on a line of its own
+// (or on the property's).
+void Parser::accessors(ClassProperty& p) {
+    for (int i = 0; i < 2; ++i) {
+        size_t save = index_;
+        skipNewlines();
+        bool isPrivate = false;
+        while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected"))
+            isPrivate = take().text != "public" || isPrivate;
+        if (isIdent("get") && peekRaw(1).kind == Tok::Op && peekRaw(1).text == "(") {
+            if (p.getter) fail(p.name + " has get() twice");
+            take();
+            expectOp("(");
+            expectOp(")");
+            if (acceptOp(":")) {
+                Type t = type();
+                if (!p.type) p.type = std::move(t);
+            }
+            if (isOp("=")) {
+                Pos at = take().pos;
+                skipNewlines();
+                auto ret = make(Node::Return, at);
+                ret->kids.push_back(expression());
+                p.getter = make(Node::Block, at);
+                p.getter->kids.push_back(std::move(ret));
+            } else {
+                skipNewlines();
+                p.getter = block();
+            }
+            continue;
+        }
+        if (isIdent("set")) {
+            if (p.setter || p.privateSetter) fail(p.name + " has set twice");
+            if (!p.isVar) fail(p.name + ": a val has no setter");
+            take();
+            p.privateSetter = isPrivate;
+            if (isOp("(")) {  // set(value) { field = value }
+                take();
+                p.setterParam = expectIdent();
+                if (acceptOp(":")) type();
+                expectOp(")");
+                if (isOp("=")) {
+                    Pos at = take().pos;
+                    skipNewlines();
+                    auto stmt = make(Node::ExprStmt, at);
+                    stmt->kids.push_back(expression());
+                    p.setter = make(Node::Block, at);
+                    p.setter->kids.push_back(std::move(stmt));
+                } else {
+                    skipNewlines();
+                    p.setter = block();
+                }
+            } else if (!isPrivate) {
+                fail("set needs (value) { … } here, or a visibility (private set)");
+            }
+            continue;
+        }
+        index_ = save;
+        return;
+    }
 }
 
 ObjectDecl Parser::objectDecl() {
@@ -301,13 +397,7 @@ ObjectDecl Parser::objectDecl() {
     if (!isIdent("object")) fail("expected 'object' (a sealed class's body holds data classes and objects)");
     take();
     o.name = expectIdent();
-    if (acceptOp(":")) {  // : Sealed() (a sealed class's subclass)
-        o.base = type();
-        if (acceptOp("(")) {
-            if (!isOp(")")) fail("a sealed class with a constructor isn't supported yet: give its subclasses the fields");
-            expectOp(")");
-        }
-    }
+    o.supers = supers();
     if (opAfterNewlines("{")) {
         skipNewlines();
         take();
@@ -330,6 +420,8 @@ DataClass Parser::dataClass() {
     expectOp("(");
     while (!isOp(")")) {
         annotations(nullptr);
+        bool overrides = false;
+        while (isIdent("override") || isIdent("public")) overrides = take().text == "override" || overrides;
         bool isVar = isIdent("var");
         if (!isVar && !isIdent("val")) fail("a data class's parameters are val or var");
         take();
@@ -341,19 +433,30 @@ DataClass Parser::dataClass() {
         if (acceptOp("=")) p.defaultValue = expression();
         c.fields.push_back(std::move(p));
         c.mutableFields.push_back(isVar);
+        c.overridingFields.push_back(overrides);
         if (!acceptOp(",")) break;
     }
     expectOp(")");
-    if (acceptOp(":")) {  // : Sealed() (a sealed class's subclass)
-        c.base = type();
+    c.supers = supers();
+    c.end = tokens_[index_ - 1].end;
+    if (c.fields.empty()) fail(c.pos, "a data class needs a parameter");
+    return c;
+}
+
+// : Sealed(), A, B after a data class or an object: a sealed class it is a case of (constructed, with no
+// arguments), interfaces and sealed interfaces (named).
+std::vector<Type> Parser::supers() {
+    std::vector<Type> out;
+    if (!acceptOp(":")) return out;
+    do {
+        skipNewlines();
+        out.push_back(type());
         if (acceptOp("(")) {
             if (!isOp(")")) fail("a sealed class with a constructor isn't supported yet: give its subclasses the fields");
             expectOp(")");
         }
-    }
-    c.end = tokens_[index_ - 1].end;
-    if (c.fields.empty()) fail(c.pos, "a data class needs a parameter");
-    return c;
+    } while (acceptOp(","));
+    return out;
 }
 
 SealedDecl Parser::sealedDecl() {
@@ -379,12 +482,12 @@ SealedDecl Parser::sealedDecl() {
             index_ = save;
             if (data) {
                 DataClass d = dataClass();
-                if (!d.base || d.base->name != s.name) fail(d.pos, d.name + ": a subclass of " + s.name + " is written `: " + s.name + "()`");
+                if (!namesSuper(d.supers, s.name)) fail(d.pos, d.name + ": a subclass of " + s.name + " is written `: " + s.name + (s.isInterface ? "`" : "()`"));
                 s.order.emplace_back('d', s.dataClasses.size());
                 s.dataClasses.push_back(std::move(d));
             } else {
                 ObjectDecl o = objectDecl();
-                if (!o.base || o.base->name != s.name) fail(o.pos, o.name + ": a subclass of " + s.name + " is written `: " + s.name + "()`");
+                if (!namesSuper(o.supers, s.name)) fail(o.pos, o.name + ": a subclass of " + s.name + " is written `: " + s.name + (s.isInterface ? "`" : "()`"));
                 s.order.emplace_back('o', s.objects.size());
                 s.objects.push_back(std::move(o));
             }
@@ -393,6 +496,44 @@ SealedDecl Parser::sealedDecl() {
     }
     s.end = tokens_[index_ - 1].end;
     return s;
+}
+
+InterfaceDecl Parser::interfaceDecl() {
+    InterfaceDecl i;
+    i.pos = cur().pos;
+    annotations(nullptr);
+    while (isIdent("private") || isIdent("internal") || isIdent("public")) take();
+    if (isIdent("fun")) {
+        take();
+        i.isFun = true;
+    }
+    if (!isIdent("interface")) fail("expected 'interface'");
+    take();
+    i.name = expectIdent();
+    if (isOp("<")) fail("a generic interface isn't supported yet");
+    if (acceptOp(":")) {
+        do {
+            skipNewlines();
+            i.bases.push_back(type());
+            if (isOp("(")) fail("an interface extends interfaces only (no constructor call)");
+        } while (acceptOp(","));
+    }
+    if (opAfterNewlines("{")) {
+        skipNewlines();
+        take();
+        std::vector<NodeP> initBlocks;
+        members(i.properties, i.methods, i.order, initBlocks, "interface");
+        if (!initBlocks.empty()) fail(i.pos, "an interface has no init block");
+    }
+    i.end = tokens_[index_ - 1].end;
+    if (i.isFun) {
+        size_t abstract = 0;
+        for (const Function& m : i.methods) abstract += m.isAbstract;
+        for (const ClassProperty& p : i.properties) abstract += !p.getter;
+        if (abstract != 1 || i.methods.empty())
+            fail(i.pos, "a fun interface has one abstract function (and nothing else abstract)");
+    }
+    return i;
 }
 
 EnumClass Parser::enumClass() {

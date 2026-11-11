@@ -19,6 +19,10 @@
 #include <limits>
 #include <map>
 #include <cstdlib>
+#include <cstdint>
+#include <memory>
+#include <tuple>
+#include <typeinfo>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -562,8 +566,50 @@ decltype(auto) await(Held<T> held) {
 }
 inline Ready<void> await(VoidMark) { return {}; }
 
+// What a call gives once awaited, as a type (declared only: for decltype). A suspend fun whose
+// result is its expression's, `suspend fun twice(x: Int) = load(x) + load(x)`, is a
+// TaskFor<decltype(that expression, each call's awaitedType)>.
+template <class A>
+auto resumed(A&& awaiter) -> decltype(awaiter.await_resume());
+template <class T>
+auto awaitedType(Held<T> held) -> decltype(resumed(await(std::move(held))));
+void awaitedType(VoidMark);
+// A suspend fun's coroutine: Task when it gives nothing, else TaskOf<T>.
+template <class T>
+using TaskFor = std::conditional_t<std::is_void_v<T>, Task, TaskOf<std::remove_cvref_t<T>>>;
+
 
 inline auto delay(long long milliseconds) { return ::kompoz::delay(std::chrono::milliseconds(milliseconds)); }
+
+// ---- by lazy { … }: the value made the first time it is read ----
+
+template <class T>
+class Lazy {
+public:
+    explicit Lazy(std::function<T()> make) : state_(std::make_shared<State>(State{std::move(make), std::nullopt})) {}
+    const T& get() const {
+        if (!state_->value) state_->value.emplace(state_->make());
+        return *state_->value;
+    }
+    bool isInitialized() const { return state_->value.has_value(); }
+    bool operator==(const Lazy& o) const { return state_ == o.state_; }
+
+private:
+    struct State {
+        std::function<T()> make;
+        std::optional<T> value;
+    };
+    std::shared_ptr<State> state_;  // (copies share it: one value)
+};
+template <class F>
+auto lazy(F make) -> Lazy<std::decay_t<std::invoke_result_t<F&>>> {
+    return Lazy<std::decay_t<std::invoke_result_t<F&>>>(std::move(make));
+}
+
+// A function giving a T, as a type (declared only): what a class's delegate's lambda stands for where its
+// type is written (`val doubled by derivedStateOf { count * 2 }`: derivedStateOf(returning<int>())).
+template <class T>
+std::function<T()> returning();
 
 // ---- Collections: listOf, mapOf, ... ----
 
@@ -1604,11 +1650,41 @@ template <class T, class... A>
 inline constexpr bool alternativeOf<T, std::variant<A...>> = (std::is_same_v<T, A> || ...);
 template <class V>
 concept Sealed = requires(const V& v) { v.kompoz_value; };
+
+// A type with an object that interfaces reach (a kompozc class's handle, an interface's, a data class or an
+// object implementing one): its Object type, and it made again from such an object (T::kompoz_from).
+template <class T>
+concept HasObject = requires { typename T::Object; } && requires(const std::shared_ptr<typename T::Object>& o) { T::kompoz_from(o); };
+template <class T>
+inline constexpr bool sharedPointer = false;
+template <class T>
+inline constexpr bool sharedPointer<std::shared_ptr<T>> = true;
+// The object behind a value, as a shared pointer (a handle's, a ViewModel's own pointer), or none; a
+// nullable's when it has one.
+template <class V>
+auto sharedOf(const V& v) {
+    if constexpr (requires { v.kompoz_shared(); }) return v.kompoz_shared();
+    else if constexpr (sharedPointer<V>) return v;
+    else if constexpr (requires { v.has_value(); *v; }) return v.has_value() ? sharedOf(*v) : decltype(sharedOf(*v))();
+    else return std::shared_ptr<void>();
+}
+template <class V>
+inline constexpr bool sharesObject = !std::is_same_v<decltype(sharedOf(std::declval<const V&>())), std::shared_ptr<void>>;
 }  // namespace detail
 
-// x is T: a sealed class's value holding a T (kompozc's sealed classes are variants), or a T itself.
+// x is T: a sealed class's value holding a T (kompozc's sealed classes are variants), an object implementing
+// T or of T's class (behind an interface: its object's type asked), or a T itself.
 template <class T, class V>
 bool is(const V& value) {
+    if constexpr (detail::sharesObject<V> && detail::HasObject<T>) {
+        auto shared = detail::sharedOf(value);
+        return shared && dynamic_cast<const typename T::Object*>(shared.get()) != nullptr;
+    } else if constexpr (detail::sharesObject<V> && detail::sharedPointer<T>) {  // a ViewModel's type: its pointer
+        auto shared = detail::sharedOf(value);
+        return shared && dynamic_cast<const typename T::element_type*>(shared.get()) != nullptr;
+    } else if constexpr (!detail::sharesObject<V> && std::is_convertible_v<const V&, T> && !std::is_arithmetic_v<V>) {
+        return true;  // (a data class implementing T)
+    } else {
     const auto& v = deref(value);
     using U = std::remove_cvref_t<decltype(v)>;
     if constexpr (detail::Sealed<U>) {
@@ -1621,14 +1697,30 @@ bool is(const V& value) {
     } else {
         return false;
     }
+    }
 }
-// x as T: the T a sealed class's value holds (it must), else x cast to T.
+// x as T: the T a sealed class's value holds (it must), the T an interface's object is (made again from
+// it), else x cast to T.
 template <class T, class V>
 decltype(auto) as(const V& value) {
+    if constexpr (std::is_same_v<T, V>) {
+        return T(value);
+    } else if constexpr (detail::sharesObject<V> && detail::HasObject<T>) {
+        auto object = std::dynamic_pointer_cast<typename T::Object>(detail::sharedOf(value));
+        if (!object) throw std::bad_cast();  // (Kotlin's ClassCastException)
+        return T(T::kompoz_from(object));
+    } else if constexpr (detail::sharesObject<V> && detail::sharedPointer<T>) {
+        auto object = std::dynamic_pointer_cast<typename T::element_type>(detail::sharedOf(value));
+        if (!object) throw std::bad_cast();
+        return T(object);
+    } else if constexpr (!detail::sharesObject<V> && std::is_convertible_v<const V&, T>) {
+        return T(value);
+    } else {
     const auto& v = deref(value);
     using U = std::remove_cvref_t<decltype(v)>;
     if constexpr (detail::Sealed<U> && detail::alternativeOf<T, decltype(v.kompoz_value)>) return std::get<T>(v.kompoz_value);
     else return static_cast<T>(v);
+    }
 }
 // x as? T: the T, or none when x isn't one.
 template <class T, class V>
@@ -1638,6 +1730,34 @@ std::optional<T> asOrNull(const V& value) {
 }
 // A when giving a value that no branch took: Kotlin's compiler rules it out (a sealed class's subclasses all covered).
 [[noreturn]] inline void noBranch() { std::abort(); }
+
+// ---- Interfaces: interface Repository { … } ----
+
+// What every interface's object is (kompozc's interface Name: a handle to a Name::Object, an abstract class
+// deriving from this, virtually: a class may implement several): its text, and whether it equals
+// another (the same object; a data class's: an equal value).
+struct InterfaceObject {
+    virtual ~InterfaceObject() = default;
+    virtual std::string toString() const { return identity("Object", this); }
+    virtual bool kompoz_equals(const InterfaceObject& other) const { return this == &other; }
+    // Kotlin's Any.toString(): Name@ and where it is.
+    static std::string identity(std::string_view name, const void* object) {
+        return std::format("{}@{:x}", name, reinterpret_cast<std::uintptr_t>(object) & 0xffffffff);
+    }
+};
+inline bool sameObject(const InterfaceObject* a, const InterfaceObject* b) {
+    return a == b || (a && b && a->kompoz_equals(*b));
+}
+// A handle made from an object (kompoz_from).
+struct FromObject {};
+// T, named where a template's parameter D is in scope: what it says is looked up when the template is used,
+// not where it is written (an interface is declared first and defined later).
+template <class D, class T>
+struct LaterType {
+    using type = T;
+};
+template <class D, class T>
+using Later = typename LaterType<D, T>::type;
 }  // namespace kt
 
 // Kotlin's String + anything: "Tıklama: " + count, "x" + 1.5f, the value written as a string template

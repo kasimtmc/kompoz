@@ -1180,6 +1180,23 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Kotlin arayüzleri**: kompozc `interface Ad : A, B { … }`'yi okur: soyut ya da gövdeli özellikler ve işlevler
+  (`fun describe() = "$name: ${count()}"`, `val title get() = …`); onları sınıflar (yapıcıdaki `override val` de),
+  `ViewModel`'lar, data class'lar (alanları özellikleridir), object'ler (`Ad.describe()` arayüzün kendi işlevlerine ulaşır)
+  ve `object : Ad { … }` ifadeleri uygular; `fun interface Check { fun test(s: String): Boolean }` bir lambdadan da yapılır
+  (`Check { it.isNotEmpty() }`). Bir arayüz değeri, yapıldığı nesneye bir tutamaçtır (bir kopyası da aynı nesnedir, `==` de;
+  bir data class'ınki değerini karşılaştırır); `is`, `as` ve `as?` ne olduğunu sorar, akıllı dönüşümler de onları izler.
+  `List<Ad>` olarak bildirilmiş bir değişken, bir `listOf(…)`'un verdiği değerleri alır.
+- **Bir sınıfın temsilcili ve erişimcili özellikleri**: `private set` ile `var count by mutableStateOf(0)`,
+  `val doubled by derivedStateOf { count * 2 }`, `val greeting by lazy { … }`, `val isValid get() = …` ve
+  `set(value) { field = … }`; sınıflarda, `ViewModel`'larda ve object'lerde: içeride adlarıyla, dışarıda `name()` ve
+  `setName(v)` ile okunup yazılır, böylece birini okuyan composable o değişince yeniden oluşturulur. `by lazy`
+  kotlin.hpp'de yeni (`kt::lazy`). `shelf.picks++` ve `shelf.picks += 2` bir özelliği ayarlayıcısıyla değiştirir.
+- **suspend fun**: üst düzeyde, sınıflarda, object'lerde ve arayüzlerde bir eşyordamdır (`TaskOf<T>`, bir şey vermiyorsa
+  `Task`; türü yazılmamışsa ifadesininki: `suspend fun twice(x: Int) = load(x) + load(x)`); bir eşyordam bloğu ya da başka
+  bir suspend fun onu çağırdığında beklenir, başka bir yerden çağrılması Kotlin'deki gibi kompozc'nin hatasıdır.
+  `scope.async { load(id) }` önceki gibi çağrının görevini verir. Rehberdeki durum tutucular, `ViewModel` durumu ve
+  bekleyen işlevler artık Kotlin ile yazılı.
 - **Kotlin sealed sınıfları ve `is`**: kompozc `sealed class` ve `sealed interface`'i, alt sınıfları içlerinde
   (`UiState.Ready`) ya da dosyada yanlarında (`data class Broken(…) : LoadState()`) olarak okur; aralarında `data object`'ler
   de olabilir (`toString()` adlarıdır). Mühürlü bir tür, durumlarından birini tutan bir değerdir (bir `std::variant`): `==` onu

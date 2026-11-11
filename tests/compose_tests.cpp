@@ -758,6 +758,206 @@ fun Awaits() {
     }
 }
 
+// Kotlin's interfaces: abstract and default properties and functions, one extending another, implemented by
+// a class (a constructor's override val), a ViewModel, a data class, an object and an object expression; a
+// fun interface made from a lambda; is / as on them, == (a data class's: equal values).
+interface Titled {
+    val name: String
+    fun title(): String = "[$name]"
+}
+
+interface Shelf : Titled {
+    val items: List<String>
+    var picks: Int
+    fun count(): Int
+    fun describe() = title() + " " + count()
+}
+
+class FakeShelf(override val name: String = "sahte") : Shelf {
+    override val items = listOf("a", "b")
+    override var picks = 0
+    override fun count() = items.size
+}
+
+object EmptyShelf : Shelf {
+    override val name = "boş"
+    override val items: List<String> = emptyList()
+    override var picks = 0
+    override fun count() = 0
+}
+
+data class Tag(override val name: String) : Titled
+
+class ShelfViewModel : ViewModel(), Titled {
+    override val name: String get() = "raf"
+    override fun title() = "<$name>"
+}
+
+object NewEmblem : Emblem {
+    override val text = "yeni"
+}
+
+data class CountEmblem(override val text: String) : Emblem
+
+fun interface Check {
+    fun test(text: String): Boolean
+}
+
+fun titleOf(named: Titled): String = named.title()
+
+fun kindOf(t: Titled): String = when (t) {
+    is Tag -> "etiket " + t.name
+    is FakeShelf -> "raf " + t.items.size + " " + (t as? Shelf)?.count()
+    else -> "başka"
+}
+
+@Composable
+fun InterfaceForms() {
+    val vm = viewModel<ShelfViewModel>()
+    val nonEmpty = Check { it.isNotEmpty() }
+    val anonymous = object : Titled { override val name = "adsız" }
+    var shelf by remember { mutableStateOf<Shelf>(FakeShelf()) }
+    Column {
+        Text(shelf.describe())
+        Text(titleOf(vm) + " " + titleOf(anonymous) + " " + titleOf(EmptyShelf) + " " + titleOf(Tag("etiket")) + " " + EmptyShelf.title())
+        Text("geçerli " + nonEmpty.test("x") + " " + nonEmpty.test(""))
+        Text(NewEmblem.shown() + CountEmblem("3").shown())
+        Text(kindOf(Tag("x")) + "; " + kindOf(FakeShelf()) + "; " + kindOf(vm))
+        Text(if (shelf is FakeShelf) "sahte: " + (shelf as FakeShelf).items + " " + shelf.picks else "başka " + (shelf == EmptyShelf))
+        val tags: List<Titled> = listOf(Tag("x"), Tag("x"))
+        Text("eşit " + (tags[0] == tags[1]) + " " + (tags[0] is Tag) + " " + (tags[0] as Tag) + " " + (tags[0] is FakeShelf))
+        Button(onClick = { shelf.picks++ ; shelf = shelf }) { Text("Seç") }
+        Button(onClick = { shelf = EmptyShelf }) { Text("Boşalt") }
+    }
+}
+
+TEST(interfaces_as_kotlin_writes_them) {
+    ComposeTestRule rule([] { InterfaceForms(); });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("[sahte] 2").exists());
+    CHECK(rule.onNodeWithText("<raf> [adsız] [boş] [etiket] [boş]").exists());
+    CHECK(rule.onNodeWithText("geçerli true false").exists() && rule.onNodeWithText("<yeni><3>").exists());
+    CHECK(rule.onNodeWithText("etiket x; raf 2 2; başka").exists());
+    CHECK(rule.onNodeWithText("sahte: [a, b] 0").exists());
+    CHECK(rule.onNodeWithText("eşit true true Tag(name=x) false").exists());
+    rule.onNodeWithText("Seç").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("sahte: [a, b] 1").exists());
+    rule.onNodeWithText("Boşalt").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("[boş] 0").exists() && rule.onNodeWithText("başka true").exists());
+}
+
+// A class's properties by a delegate (var count by mutableStateOf(0) with a private set, by derivedStateOf, by lazy),
+// with get() and set(v) (`field`), in a ViewModel, a plain state holder and an object; read from a composable.
+class CounterViewModel : ViewModel() {
+    var count by mutableStateOf(0)
+        private set
+    val doubled by derivedStateOf { count * 2 }
+    val label: String get() = "sayaç $count"
+    var step = 1
+        set(value) { field = if (value > 0) value else 1 }
+
+    fun increment() { count += step }
+}
+
+class FormState {
+    var text by mutableStateOf("")
+    val isValid get() = text.length >= 3
+    val greeting by lazy { "merhaba" }
+}
+
+object Prefs {
+    var dark by mutableStateOf(false)
+    val mode get() = if (dark) "koyu" else "açık"
+}
+
+@Composable
+fun DelegatedMembers() {
+    val vm = viewModel<CounterViewModel>()
+    val form = remember { FormState() }
+    Column {
+        Text("${vm.count} ${vm.doubled} ${vm.label}")
+        Text("${form.text}|${form.isValid}|${form.greeting} ${Prefs.mode}")
+        Button(onClick = { vm.increment() }) { Text("Artır") }
+        Button(onClick = {
+            vm.step = -4
+            vm.step = vm.step + 2
+            form.text = "abc"
+            Prefs.dark = !Prefs.dark
+        }) { Text("Adım") }
+    }
+}
+
+TEST(class_properties_by_delegates_and_accessors) {
+    ComposeTestRule rule([] { DelegatedMembers(); });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("0 0 sayaç 0").exists() && rule.onNodeWithText("|false|merhaba açık").exists());
+    rule.onNodeWithText("Artır").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("1 2 sayaç 1").exists());
+    rule.onNodeWithText("Adım").performClick();
+    rule.onNodeWithText("Artır").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("4 8 sayaç 4").exists() && rule.onNodeWithText("abc|true|merhaba koyu").exists());
+}
+
+// suspend fun: a coroutine, awaited where it is called from one (a LaunchedEffect, another suspend fun): at the
+// top level (its result written, or its expression's), a class's, an interface's implemented by a class.
+suspend fun greet(name: String): String {
+    delay(100)
+    return "merhaba $name"
+}
+
+suspend fun twice(x: Int) = slowDouble(x) + slowDouble(x)
+
+suspend fun pause() {
+    delay(50)
+}
+
+class Loader {
+    var loads = 0
+    suspend fun load(n: Int): List<Int> {
+        pause()
+        loads++
+        return listOf(1, 2, 3).take(n)
+    }
+}
+
+interface Source {
+    suspend fun next(): Int
+}
+
+class Counting : Source {
+    var n = 0
+    override suspend fun next(): Int {
+        delay(10)
+        n++
+        return n
+    }
+}
+
+@Composable
+fun SuspendFunctions() {
+    var text by remember { mutableStateOf("…") }
+    LaunchedEffect(Unit) {
+        val loader = Loader()
+        val source: Source = Counting()
+        val g = greet("dünya")
+        val items = loader.load(2)
+        source.next()
+        text = g + " " + items + " " + twice(5) + " " + source.next() + " " + loader.loads
+    }
+    Text(text)
+}
+
+TEST(suspend_functions) {
+    ComposeTestRule rule([] { SuspendFunctions(); });
+    CHECK(rule.onNodeWithText("…").exists());
+    rule.advanceTimeBy(1500);
+    CHECK(rule.onNodeWithText("merhaba dünya [1, 2] 20 2 1").exists() || (std::printf("metin: %s\n", rule.onNodeWithText("merhaba", true).text().c_str()), false));
+}
+
 TEST(coroutines_await_what_suspends) {
     ComposeTestRule rule([] { Awaits(); });
     CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());

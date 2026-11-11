@@ -27,14 +27,14 @@ Things you can wait for, in a coroutine:
 | `awaitFrame()` | `withFrameNanos { }` | Until the next frame; gives its time in nanoseconds. |
 | `withBackground { work }` | `withContext(Dispatchers.IO) { }` | While `work` runs on a worker thread; gives what it returned. |
 | `anim.animateTo(1f)` | `animateTo(1f)` | Until an animation ends (see [Animation](animation.md)). |
-| a function returning `TaskOf<T>` | a `suspend fun` | Until it gives its result. |
+| a `suspend fun` of yours | a `suspend fun` | Until it gives its result. |
 
-A suspending function of your own is written in C++ for now: a coroutine returning `TaskOf<T>` (or `Task`), with `co_await` and `co_return`. A coroutine block calls it as Kotlin calls a `suspend fun`, and kompozc awaits it; it runs as part of the caller and is cancelled with it:
+A suspending function of your own is a `suspend fun`, as in Kotlin, a class's and an interface's too. A coroutine block or another `suspend fun` calls it and kompozc awaits it; it runs as part of the caller and is cancelled with it. Called anywhere else it is an error, as in Kotlin:
 
 ```kotlin
-TaskOf<std::string> loadName(int id) {
-    co_await delay(std::chrono::milliseconds(300));
-    co_return "User " + std::to_string(id);
+suspend fun loadName(id: Int): String {
+    delay(300)
+    return "User $id"
 }
 
 @Composable
@@ -45,6 +45,8 @@ fun UserName(id: Int) {
 }
 ```
 
+In C++ a `suspend fun` is a coroutine returning `TaskOf<T>` (`Task` when it gives nothing), and one written so in C++ is called from Kotlin the same way.
+
 A coroutine block captures what it uses by value, as every lambda does here, so it never holds a reference to something gone; what it captured is kept while it runs.
 
 ### Jobs, async and structured scopes
@@ -52,9 +54,10 @@ A coroutine block captures what it uses by value, as every lambda does here, so 
 `launch` gives back a `Job`: `cancel()` it, ask `isActive()`, `isCompleted()` or `isCancelled()`, or wait in a coroutine with `job.join()` for it to end. `async { … }` starts a coroutine (its block calls a suspending function) and gives back a `Deferred<T>`, whose `await()` gives its value or throws what it threw, so two pieces of work can run at once:
 
 ```kotlin
-#! struct User { std::string name; }; struct Posts { int count = 0; };
-#! TaskOf<User> loadUser(int) { co_return User{"Ada"}; }
-#! TaskOf<Posts> loadPosts(int) { co_return Posts{3}; }
+#! data class User(val name: String)
+#! data class Posts(val count: Int)
+#! suspend fun loadUser(id: Int) = User("Ada")
+#! suspend fun loadPosts(id: Int) = Posts(3)
 @Composable
 fun Profile(id: Int) {
     var line by remember { mutableStateOf("…") }
@@ -171,7 +174,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
 `produceState(initial, key) { … }` turns the result of a coroutine into a value that composition reads. The coroutine sets `value`, and is restarted when `key` changes:
 
 ```kotlin
-#! TaskOf<int> fetchCount(const std::string&) { co_return 3; }
+#! suspend fun fetchCount(url: String) = 3
 @Composable
 fun Downloads(url: String) {
     val count by produceState(0, url) {

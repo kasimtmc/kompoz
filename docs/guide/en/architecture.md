@@ -70,6 +70,35 @@ fun TodoScreen() {
 
 To give a `ViewModel` dependencies, use the overload that takes a factory: `viewModel<T>(key, factory)`, the factory making it with them (in C++, `std::make_shared<T>(repository)`).
 
+A `ViewModel`'s state can also be its properties `by mutableStateOf(…)`, read in composition as any state is, with a `private set` so that only it changes them. Its dependencies can be interfaces, with a fake one given by default; their `suspend fun`s are awaited in its coroutines:
+
+```kotlin
+interface NoteRepository {
+    suspend fun notes(): List<String>
+}
+
+class FakeNotes : NoteRepository {
+    override suspend fun notes() = listOf("Write docs", "Ship")
+}
+
+class NotesViewModel(private val repo: NoteRepository = FakeNotes()) : ViewModel() {
+    var notes by mutableStateOf(emptyList<String>())
+        private set
+
+    init {
+        viewModelScope.launch { notes = repo.notes() }
+    }
+}
+
+@Composable
+fun NotesScreen() {
+    val vm = viewModel<NotesViewModel>()
+    Column {
+        for (note in vm.notes) Text(note)
+    }
+}
+```
+
 ## Flows
 
 A `ViewModel` exposes its state as a `StateFlow`, and the UI reads it with `collectAsState()`, which recomposes when the value changes.

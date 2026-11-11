@@ -600,6 +600,9 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 373. Compose's `destination.hierarchy.any { it.hasRoute<Tab>() }` and `destination?.hasRoute<Home>()`, `navOptions { popUpTo<Home> { saveState = true }; launchSingleTop = true }`, typed `composable<Item>(deepLinks = listOf(navDeepLink<Item>("…"))) { }` and `navigation<Graph>(startDestination = …) { }` by name, Compose 1.4's `NavigationSuiteScaffold(navigationItems = { NavigationSuiteItem(selected = …, onClick = …, icon = { }, label = { }, badge = { }) }, navigationSuiteType = …)`, Compose Multiplatform's `MenuBar { Menu("…") { Item(…); CheckboxItem(…); RadioButtonItem(…); Separator(); Menu("…") { } } }` with `KeyShortcut(Key.D, ctrl = true)`, `data.visuals.actionLabel`, `Key.DirectionLeft` / `MoveHome` / `Spacebar` ✅
 374. Kotlin's `object` with members (`object AppIcons { val Add = … }`, `const val`, `var`, private members, functions, `init`), a colors object imported (`topAppBarColors(…)` without `TopAppBarDefaults.`), `String + any value` ✅
 375. Kotlin's `sealed class` / `sealed interface` (subclasses inside it or next to it, `data object`s), `is` / `!is`, `as` / `as?`, smart casts in `when` branches, past `is` in `if` and `&&`, a `when` over all cases without `else` ✅
+376. Kotlin's `interface` (abstract and default properties and functions, extending others) implemented by classes, `ViewModel`s, data classes, objects and `object : Name { }`, `fun interface` from a lambda, `is` / `as` on interfaces ✅
+377. A class's and an object's properties `by mutableStateOf(…)` (with `private set`), `by derivedStateOf { }`, `by lazy { }`, with `get()` and `set(value) { field = … }` ✅
+378. `suspend fun` at the top level, in classes, objects and interfaces (its type written or its expression's) ✅
 
 ## Next
 

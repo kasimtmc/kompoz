@@ -20,6 +20,8 @@ public:
     // A class's or an object's body after its {: properties, functions and init blocks, to the }.
     void members(std::vector<ClassProperty>& properties, std::vector<Function>& methods, std::vector<size_t>& order,
                  std::vector<NodeP>& initBlocks, const char* what);
+    // [fun] interface Name : A, B { val a: T; fun f(): R; fun g() = … }
+    InterfaceDecl interfaceDecl();
     // enum class Name { A, B, C }
     EnumClass enumClass();
     // class Name(val a: T, b: U) : Base(b) { val c = …; fun f() { … } }
@@ -45,6 +47,8 @@ private:
 
     Type type();
     std::vector<Param> params();
+    std::vector<Type> supers();
+    void accessors(ClassProperty& p);
     void annotations(std::vector<std::string>* names, std::map<std::string, std::string>* args = nullptr);
 
     NodeP block();             // { statements }
@@ -81,6 +85,7 @@ private:
     std::vector<Token> tokens_;
     size_t index_ = 0;
     bool newlines_ = true;  // newlines end statements (false inside ( ) and [ ])
+    bool abstractMembers_ = false;  // an interface's: a fun may have no body
 };
 
 }  // namespace kompozc

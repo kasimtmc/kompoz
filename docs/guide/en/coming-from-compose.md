@@ -121,7 +121,38 @@ fun Screen(state: UiState) {
 }
 ```
 
-Coroutines: a `LaunchedEffect` or a `launch` block is a coroutine, and `delay`, `animateScrollToItem` and the other suspending calls in it are awaited:
+An interface is a type that others implement: a class, a `ViewModel`, a data class, an object, an `object : Name { … }` expression. Its functions and properties without a body are abstract; a value of it is the object it was made from (a copy is the same one), and `is` and `as` tell which. A `fun interface` is made from a lambda too (`Check { it.isNotEmpty() }`):
+
+```kotlin
+interface Repository {
+    val name: String
+    fun items(): List<String>
+    fun describe() = "$name: ${items().size}"
+}
+
+class FakeRepository(override val name: String = "fake") : Repository {
+    override fun items() = listOf("a", "b")
+}
+
+@Composable
+fun Items(repo: Repository) {
+    Text(repo.describe())
+}
+```
+
+A class's property can be delegated, as a composable's local is, and have its own `get()` and `set(value)`. `var count by mutableStateOf(0)` with a `private set` is a state the class changes and everyone reads; `by derivedStateOf { … }` and `by lazy { … }` work as in Kotlin:
+
+```kotlin
+class CounterViewModel : ViewModel() {
+    var count by mutableStateOf(0)
+        private set
+    val isEven get() = count % 2 == 0
+
+    fun increment() { count++ }
+}
+```
+
+Coroutines: a `LaunchedEffect` or a `launch` block is a coroutine, and `delay`, `animateScrollToItem`, your `suspend fun`s and the other suspending calls in it are awaited:
 
 ```kotlin
 @Composable
@@ -171,7 +202,7 @@ Lambdas capture by value, as Kotlin's capture: a block can run again later on it
 
 ## Not yet
 
-kompozc reads the Kotlin a composable needs: composables, plain and extension functions, top-level `val`s, data classes, enum classes, classes (a ViewModel, a repository), `@Serializable` routes, objects, with members too (`object AppIcons { val Add = … }`: an app's singletons), and `sealed` classes and interfaces. What it doesn't read yet is written in C++ next to it: interfaces that aren't sealed, `suspend fun`, a class's `by` properties. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
+kompozc reads the Kotlin a composable needs: composables, plain, extension and `suspend` functions, top-level `val`s, data classes, enum classes, classes (a ViewModel, a repository) with delegated properties and accessors, interfaces, `sealed` classes and interfaces, `@Serializable` routes, and objects, with members too (`object AppIcons { val Add = … }`: an app's singletons). What it doesn't read yet is written in C++ next to it: generic classes and interfaces (`class Box<T>`), abstract classes, a data class's own functions. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
 
 Without kompozc, Kompoz's composables are written in C++: [Writing in C++](cpp.md) shows how each of Kotlin's constructs reads there.
 

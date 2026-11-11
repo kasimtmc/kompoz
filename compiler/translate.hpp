@@ -17,7 +17,7 @@
 
 namespace kompozc {
 
-// A Kotlin declaration in the C++: a @Composable function, a data class or a top-level val.
+// A Kotlin declaration in the C++: a @Composable function, a data class, a top-level val, a class, an interface, ...
 struct Found {
     std::optional<Function> function;
     std::optional<DataClass> dataClass;
@@ -33,12 +33,13 @@ struct Found {
     // One that couldn't be read (scan with errors): where it is, nothing of it.
     bool failed = false;
     std::optional<SealedDecl> sealed = std::nullopt;  // (last: the declarations above are made by place)
+    std::optional<InterfaceDecl> interface = std::nullopt;
 
     const std::string& name() const {
         static const std::string none;
         return failed ? none
                : function ? function->name : dataClass ? dataClass->name : property ? property->name : classDecl ? classDecl->name
-               : object   ? object->name   : sealed ? sealed->name : enumClass->name;
+               : object   ? object->name   : sealed ? sealed->name : interface ? interface->name : enumClass->name;
     }
 };
 

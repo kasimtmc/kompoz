@@ -230,23 +230,23 @@ Compose'daki gibi temel kural:
 
 ### Durum tutucular
 
-Bir ekranın durumu ve mantığı büyüdükçe onları bir sınıfta toplayın: bir *durum tutucu*. `remember` ile tutulan düz bir sınıf arayüz mantığına uyar (hangi panelin açık olduğu, bir formun alanları); ekrandan uzun yaşayan ve uygulamanın geri kalanıyla konuşan durum için `ViewModel` uygundur. Kompoz'un kendi bileşenleri de bunu yapar: `LazyListState`, `DrawerState` ve `SnackbarHostState`, `rememberLazyListState()` ve benzerlerinin yaptığı durum tutuculardır. Böyle bir sınıf composable'larınızın yanında C++ ile yazılır:
+Bir ekranın durumu ve mantığı büyüdükçe onları bir sınıfta toplayın: bir *durum tutucu*. `remember` ile tutulan düz bir sınıf arayüz mantığına uyar (hangi panelin açık olduğu, bir formun alanları); ekrandan uzun yaşayan ve uygulamanın geri kalanıyla konuşan durum için `ViewModel` uygundur. Kompoz'un kendi bileşenleri de bunu yapar: `LazyListState`, `DrawerState` ve `SnackbarHostState`, `rememberLazyListState()` ve benzerlerinin yaptığı durum tutuculardır. Böyle bir sınıf composable'larınızın yanında Kotlin'deki gibi yazılır: `by mutableStateOf(…)` özellikleri birer durumdur, adlarıyla okunup yazılır ve birini okuyan composable o değişince yeniden oluşturulur:
 
 ```kotlin
 class SearchState {
-public:
-    MutableState<std::string> query = mutableStateOf(std::string());
-    MutableState<bool> expanded = mutableStateOf(false);
-    void clear() const {
-        query.set("");
-        expanded.set(false);
+    var query by mutableStateOf("")
+    var expanded by mutableStateOf(false)
+
+    fun clear() {
+        query = ""
+        expanded = false
     }
-};
+}
 
 @Composable
 fun SearchScreen() {
     val search = remember { SearchState() }
-    Text(search.query.value)
+    Text(search.query)
 }
 ```
 

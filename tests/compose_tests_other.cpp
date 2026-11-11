@@ -16,3 +16,9 @@ fun StickerRow(sticker: Sticker, prefix: String = "", suffix: String = "") {
 val StickerGreeting = "selam " + Shout
 
 private val Shout = "!"
+
+// An interface of this file, implemented in compose_tests.cpp (an object, a data class).
+interface Emblem {
+    val text: String
+    fun shown() = "<$text>"
+}

@@ -121,7 +121,38 @@ fun Screen(state: UiState) {
 }
 ```
 
-Eşyordamlar: bir `LaunchedEffect` ya da `launch` bloğu bir eşyordamdır; içindeki `delay`, `animateScrollToItem` ve öteki bekleyen çağrılar beklenir:
+Arayüz, başka türlerin uyguladığı bir türdür: bir sınıf, bir `ViewModel`, bir data class, bir object, bir `object : Ad { … }` ifadesi. Gövdesiz işlevleri ve özellikleri soyuttur; onun bir değeri, yapıldığı nesnenin kendisidir (bir kopyası da aynı nesnedir), `is` ve `as` hangisi olduğunu söyler. Bir `fun interface` bir lambdadan da yapılır (`Check { it.isNotEmpty() }`):
+
+```kotlin
+interface Repository {
+    val name: String
+    fun items(): List<String>
+    fun describe() = "$name: ${items().size}"
+}
+
+class FakeRepository(override val name: String = "sahte") : Repository {
+    override fun items() = listOf("a", "b")
+}
+
+@Composable
+fun Items(repo: Repository) {
+    Text(repo.describe())
+}
+```
+
+Bir sınıfın özelliği, bir composable'ın yereli gibi bir temsilciye bağlanabilir (`by`), kendi `get()` ve `set(value)`'su da olabilir. `private set` ile `var count by mutableStateOf(0)`, sınıfın değiştirdiği ve herkesin okuduğu bir durumdur; `by derivedStateOf { … }` ve `by lazy { … }` Kotlin'deki gibi çalışır:
+
+```kotlin
+class CounterViewModel : ViewModel() {
+    var count by mutableStateOf(0)
+        private set
+    val isEven get() = count % 2 == 0
+
+    fun increment() { count++ }
+}
+```
+
+Eşyordamlar: bir `LaunchedEffect` ya da `launch` bloğu bir eşyordamdır; içindeki `delay`, `animateScrollToItem`, sizin `suspend fun`'larınız ve öteki bekleyen çağrılar beklenir:
 
 ```kotlin
 @Composable
@@ -171,7 +202,7 @@ Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha so
 
 ## Henüz yok
 
-kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: composable'lar, düz ve eklenti işlevleri, üst düzey `val`'ler, data class'lar, enum class'lar, sınıflar (bir ViewModel, bir depo), `@Serializable` rotalar, üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri) ve `sealed` sınıflar ile arayüzler. Henüz okumadıkları onun yanında C++ ile yazılır: `sealed` olmayan arayüzler, `suspend fun`, bir sınıfın `by` özellikleri. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
+kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: composable'lar, düz, eklenti ve `suspend` işlevler, üst düzey `val`'ler, data class'lar, enum class'lar, temsilcili (`by`) ve erişimcili özellikleriyle sınıflar (bir ViewModel, bir depo), arayüzler, `sealed` sınıflar ile arayüzler, `@Serializable` rotalar ve üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri). Henüz okumadıkları onun yanında C++ ile yazılır: tür parametreli sınıflar ve arayüzler (`class Box<T>`), soyut sınıflar, bir data class'ın kendi işlevleri. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
 
 kompozc olmadan Kompoz'un composable'ları C++ ile yazılır: [C++ ile yazmak](cpp.md), Kotlin'in her yapısının orada nasıl okunduğunu gösterir.
 
