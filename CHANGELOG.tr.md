@@ -1191,9 +1191,10 @@
   `kompozable(site, …)` ve `KompozableScope`; `ComposeHost`, `KompozHost`; `detail::Composer`, `detail::Kompozer`;
   `composeMovable`, `kompozMovable` oldu. CMake'in `kompoz_compose(target)`'ı `kompozable(target)` (cmake/Kompozable.cmake),
   testler `kompozable_tests` (tests/kompozable_tests.cpp), rehberin CompositionLocal sayfası kompozition-local.md oldu. CLion
-  eklentisi `dev.kompoz.kompozable` 0.2.0: CLion için yeni bir eklenti, eskisi (`dev.kompoz.compose`) elle kaldırılır.
-  Compose'un kendi adları (rehberin ve yorumların karşılaştırdığı Jetpack adları) olduğu gibi kaldı; navigasyonun
-  `composable(route) { }`'u ve composable, composition, recomposition sözcükleri de.
+  eklentisi `com.plyg.kompoz` 0.2.0: CLion için yeni bir eklenti, eskisi (`dev.kompoz.compose`) elle kaldırılır.
+  Compose'un kendi adları (rehberin ve yorumların karşılaştırdığı Jetpack adları) olduğu gibi kaldı, composable,
+  composition, recomposition sözcükleri de. Navigasyonun hedefleri de değişti: bir `NavHost`'ta `kompozable(route) { }` ve
+  `kompozable<Route> { }` (C++'ta `NavGraphBuilder::kompozable`).
 - **Kotlin arayüzleri**: kompozc `interface Ad : A, B { … }`'yi okur: soyut ya da gövdeli özellikler ve işlevler
   (`fun describe() = "$name: ${count()}"`, `val title get() = …`); onları sınıflar (yapıcıdaki `override val` de),
   `ViewModel`'lar, data class'lar (alanları özellikleridir), object'ler (`Ad.describe()` arayüzün kendi işlevlerine ulaşır)

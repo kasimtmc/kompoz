@@ -1154,9 +1154,10 @@
   `kompozable(site, …)` and `KompozableScope`, `ComposeHost` is `KompozHost`, `detail::Composer` is `detail::Kompozer`,
   `composeMovable` is `kompozMovable`. CMake's `kompoz_compose(target)` is `kompozable(target)` (cmake/Kompozable.cmake),
   the tests `kompozable_tests` (tests/kompozable_tests.cpp), the guide's CompositionLocal page kompozition-local.md. The CLion
-  plugin is `dev.kompoz.kompozable` 0.2.0: a new plugin to CLion, the old one (`dev.kompoz.compose`) removed by hand. Names
-  that are Compose's (Jetpack's, as the guide and comments compare with them) are as they were, and so are navigation's
-  `composable(route) { }` and the words composable, composition and recomposition.
+  plugin is `com.plyg.kompoz` 0.2.0: a new plugin to CLion, the old one (`dev.kompoz.compose`) removed by hand. Names
+  that are Compose's (Jetpack's, as the guide and comments compare with them) are as they were, and so are the words
+  composable, composition and recomposition. Navigation's destinations too: `kompozable(route) { }` and
+  `kompozable<Route> { }` in a `NavHost` (`NavGraphBuilder::kompozable` in C++).
 - **Kotlin interfaces**: kompozc reads `interface Name : A, B { … }`: properties and functions, abstract or with a
   body (`fun describe() = "$name: ${count()}"`, `val title get() = …`), implemented by classes (`override val` in the
   constructor too), `ViewModel`s, data classes (their fields are the properties), objects (`Name.describe()` reaches the

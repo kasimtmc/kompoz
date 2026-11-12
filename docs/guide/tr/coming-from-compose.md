@@ -9,7 +9,7 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 }
 ```
 
-Compose'un kendi adını taşıyan adları Kompoz'da Kompoz'un adını taşır: `@Kompozable`, Compose'un `@Composable`'ıdır; `KompozitionLocal`, `kompozitionLocalOf`, `staticKompozitionLocalOf` ve `KompozitionLocalProvider`, onun `CompositionLocal` ailesidir; `SubkompozLayout` (`subkompoz(…)` ile) onun `SubcomposeLayout`'udur; `KompozTestRule` onun test kuralıdır. Öteki bütün adlar Compose'unkilerdir.
+Compose'un kendi adını taşıyan adları Kompoz'da Kompoz'un adını taşır: `@Kompozable`, Compose'un `@Composable`'ıdır; `KompozitionLocal`, `kompozitionLocalOf`, `staticKompozitionLocalOf` ve `KompozitionLocalProvider`, onun `CompositionLocal` ailesidir; `SubkompozLayout` (`subkompoz(…)` ile) onun `SubcomposeLayout`'udur; `KompozTestRule` onun test kuralıdır; bir `NavHost`'ta `kompozable(route) { }` ve `kompozable<Route> { }`, navigasyonun `composable`'ıdır. Öteki bütün adlar Compose'unkilerdir.
 
 Kompoz, Material 3'ün ölçülerine ve Android'in fling eğrisine kadar Compose'un davranışını yakından izler. Yeni olan yalnızca kodun durduğu yerdir: C++ kaynaklarında, C++'ın yanında.
 

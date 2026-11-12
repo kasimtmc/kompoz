@@ -5,10 +5,10 @@
 //
 //   auto nav = rememberNavController();
 //   NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-//       graph.composable("home", [&](const NavBackStackEntry&) {
+//       graph.kompozable("home", [&](const NavBackStackEntry&) {
 //           Button([nav] { nav.navigate("detail/42"); }, [] { Text("Aç"); });
 //       });
-//       graph.composable("detail/{id}?tab={tab}", [&](const NavBackStackEntry& entry) {
+//       graph.kompozable("detail/{id}?tab={tab}", [&](const NavBackStackEntry& entry) {
 //           Text("Öğe " + std::to_string(entry.arguments().getInt("id").value_or(0)));
 //       });
 //   });
@@ -20,10 +20,10 @@
 // Screens that belong together go in a nested graph, with a route of its own:
 //
 //   graph.navigation("username", "login", [&](NavGraphBuilder& login) {
-//       login.composable("username", [&](const NavBackStackEntry& entry) {
+//       login.kompozable("username", [&](const NavBackStackEntry& entry) {
 //           auto form = viewModel<LoginViewModel>(*entry.parent());  // shared by the graph's screens
 //       });
-//       login.composable("password", ...);
+//       login.kompozable("password", ...);
 //   });
 //   nav.navigate("login");                                          // its start destination
 //   nav.navigate("home", {.popUpTo = "login", .inclusive = true});  // the whole flow off the stack
@@ -35,7 +35,7 @@
 // intents, the desktop command line, the web address's #fragment) go there, with the start
 // destination and the screens of the graphs on the way below it, so that back leads up:
 //
-//   graph.composable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [&](const NavBackStackEntry& e) { ... });
+//   graph.kompozable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [&](const NavBackStackEntry& e) { ... });
 //   nav.navigate("kompoz://item/42");  // a link from inside the app: on top of the stack
 //
 // Type-safe routes (Compose's @Serializable ones): a struct whose fields are the arguments.
@@ -46,7 +46,7 @@
 //       std::optional<int> tab;
 //       KOMPOZ_ROUTE(Profile, id, tab)  // the route "Profile/{id}?tab={tab}"
 //   };
-//   graph.composable<Profile>([&](const NavBackStackEntry& e) { Profile p = e.toRoute<Profile>(); });
+//   graph.kompozable<Profile>([&](const NavBackStackEntry& e) { Profile p = e.toRoute<Profile>(); });
 //   nav.navigate(Profile{.id = "42"});
 //
 // Fields can be strings, numbers, bools, enums, and std::optionals of them.
@@ -431,35 +431,35 @@ NavController rememberNavController(CallSite site = CallSite::current());
 // NavHost's builder: the destinations, by route (unique in the whole NavHost).
 class NavGraphBuilder {
 public:
-    void composable(std::string route, std::function<void(const NavBackStackEntry&)> content);
-    void composable(std::string route, std::vector<NavDeepLink> deepLinks, std::function<void(const NavBackStackEntry&)> content);
+    void kompozable(std::string route, std::function<void(const NavBackStackEntry&)> content);
+    void kompozable(std::string route, std::vector<NavDeepLink> deepLinks, std::function<void(const NavBackStackEntry&)> content);
     // A nested graph: navigating to `route` goes to `startDestination`, one of those `builder` adds.
     void navigation(std::string startDestination, std::string route, const std::function<void(NavGraphBuilder&)>& builder);
-    // Type-safe routes: composable<Profile>(...), navigation<Login>(Username{}, ...).
+    // Type-safe routes: kompozable<Profile>(...), navigation<Login>(Username{}, ...).
     template <TypedRoute T>
-    void composable(std::function<void(const NavBackStackEntry&)> content) {
-        composable(routePattern<T>(), std::move(content));
+    void kompozable(std::function<void(const NavBackStackEntry&)> content) {
+        kompozable(routePattern<T>(), std::move(content));
     }
     template <TypedRoute T>
-    void composable(std::vector<NavDeepLink> deepLinks, std::function<void(const NavBackStackEntry&)> content) {
-        composable(routePattern<T>(), std::move(deepLinks), std::move(content));
+    void kompozable(std::vector<NavDeepLink> deepLinks, std::function<void(const NavBackStackEntry&)> content) {
+        kompozable(routePattern<T>(), std::move(deepLinks), std::move(content));
     }
     template <TypedRoute T, TypedRoute S>
     void navigation(const S& startDestination, const std::function<void(NavGraphBuilder&)>& builder) {
         (void)startDestination;
         navigation(routePattern<S>(), routePattern<T>(), builder);
     }
-    // The same by name, as Compose writes them: composable<Item>(deepLinks = listOf(…)) { entry -> … } and
+    // The same by name, as Compose writes them: kompozable<Item>(deepLinks = listOf(…)) { entry -> … } and
     // navigation<ListGraph>(startDestination = ListAll) { … }.
     template <TypedRoute T, class... A>
         requires(detail::anyNamedArgument<A...>)
-    void composable(A&&... args) {
+    void kompozable(A&&... args) {
         namespace n = detail::names;
         using P = detail::Params<n::DeepLinks, detail::BlockWith<const NavBackStackEntry&>>;
         static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: composable<T>(…) { entry -> … } takes its content");
+        static_assert(P::blockGiven<A...>(), "kompoz: kompozable<T>(…) { entry -> … } takes its content");
         std::function<void(const NavBackStackEntry&)> content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
-        composable(routePattern<T>(), P::get<n::DeepLinks>(std::vector<NavDeepLink>(), args...), std::move(content));
+        kompozable(routePattern<T>(), P::get<n::DeepLinks>(std::vector<NavDeepLink>(), args...), std::move(content));
     }
     template <TypedRoute T, class... A>
         requires(detail::anyNamedArgument<A...>)
@@ -472,17 +472,17 @@ public:
         using S = std::remove_cvref_t<decltype(P::arg<n::StartDestination>(args...))>;
         navigation(routePattern<S>(), routePattern<T>(), builder);
     }
-    // Compose's names: composable(route, deepLinks = listOf(…)) { entry -> … } and
+    // Compose's names: kompozable(route, deepLinks = listOf(…)) { entry -> … } and
     // navigation(startDestination = …, route = …) { … }.
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
-    void composable(A&&... args) {
+    void kompozable(A&&... args) {
         namespace n = detail::names;
         using P = detail::Params<n::Route, n::DeepLinks, detail::BlockWith<const NavBackStackEntry&>>;
         static_assert(P::check<A...>());
-        static_assert(P::blockGiven<A...>(), "kompoz: composable(route) { entry -> … } takes its content");
+        static_assert(P::blockGiven<A...>(), "kompoz: kompozable(route) { entry -> … } takes its content");
         std::function<void(const NavBackStackEntry&)> content = std::get<sizeof...(A) - 1>(std::forward_as_tuple(args...));
-        composable(std::string(P::arg<n::Route>(args...)), P::get<n::DeepLinks>(std::vector<NavDeepLink>(), args...), std::move(content));
+        kompozable(std::string(P::arg<n::Route>(args...)), P::get<n::DeepLinks>(std::vector<NavDeepLink>(), args...), std::move(content));
     }
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
@@ -530,7 +530,7 @@ void NavHost(const NavController& navController, const S& startDestination, cons
 }
 // NavHost(nav, start, modifier, builder, options) as it was, or Compose's NavHost(navController = …,
 // startDestination = …, modifier = …, enterTransition = { }, exitTransition = { }, popEnterTransition = { },
-// popExitTransition = { }) { composable(…) { } }: the transitions' lambdas on their scope (initialState,
+// popExitTransition = { }) { kompozable(…) { } }: the transitions' lambdas on their scope (initialState,
 // targetState: the entries), the builder last.
 struct NavHostImpl {
     static constexpr bool takesContentByName = true;

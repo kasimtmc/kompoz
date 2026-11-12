@@ -1581,16 +1581,16 @@ fun Navigator(nav: NavController) {
         Text("rota ${route ?: "yok"}", modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { selecting = true }))
         NavHost(navController = nav, startDestination = Start, modifier = Modifier.size(200.dp),
                 enterTransition = { slideInHorizontally { it } }, exitTransition = { slideOutHorizontally { -it } }) {
-            composable<Start> {
+            kompozable<Start> {
                 Button(onClick = { nav.navigate(Detail(id = 7, tab = "b")) { launchSingleTop = true } }) { Text("Aç") }
             }
-            composable<Detail> { backStackEntry ->
+            kompozable<Detail> { backStackEntry ->
                 val detail = backStackEntry.toRoute<Detail>()
                 Text("ayrıntı ${detail.id} ${detail.tab ?: "-"}")
                 Button(onClick = { nav.navigate(Start) { popUpTo<Start>(); launchSingleTop = true } }) { Text("Geri") }
             }
             navigation(startDestination = "a/{n}", route = "grup") {
-                composable("a/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://a/{n}" })) { e ->
+                kompozable("a/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://a/{n}" })) { e ->
                     Text("a ${e.arguments?.getInt("n") ?: 0}")
                 }
             }
@@ -2329,7 +2329,7 @@ TEST(graphics_forms_as_compose_writes_them) {
 }
 
 // App shell forms as Compose writes them: destination.hierarchy.any { it.hasRoute<T>() }, destination?.hasRoute<T>(),
-// navOptions { popUpTo<T> { saveState = true } }, composable<T>(deepLinks =) and navigation<T>(startDestination =),
+// navOptions { popUpTo<T> { saveState = true } }, kompozable<T>(deepLinks =) and navigation<T>(startDestination =),
 // NavigationSuiteScaffold(navigationItems = { NavigationSuiteItem(…) }, navigationSuiteType =), MenuBar { Menu { … } },
 // data.visuals.actionLabel and Compose's key names.
 @Serializable
@@ -2375,9 +2375,9 @@ fun AppShellForms(nav: NavController) {
             modifier = Modifier.weight(1f),
         ) {
             NavHost(navController = nav, startDestination = Shell) {
-                composable<Shell> { Text(if (destination?.hasRoute<Shell>() == true) "kabuk ekranı" else "yolda") }
+                kompozable<Shell> { Text(if (destination?.hasRoute<Shell>() == true) "kabuk ekranı" else "yolda") }
                 navigation<AccountGraph>(startDestination = Member(0)) {
-                    composable<Member>(deepLinks = listOf(navDeepLink<Member>("kompoz://member"))) { e -> Text("hesap ${e.toRoute<Member>().n}") }
+                    kompozable<Member>(deepLinks = listOf(navDeepLink<Member>("kompoz://member"))) { e -> Text("hesap ${e.toRoute<Member>().n}") }
                 }
             }
         }

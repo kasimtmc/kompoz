@@ -2012,7 +2012,7 @@ private:
         if (callee.kind == Node::Name && !lookup(callee.text)) {
             if (size_t r = receiverOf(callee.text)) {
                 out_.text("(*kompoz_this_" + std::to_string(r) + ")." + cppName(callee.text));
-                if (!c.typeArgs.empty()) {  // composable<Profile> { } in a NavHost
+                if (!c.typeArgs.empty()) {  // kompozable<Profile> { } in a NavHost
                     out_.text("<");
                     for (size_t i = 0; i < c.typeArgs.size(); ++i) out_.text((i ? ", " : "") + plainType(c.typeArgs[i]));
                     out_.text(">");

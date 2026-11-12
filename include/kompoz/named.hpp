@@ -1149,7 +1149,7 @@ inline constexpr Param<detail::names::ResizeMode> resizeMode;
 inline constexpr Param<detail::names::Orientation> orientation;
 inline constexpr Param<detail::names::Target> target;
 inline constexpr Param<detail::names::ShouldStartDragAndDrop> shouldStartDragAndDrop;
-// (navigation: NavHost(navController, startDestination, enterTransition = { }, …), composable(route, deepLinks = …))
+// (navigation: NavHost(navController, startDestination, enterTransition = { }, …), kompozable(route, deepLinks = …))
 inline constexpr Param<detail::names::NavController> navController;
 inline constexpr Param<detail::names::StartDestination> startDestination;
 inline constexpr Param<detail::names::Route> route;

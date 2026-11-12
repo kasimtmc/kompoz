@@ -1,5 +1,5 @@
 <idea-plugin>
-    <id>dev.kompoz.kompozable</id>
+    <id>com.plyg.kompoz</id>
     <name>Kompoz</name>
     <vendor url="https://github.com/kasimtmc/kompoz">Kompoz</vendor>
     <description><![CDATA[
@@ -14,14 +14,14 @@
     <depends>com.intellij.modules.lsp</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <platform.lsp.integrationProvider implementation="dev.kompoz.clion.KompozLspIntegrationProvider"/>
-        <applicationConfigurable parentId="tools" instance="dev.kompoz.clion.KompozConfigurable" id="dev.kompoz.kompozable.settings"
+        <platform.lsp.integrationProvider implementation="com.plyg.kompoz.KompozLspIntegrationProvider"/>
+        <applicationConfigurable parentId="tools" instance="com.plyg.kompoz.KompozConfigurable" id="com.plyg.kompoz.settings"
                                  displayName="Kompoz"/>
     </extensions>
 
     <projectListeners>
-        <listener class="dev.kompoz.clion.KompozEditorListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
-        <listener class="dev.kompoz.clion.KompozHighlightingListener"
+        <listener class="com.plyg.kompoz.KompozEditorListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+        <listener class="com.plyg.kompoz.KompozHighlightingListener"
                   topic="com.intellij.codeInsight.daemon.impl.analysis.FileHighlightingSettingListener"/>
     </projectListeners>
 </idea-plugin>

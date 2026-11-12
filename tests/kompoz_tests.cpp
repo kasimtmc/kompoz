@@ -1064,8 +1064,8 @@ TEST(uri_handler_opens_the_apps_own_links_in_it) {
             if (!hosted.get()) return;
             auto nav = rememberNavController();
             NavHost(nav, "home", Modifier().fillMaxWidth().height(200), [&](NavGraphBuilder& graph) {
-                graph.composable("home", [](const NavBackStackEntry&) { Text("ev"); });
-                graph.composable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [](const NavBackStackEntry& e) {
+                graph.kompozable("home", [](const NavBackStackEntry&) { Text("ev"); });
+                graph.kompozable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [](const NavBackStackEntry& e) {
                     Text(std::format("öğe {}", e.arguments().getInt("n").value_or(-1)));
                 });
             });
@@ -4423,11 +4423,11 @@ TEST(nav_host_goes_to_routes_with_arguments_and_back) {
         auto nav = rememberNavController();
         controller = nav;
         NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-            graph.composable("home", [](const NavBackStackEntry&) { Text("ana sayfa"); });
-            graph.composable("detail/{id}?tab={tab}", [](const NavBackStackEntry& e) {
+            graph.kompozable("home", [](const NavBackStackEntry&) { Text("ana sayfa"); });
+            graph.kompozable("detail/{id}?tab={tab}", [](const NavBackStackEntry& e) {
                 Text(std::format("öğe {} sekme {}", e.arguments().getInt("id").value_or(-1), e.arguments().getString("tab").value_or("yok")));
             });
-            graph.composable("settings", [](const NavBackStackEntry&) { Text("ayarlar"); });
+            graph.kompozable("settings", [](const NavBackStackEntry&) { Text("ayarlar"); });
         });
     }, {400, 800});
     NavController nav = *controller;
@@ -4486,7 +4486,7 @@ TEST(nav_host_brings_entries_in_over_going_forward_and_under_going_back) {
         controller = nav;
         NavHost(nav, "a", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
             for (const char* route : {"a", "b", "c"})
-                graph.composable(route, [route](const NavBackStackEntry&) { Text(std::string("ekran ") + route); });
+                graph.kompozable(route, [route](const NavBackStackEntry&) { Text(std::string("ekran ") + route); });
         });
     }, {400, 800});
     NavController nav = *controller;
@@ -4522,7 +4522,7 @@ TEST(nav_host_seeks_its_pop_transition_with_the_back_gesture) {
         ContentTransform pop = togetherWith(fadeIn(0, tween(300)), fadeOut(0, tween(150, 0, LinearEasing)));
         NavHost(nav, "a", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
             for (const char* route : {"a", "b", "c"})
-                graph.composable(route, [route](const NavBackStackEntry&) { Text(std::string("ekran ") + route); });
+                graph.kompozable(route, [route](const NavBackStackEntry&) { Text(std::string("ekran ") + route); });
         }, NavHostOptions{.transition = togetherWith(EnterTransition::None, ExitTransition::None), .popTransition = pop});
     }, {400, 800});
     NavController nav = *controller;
@@ -4656,9 +4656,9 @@ TEST(nav_host_keeps_saveable_state_on_the_back_stack_and_in_saved_tabs) {
         auto nav = rememberNavController();
         controller = nav;
         NavHost(nav, "a", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-            graph.composable("a", [](const NavBackStackEntry&) { SaveableScreen("a"); });
-            graph.composable("b", [](const NavBackStackEntry&) { SaveableScreen("b"); });
-            graph.composable("b/detail/{n}", [](const NavBackStackEntry&) { SaveableScreen("detay"); });
+            graph.kompozable("a", [](const NavBackStackEntry&) { SaveableScreen("a"); });
+            graph.kompozable("b", [](const NavBackStackEntry&) { SaveableScreen("b"); });
+            graph.kompozable("b/detail/{n}", [](const NavBackStackEntry&) { SaveableScreen("detay"); });
         }, NavHostOptions{.transition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap())), .popTransition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap()))});
     }, {400, 800});
     NavController nav = *controller;
@@ -4706,12 +4706,12 @@ TEST(saveable_scroll_position_comes_back_with_its_entry) {
         auto nav = rememberNavController();
         controller = nav;
         NavHost(nav, "list", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-            graph.composable("list", [&](const NavBackStackEntry&) {
+            graph.kompozable("list", [&](const NavBackStackEntry&) {
                 auto& scroll = rememberSaveable([] { return ScrollState(); });
                 seen = &scroll;
                 Column(Modifier().fillMaxSize().verticalScroll(scroll), [=] { Box(Modifier().height(5000)); });
             });
-            graph.composable("other", [](const NavBackStackEntry&) { Text("öteki"); });
+            graph.kompozable("other", [](const NavBackStackEntry&) { Text("öteki"); });
         }, NavHostOptions{.transition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap())), .popTransition = togetherWith(fadeIn(0, snap()), fadeOut(0, snap()))});
     }, {400, 800});
     seen->scrollTo(1234);
@@ -4753,7 +4753,7 @@ TEST(view_models_of_navigation_entries_go_before_their_host) {
         KompozTestRule rule([&] {
             auto nav = rememberNavController();
             NavHost(nav, "a", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-                graph.composable("a", [&](const NavBackStackEntry&) {
+                graph.kompozable("a", [&](const NavBackStackEntry&) {
                     auto vm = viewModel<SharingModel>();
                     weak = vm;
                     Text(std::format("a {}", vm->shared.collectAsState()));
@@ -4777,8 +4777,8 @@ TEST(view_models_live_as_long_as_their_navigation_entry) {
         auto nav = rememberNavController();
         controller = nav;
         NavHost(nav, "a", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-            graph.composable("a", [](const NavBackStackEntry&) { Text("a"); });
-            graph.composable("b/{n}", [&](const NavBackStackEntry&) {
+            graph.kompozable("a", [](const NavBackStackEntry&) { Text("a"); });
+            graph.kompozable("b/{n}", [&](const NavBackStackEntry&) {
                 auto vm = viewModel<TestViewModel>();
                 seen = vm;
                 Text(std::format("b {}", vm->count.collectAsState()));
@@ -4826,15 +4826,15 @@ TEST(nested_navigation_graphs_are_entered_by_route_and_left_with_their_screens) 
         auto nav = rememberNavController();
         controller = nav;
         NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-            graph.composable("home", [](const NavBackStackEntry&) { Text("ana"); });
+            graph.kompozable("home", [](const NavBackStackEntry&) { Text("ana"); });
             graph.navigation("username", "login", [&](NavGraphBuilder& login) {
-                login.composable("username", [](const NavBackStackEntry&) { Text("kullanıcı"); });
-                login.composable("password", [](const NavBackStackEntry&) { Text("parola"); });
+                login.kompozable("username", [](const NavBackStackEntry&) { Text("kullanıcı"); });
+                login.kompozable("password", [](const NavBackStackEntry&) { Text("parola"); });
                 login.navigation("code", "verify", [&](NavGraphBuilder& verify) {  // a graph in a graph
-                    verify.composable("code", [](const NavBackStackEntry&) { Text("kod"); });
+                    verify.kompozable("code", [](const NavBackStackEntry&) { Text("kod"); });
                 });
             });
-            graph.composable("profile", [](const NavBackStackEntry&) { Text("profil"); });
+            graph.kompozable("profile", [](const NavBackStackEntry&) { Text("profil"); });
         });
     });
     NavController nav = *controller;
@@ -4889,16 +4889,16 @@ TEST(a_nested_graphs_view_models_are_shared_by_its_screens) {
         controller = nav;
         NavHost(nav, "login", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {  // a graph to start with
             graph.navigation("username", "login", [&](NavGraphBuilder& login) {
-                login.composable("username", [&](const NavBackStackEntry& e) {
+                login.kompozable("username", [&](const NavBackStackEntry& e) {
                     inUsername = viewModel<TestViewModel>(*e.parent());
                     Text(std::format("kullanıcı {}", inUsername->count.collectAsState()));
                 });
-                login.composable("password", [&](const NavBackStackEntry& e) {
+                login.kompozable("password", [&](const NavBackStackEntry& e) {
                     inPassword = viewModel<TestViewModel>(*e.parent());
                     Text(std::format("parola {}", inPassword->count.collectAsState()));
                 });
             });
-            graph.composable("home", [](const NavBackStackEntry&) { Text("ana"); });
+            graph.kompozable("home", [](const NavBackStackEntry&) { Text("ana"); });
         }, NavHostOptions{.transition = fade, .popTransition = fade});
     });
     NavController nav = *controller;
@@ -4941,15 +4941,15 @@ TEST(deep_links_open_their_destination_with_the_screens_above_it) {
         auto nav = rememberNavController();
         controller = nav;
         NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-            graph.composable("home", [](const NavBackStackEntry&) { Text("ana"); });
+            graph.kompozable("home", [](const NavBackStackEntry&) { Text("ana"); });
             graph.navigation("list/all", "list", [&](NavGraphBuilder& list) {
-                list.composable("list/all", [](const NavBackStackEntry&) { Text("liste"); });
-                list.composable("item/{n}", {navDeepLink("kompoz://item/{n}"), navDeepLink("https://example.com/items/{n}")},
+                list.kompozable("list/all", [](const NavBackStackEntry&) { Text("liste"); });
+                list.kompozable("item/{n}", {navDeepLink("kompoz://item/{n}"), navDeepLink("https://example.com/items/{n}")},
                                 [](const NavBackStackEntry& e) { Text(std::format("öğe {}", e.arguments().getInt("n").value_or(-1))); });
             });
-            graph.composable("search?q={q}", {navDeepLink("kompoz://search?q={q}")},
+            graph.kompozable("search?q={q}", {navDeepLink("kompoz://search?q={q}")},
                              [](const NavBackStackEntry& e) { Text("arama: " + e.arguments().getString("q").value_or("-")); });
-            graph.composable("tag/{name}", {navDeepLink("kompoz://tags/{name}")},
+            graph.kompozable("tag/{name}", {navDeepLink("kompoz://tags/{name}")},
                              [](const NavBackStackEntry& e) { Text("etiket: " + e.arguments().getString("name").value_or("-")); });
         });
     });
@@ -5022,13 +5022,13 @@ TEST(type_safe_routes_carry_their_arguments) {
         auto nav = rememberNavController();
         controller = nav;
         NavHost(nav, HomeRoute{}, Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-            graph.composable<HomeRoute>([](const NavBackStackEntry&) { Text("ana"); });
-            graph.composable<ProfileRoute>({navDeepLink<ProfileRoute>("kompoz://profile")}, [&](const NavBackStackEntry& e) {
+            graph.kompozable<HomeRoute>([](const NavBackStackEntry&) { Text("ana"); });
+            graph.kompozable<ProfileRoute>({navDeepLink<ProfileRoute>("kompoz://profile")}, [&](const NavBackStackEntry& e) {
                 seen = e.toRoute<ProfileRoute>();
                 Text("profil " + seen->id);
             });
             graph.navigation<LoginGraph>(UsernameRoute{}, [&](NavGraphBuilder& login) {
-                login.composable<UsernameRoute>([](const NavBackStackEntry& e) {
+                login.kompozable<UsernameRoute>([](const NavBackStackEntry& e) {
                     Text(std::format("deneme {}", e.toRoute<UsernameRoute>().attempt));
                 });
             });
@@ -5098,7 +5098,7 @@ TEST(saved_state_outlives_the_host) {
             auto nav = rememberNavController();
             r.nav = nav;
             NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-                graph.composable("home", [&](const NavBackStackEntry&) {
+                graph.kompozable("home", [&](const NavBackStackEntry&) {
                     auto state = rememberLazyListState();
                     r.list = state;
                     LazyColumn(Modifier().fillMaxSize(), kompoz::state = state, [&] {
@@ -5109,7 +5109,7 @@ TEST(saved_state_outlives_the_host) {
                         });
                     });
                 });
-                graph.composable("detail/{id}", [&](const NavBackStackEntry& e) {
+                graph.kompozable("detail/{id}", [&](const NavBackStackEntry& e) {
                     auto n = rememberSaveable([] { return mutableStateOf(0); });
                     r.entryCount = n;
                     Text(std::format("ayrıntı {} · {}", e.arguments().getInt("id").value_or(-1), n.get()));
@@ -5415,8 +5415,8 @@ TEST(saved_state_handles_outlive_the_process) {
             auto nav = rememberNavController();
             r.nav = nav;
             NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-                graph.composable("home", [](const NavBackStackEntry&) { Text("ev"); });
-                graph.composable("search", [&](const NavBackStackEntry&) {
+                graph.kompozable("home", [](const NavBackStackEntry&) { Text("ev"); });
+                graph.kompozable("search", [&](const NavBackStackEntry&) {
                     r.entry = viewModel<QueryViewModel>();
                     Text("giriş " + r.entry->query.collectAsState());
                 });
@@ -5467,10 +5467,10 @@ TEST(a_nested_graph_is_saved_and_restored_as_a_tab) {
         auto nav = rememberNavController();
         controller = nav;
         NavHost(nav, "home", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-            graph.composable("home", [](const NavBackStackEntry&) { Text("ana"); });
+            graph.kompozable("home", [](const NavBackStackEntry&) { Text("ana"); });
             graph.navigation("list/all", "list", [&](NavGraphBuilder& list) {
-                list.composable("list/all", [](const NavBackStackEntry&) { Text("liste"); });
-                list.composable("item/{n}", [&](const NavBackStackEntry& e) {
+                list.kompozable("list/all", [](const NavBackStackEntry&) { Text("liste"); });
+                list.kompozable("item/{n}", [&](const NavBackStackEntry& e) {
                     listModel = viewModel<TestViewModel>(*e.parent());
                     auto likes = rememberSaveable([] { return mutableStateOf(0); });
                     Button([likes] { likes.set(likes.peek() + 1); }, [=] {
@@ -5478,7 +5478,7 @@ TEST(a_nested_graph_is_saved_and_restored_as_a_tab) {
                     });
                 });
             });
-            graph.composable("settings", [](const NavBackStackEntry&) { Text("ayarlar"); });
+            graph.kompozable("settings", [](const NavBackStackEntry&) { Text("ayarlar"); });
         });
     });
     NavController nav = *controller;
@@ -8291,7 +8291,7 @@ TEST(graphics_forms_take_compose_named_arguments) {
 }
 
 TEST(app_shell_forms_take_compose_named_arguments) {
-    // NavDestination::hierarchy / hasRoute<T>, navOptions { popUpTo<T> { saveState } }, composable<T>(arg::deepLinks =) and
+    // NavDestination::hierarchy / hasRoute<T>, navOptions { popUpTo<T> { saveState } }, kompozable<T>(arg::deepLinks =) and
     // navigation<T>(arg::startDestination =); the menu builder (MenuBar { Menu { Item / CheckboxItem / RadioButtonItem / Separator /
     // Menu } }); NavigationSuiteItem by name and NavigationSuiteScaffold(arg::navigationItems =, arg::navigationSuiteType =);
     // SnackbarData::visuals; Compose's key names.
@@ -8339,9 +8339,9 @@ TEST(app_shell_forms_take_compose_named_arguments) {
                                     arg::badge = [] { Badge(Modifier(), [] { Text("1"); }); });
             }, arg::navigationSuiteType = NavigationSuiteType::NavigationRail, arg::modifier = Modifier().weight(1), [&nav] {
                 NavHost(nav, HomeRoute{}, Modifier(), [&](NavGraphBuilder& g) {
-                    g.composable<HomeRoute>([](const NavBackStackEntry&) { Text("ev ekranı"); });
+                    g.kompozable<HomeRoute>([](const NavBackStackEntry&) { Text("ev ekranı"); });
                     g.navigation<LoginGraph>(arg::startDestination = UsernameRoute{}, [&](NavGraphBuilder& login) {
-                        login.composable<UsernameRoute>(arg::deepLinks = std::vector{navDeepLink<UsernameRoute>("kompoz://username")},
+                        login.kompozable<UsernameRoute>(arg::deepLinks = std::vector{navDeepLink<UsernameRoute>("kompoz://username")},
                                                         [](const NavBackStackEntry& e) { Text("kullanıcı " + std::to_string(e.toRoute<UsernameRoute>().attempt)); });
                     });
                 });
@@ -8367,7 +8367,7 @@ TEST(app_shell_forms_take_compose_named_arguments) {
 
 TEST(navigation_takes_compose_named_arguments) {
     // NavHost(navController =, startDestination =, enterTransition = { }) { … } with the graph builder's
-    // composable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }
+    // kompozable(route, deepLinks =) and navigation(startDestination =, route =) by name, navigate(route) { popUpTo … }
     // as a block of options, the entry's destination(), BackHandler(enabled =) { }, combinedClickable by name.
     NavController nav;
     auto longPressed = std::make_shared<int>(0), backs = std::make_shared<int>(0);
@@ -8378,9 +8378,9 @@ TEST(navigation_takes_compose_named_arguments) {
         NavHost(arg::navController = nav, arg::startDestination = std::string("ev"), arg::modifier = Modifier().size(200),
                 arg::enterTransition = [](const AnimatedContentTransitionScope<NavBackStackEntry>&) { return slideInHorizontally([](float w) { return w; }); },
                 [&](NavGraphBuilder& graph) {
-                    graph.composable(arg::route = std::string("ev"), [&](const NavBackStackEntry&) { Text("ev"); });
+                    graph.kompozable(arg::route = std::string("ev"), [&](const NavBackStackEntry&) { Text("ev"); });
                     graph.navigation(arg::startDestination = std::string("a"), arg::route = std::string("grup"), [&](NavGraphBuilder& g) {
-                        g.composable(arg::route = std::string("a"), arg::deepLinks = std::vector<NavDeepLink>{navDeepLink([](NavDeepLink& l) { l.uriPattern = "kompoz://a"; })},
+                        g.kompozable(arg::route = std::string("a"), arg::deepLinks = std::vector<NavDeepLink>{navDeepLink([](NavDeepLink& l) { l.uriPattern = "kompoz://a"; })},
                                      [&](const NavBackStackEntry&) { Text("a"); });
                     });
                 });
@@ -23141,7 +23141,7 @@ TEST(nav_entries_have_lifecycles_capped_by_the_nav_host) {
             controller = nav;
             if (!hosted.get()) return;
             NavHost(nav, "a", Modifier().fillMaxSize(), [&](NavGraphBuilder& graph) {
-                graph.composable("a", [&](const NavBackStackEntry& e) {
+                graph.kompozable("a", [&](const NavBackStackEntry& e) {
                     CHECK(currentLifecycleOwner().get() == static_cast<const LifecycleOwner*>(&e));  // the entry's
                     LifecycleResumeEffect(0, [&log]() -> std::function<void()> {
                         log.push_back("a resume");
@@ -23149,14 +23149,14 @@ TEST(nav_entries_have_lifecycles_capped_by_the_nav_host) {
                     });
                     Text("ekran a");
                 });
-                graph.composable("b", [&](const NavBackStackEntry&) {
+                graph.kompozable("b", [&](const NavBackStackEntry&) {
                     LifecycleStartEffect(0, [&log]() -> std::function<void()> {
                         log.push_back("b start");
                         return [&log] { log.push_back("b stop"); };
                     });
                     Text("ekran b");
                 });
-                graph.composable("c", [](const NavBackStackEntry&) { Text("ekran c"); });
+                graph.kompozable("c", [](const NavBackStackEntry&) { Text("ekran c"); });
             });
         });
         NavController nav = *controller;

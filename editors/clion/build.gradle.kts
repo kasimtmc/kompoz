@@ -11,7 +11,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.20.1"
 }
 
-group = "dev.kompoz"
+group = "com.plyg"
 version = "0.2.0"
 
 repositories {

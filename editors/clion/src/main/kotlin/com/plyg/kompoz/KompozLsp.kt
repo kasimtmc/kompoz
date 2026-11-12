@@ -2,7 +2,7 @@
 // CLion's own C++ engine would read as broken C++. In those files, CLion's highlighting is turned
 // off (the language server's diagnostics still show: they aren't a highlighting pass of CLion's),
 // so what is wrong there comes from kompozc --lsp: kompozc's errors and clangd's, on their lines.
-package dev.kompoz.clion
+package com.plyg.kompoz
 
 import com.intellij.codeInsight.daemon.impl.analysis.FileHighlightingSetting
 import com.intellij.codeInsight.daemon.impl.analysis.FileHighlightingSettingListener

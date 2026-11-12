@@ -9,7 +9,7 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 }
 ```
 
-Where Compose's names carry its own name, Kompoz's carry Kompoz's: `@Kompozable` is Compose's `@Composable`; `KompozitionLocal`, `kompozitionLocalOf`, `staticKompozitionLocalOf` and `KompozitionLocalProvider` are its `CompositionLocal` family; `SubkompozLayout` (with `subkompoz(…)`) is its `SubcomposeLayout`; `KompozTestRule` is its test rule. Every other name is Compose's.
+Where Compose's names carry its own name, Kompoz's carry Kompoz's: `@Kompozable` is Compose's `@Composable`; `KompozitionLocal`, `kompozitionLocalOf`, `staticKompozitionLocalOf` and `KompozitionLocalProvider` are its `CompositionLocal` family; `SubkompozLayout` (with `subkompoz(…)`) is its `SubcomposeLayout`; `KompozTestRule` is its test rule; in a `NavHost`, `kompozable(route) { }` and `kompozable<Route> { }` are navigation's `composable`. Every other name is Compose's.
 
 Kompoz follows Compose's behavior closely, down to Material 3's measurements and Android's fling curve. What is new is only where the code lives: in C++ sources, next to C++.
 

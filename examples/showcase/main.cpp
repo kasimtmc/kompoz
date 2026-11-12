@@ -172,24 +172,24 @@ fun ShowcaseApp() {
             enterTransition = { fadeIn(animationSpec = tween(220, delayMillis = 60)) },
             exitTransition = { fadeOut(animationSpec = tween(120)) },
         ) {
-            composable<routes.Home> { HomeScreen(Modifier.fillMaxSize()) }
+            kompozable<routes.Home> { HomeScreen(Modifier.fillMaxSize()) }
             // The list and its items: a nested graph, with a ViewModel of its own.
             navigation<routes.ListGraph>(startDestination = routes.ListAll()) {
-                composable<routes.ListAll> { e ->
+                kompozable<routes.ListAll> { e ->
                     ListScreen(Modifier.fillMaxSize(), listState, nav, viewModel<LikesViewModel>(e.parent!!))
                 }
                 // Also opened by a link: `showcase kompoz://item/42`, an Android intent, or #item/42 on the web.
-                composable<routes.Item>(deepLinks = listOf(navDeepLink<routes.Item>("kompoz://item"))) { e ->
+                kompozable<routes.Item>(deepLinks = listOf(navDeepLink<routes.Item>("kompoz://item"))) { e ->
                     ItemScreen(e.toRoute<routes.Item>().n, nav, viewModel<LikesViewModel>(e.parent!!))
                 }
             }
-            composable<routes.Components>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://components" })) {
+            kompozable<routes.Components>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://components" })) {
                 ComponentsScreen(Modifier.fillMaxSize())
             }
-            composable<routes.Material>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://material" })) {
+            kompozable<routes.Material>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://material" })) {
                 MaterialScreen(Modifier.fillMaxSize(), colorSource, nav)
             }
-            composable<routes.Places>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://places" })) {
+            kompozable<routes.Places>(deepLinks = listOf(navDeepLink { uriPattern = "kompoz://places" })) {
                 PlacesScreen(Modifier.fillMaxSize())
             }
         }

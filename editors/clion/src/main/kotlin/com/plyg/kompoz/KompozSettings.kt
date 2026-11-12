@@ -1,6 +1,6 @@
 // Where kompozc is: set in Settings, Tools, Kompoz; else KOMPOZC from the environment; else one
 // built in the project (build/compiler/kompozc, cmake-build-*/compiler/kompozc); else kompozc on PATH.
-package dev.kompoz.clion
+package com.plyg.kompoz
 
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service

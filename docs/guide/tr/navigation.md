@@ -9,10 +9,10 @@
 fun App() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
-        composable("home") {
+        kompozable("home") {
             Button(onClick = { nav.navigate("detail/42") }) { Text("Open item 42") }
         }
-        composable("detail/{id}") { backStackEntry ->
+        kompozable("detail/{id}") { backStackEntry ->
             val id = backStackEntry.arguments?.getInt("id") ?: 0
             Column {
                 Text("Item $id")
@@ -25,7 +25,7 @@ fun App() {
 
 - `rememberNavController()` controller'ı oluşturur. Kaydedilebilirdir: süreç sonlandırıldıktan sonra geri yığını geri gelir.
 - `NavHost(nav, startDestination, modifier, builder)` hedefleri tanımlar ve güncel olanı gösterir.
-- `graph.composable(route, content)` bir hedef ekler. İçeriği `NavBackStackEntry`'yi alır.
+- `graph.kompozable(route, content)` bir hedef ekler. İçeriği `NavBackStackEntry`'yi alır.
 - `nav.navigate(path)` bir hedefi yığına iter; `nav.popBackStack()` geri gider.
 
 Sistemin geri butonu ve hareketi (masaüstünde Escape de) geri gidilecek bir şey olduğu sürece yığından çıkarır.
@@ -49,10 +49,10 @@ object Home
 fun TypedApp() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Home, modifier = Modifier.fillMaxSize()) {
-        composable<Home> {
+        kompozable<Home> {
             Button(onClick = { nav.navigate(Profile(id = "ada")) }) { Text("Ada's profile") }
         }
-        composable<Profile> { backStackEntry ->
+        kompozable<Profile> { backStackEntry ->
             val profile = backStackEntry.toRoute<Profile>()
             Text("Profile of ${profile.id}, tab ${profile.tab ?: 0}")
         }
@@ -149,16 +149,16 @@ Birbirine ait ekranlar, örneğin bir oturum açma akışı, kendi rotası olan 
 @Kompozable
 fun Graphs(nav: NavController) {
     NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
-        composable("home") {
+        kompozable("home") {
             Button(onClick = { nav.navigate("login") }) { Text("Sign in") }
         }
         navigation(startDestination = "username", route = "login") {
-            composable("username") { entry ->
+            kompozable("username") { entry ->
                 val form = viewModel<LoginViewModel>(entry.parent!!)   // grafiğin ekranlarınca paylaşılır
                 val user by form.user.collectAsState()
                 Button(onClick = { nav.navigate("password") }) { Text("Next, $user") }
             }
-            composable("password") { entry ->
+            kompozable("password") { entry ->
                 val form = viewModel<LoginViewModel>(entry.parent!!)   // aynısı
                 val user by form.user.collectAsState()
                 Button(onClick = { nav.navigate("home") { popUpTo("login") { inclusive = true } } }) { Text("Done, $user") }
@@ -177,8 +177,8 @@ Bir hedef URI'lara yanıt verebilir. Uygulama bir bağlantıyla açıldığında
 ```kotlin body
 #! val nav = rememberNavController()
 NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
-    composable("home") { Text("Home") }
-    composable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { e ->
+    kompozable("home") { Text("Home") }
+    kompozable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { e ->
         Text("Item ${e.arguments?.getInt("n") ?: 0}")
     }
 }
@@ -201,7 +201,7 @@ Uygulamanın içinden `nav.navigate("kompoz://item/42")` bir bağlantıyı yığ
 NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize(),
         enterTransition = { slideInHorizontally { it } }, exitTransition = { slideOutHorizontally { -it / 3 } },
         popEnterTransition = { slideInHorizontally { -it / 3 } }, popExitTransition = { slideOutHorizontally { it } }) {
-    composable("home") { Text("Home") }
+    kompozable("home") { Text("Home") }
 }
 ```
 

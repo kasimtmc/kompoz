@@ -9,10 +9,10 @@ Moving between screens with a back stack, as `androidx.navigation.compose` does:
 fun App() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
-        composable("home") {
+        kompozable("home") {
             Button(onClick = { nav.navigate("detail/42") }) { Text("Open item 42") }
         }
-        composable("detail/{id}") { backStackEntry ->
+        kompozable("detail/{id}") { backStackEntry ->
             val id = backStackEntry.arguments?.getInt("id") ?: 0
             Column {
                 Text("Item $id")
@@ -25,7 +25,7 @@ fun App() {
 
 - `rememberNavController()` makes the controller. It is saveable: the back stack comes back after the process was ended.
 - `NavHost(nav, startDestination, modifier, builder)` declares the destinations and shows the current one.
-- `graph.composable(route, content)` adds a destination. Its content gets the `NavBackStackEntry`.
+- `graph.kompozable(route, content)` adds a destination. Its content gets the `NavBackStackEntry`.
 - `nav.navigate(path)` pushes a destination; `nav.popBackStack()` goes back.
 
 The system back button and gesture (and Escape on the desktop) pop the stack while there is something to go back to.
@@ -49,10 +49,10 @@ object Home
 fun TypedApp() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Home, modifier = Modifier.fillMaxSize()) {
-        composable<Home> {
+        kompozable<Home> {
             Button(onClick = { nav.navigate(Profile(id = "ada")) }) { Text("Ada's profile") }
         }
-        composable<Profile> { backStackEntry ->
+        kompozable<Profile> { backStackEntry ->
             val profile = backStackEntry.toRoute<Profile>()
             Text("Profile of ${profile.id}, tab ${profile.tab ?: 0}")
         }
@@ -149,16 +149,16 @@ Screens that belong together, such as a sign-in flow, go in a nested graph with 
 @Kompozable
 fun Graphs(nav: NavController) {
     NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
-        composable("home") {
+        kompozable("home") {
             Button(onClick = { nav.navigate("login") }) { Text("Sign in") }
         }
         navigation(startDestination = "username", route = "login") {
-            composable("username") { entry ->
+            kompozable("username") { entry ->
                 val form = viewModel<LoginViewModel>(entry.parent!!)   // shared by the graph's screens
                 val user by form.user.collectAsState()
                 Button(onClick = { nav.navigate("password") }) { Text("Next, $user") }
             }
-            composable("password") { entry ->
+            kompozable("password") { entry ->
                 val form = viewModel<LoginViewModel>(entry.parent!!)   // the same one
                 val user by form.user.collectAsState()
                 Button(onClick = { nav.navigate("home") { popUpTo("login") { inclusive = true } } }) { Text("Done, $user") }
@@ -177,8 +177,8 @@ A destination can answer URIs. When the app is opened with a link, the `NavHost`
 ```kotlin body
 #! val nav = rememberNavController()
 NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize()) {
-    composable("home") { Text("Home") }
-    composable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { e ->
+    kompozable("home") { Text("Home") }
+    kompozable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { e ->
         Text("Item ${e.arguments?.getInt("n") ?: 0}")
     }
 }
@@ -201,7 +201,7 @@ From inside the app, `nav.navigate("kompoz://item/42")` follows a link onto the 
 NavHost(navController = nav, startDestination = "home", modifier = Modifier.fillMaxSize(),
         enterTransition = { slideInHorizontally { it } }, exitTransition = { slideOutHorizontally { -it / 3 } },
         popEnterTransition = { slideInHorizontally { -it / 3 } }, popExitTransition = { slideOutHorizontally { it } }) {
-    composable("home") { Text("Home") }
+    kompozable("home") { Text("Home") }
 }
 ```
 

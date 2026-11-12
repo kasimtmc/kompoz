@@ -498,11 +498,11 @@ std::vector<std::string> NavBackStackEntry::hierarchy() const {
     return routes;
 }
 
-void NavGraphBuilder::composable(std::string route, std::function<void(const NavBackStackEntry&)> content) {
+void NavGraphBuilder::kompozable(std::string route, std::function<void(const NavBackStackEntry&)> content) {
     destinations_.push_back({std::move(route), std::move(content), {}, parent_, {}});
 }
 
-void NavGraphBuilder::composable(std::string route, std::vector<NavDeepLink> deepLinks,
+void NavGraphBuilder::kompozable(std::string route, std::vector<NavDeepLink> deepLinks,
                                  std::function<void(const NavBackStackEntry&)> content) {
     destinations_.push_back({std::move(route), std::move(content), {}, parent_, std::move(deepLinks)});
 }
