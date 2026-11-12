@@ -1180,6 +1180,26 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Bir data class'ın gövdesi**: `data class Receipt(val item: String, val price: Int) { val total = …; val isBig get() = …;
+  val label by lazy { … }; init { require(…) }; fun withTax(rate: Int) = … }`. İşlevleri const üyelerdir; değeri verilen bir
+  özellik değer yapılırken, getter'lı biri her okunuşta hesaplanır; `==`, `toString()` ve `copy()` Kotlin'deki gibi
+  alanlarınınkidir (`copy()` onu yeniden yapar: gövdesinin değerleri ve init blokları yeniden çalışır). Yine bir değerdir,
+  alanlarının adlarıyla yapılır: bir özelliğin değerindeki lambda, içinde yapıldığı değeri değil okuduğu alanların
+  kopyalarını tutar. Bir arayüzü uygulayan data class onun işlevlerini de verebilir.
+- **Açık ve soyut sınıflar**: Kotlin ile yazılmış bir sınıf, modülün bir `open class`'ından ya da `abstract class`'ından
+  türer (`class Square(val side: Float) : Plate("kare")`); `abstract` ve `open` işlevleri ve özellikleri sanaldır,
+  `override` ile ezilir, `super.describe()` ile ulaşılır; bir alt sınıf tabanı yerine geçer (`List<Plate>`), `is` ve `as`
+  hangisi olduğunu sorar. Soyut bir sınıf yalnızca alt sınıflarından biri olarak yapılır; bir `ViewModel`'dan türeyen de
+  aynı biçimde çalışır. Bir sınıfın kendi (ve devraldığı) işlevleri, Kotlin'deki gibi aynı adlı üst düzey işlevlerden önce gelir.
+- **Tür parametreleri**: `class Box<T>`, `data class Pair<A, B>`, `interface Source<T>`, `fun interface Mapper<T>` ve
+  `fun <T> first(items: List<T>): T`, `fun <T, R> mapAll(items: List<T>, f: (T) -> R)`, `fun <T> List<T>.second()`,
+  `@Kompozable fun <T> Row(items: List<T>, label: (T) -> String)`, bir sınıfın `fun <R> convert(f: (T) -> R)`'i: C++
+  şablonlarıdır; tür argümanları yazılır (`Box<String>("x")`, `emptyBag<Int>()`) ya da değerlerden çıkarılır; yalnızca bir
+  lambdanın sonucunun adlandırdığı tür parametresi, lambdanın verdiğidir. `Source<Int>`'i uygulayan bir sınıf onun
+  üyelerini `T` yerine `Int` ile ezer. Modülün bir sınıfının değer veren bir işlev alan işlevine verilen lambda, son
+  ifadesini verir.
+- `kt::str`, kendi `toString()`'i olan bir değeri önce onunla yazar (`first` ve `second` alanlı bir data class bir Pair
+  olarak yazılmaz).
 - **Compose'un adını taşıyanlara Kompoz'un adları** (eski yazım kalmadı): `@Composable`, `@Kompozable` oldu (hâlâ öyle
   yazılmışsa kompozc söyler); `CompositionLocal`, `compositionLocalOf`, `staticCompositionLocalOf`,
   `CompositionLocalProvider`, `CompositionLocalContext` ve

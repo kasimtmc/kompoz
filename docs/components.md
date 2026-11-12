@@ -603,6 +603,10 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 376. Kotlin's `interface` (abstract and default properties and functions, extending others) implemented by classes, `ViewModel`s, data classes, objects and `object : Name { }`, `fun interface` from a lambda, `is` / `as` on interfaces ✅
 377. A class's and an object's properties `by mutableStateOf(…)` (with `private set`), `by derivedStateOf { }`, `by lazy { }`, with `get()` and `set(value) { field = … }` ✅
 378. `suspend fun` at the top level, in classes, objects and interfaces (its type written or its expression's) ✅
+379. A data class's body: functions, properties (a value, a getter, `by lazy`), `init`; `==`, `toString()`, `copy()` over its fields ✅
+380. Kotlin's `open class` and `abstract class` (abstract and open functions and properties, `override`, `super.f()`), subclasses as their base, `is` / `as` ✅
+381. Generic classes, data classes, interfaces and fun interfaces (`class Box<T>`, `interface Source<T>`), their type arguments written or taken from the values ✅
+382. Generic functions (`fun <T> first(items: List<T>)`, `fun <T, R> map(items: List<T>, f: (T) -> R)`, `fun <T> List<T>.second()`, generic composables and class functions) ✅
 
 ## Next
 

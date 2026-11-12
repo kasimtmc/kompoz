@@ -76,6 +76,17 @@ bool startsClass(std::string_view src, size_t at) {
     while (w == "private" || w == "internal" || w == "public" || w == "open" || w == "abstract") w = word();
     if (w != "class" || word().empty()) return false;
     while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+    bool generic = k < src.size() && src[k] == '<';
+    if (generic) {  // class Box<T>: its type parameters (C++'s class X<int> { is a specialization: its body tells)
+        int depth = 0;
+        for (; k < src.size() && src[k] != '\n'; ++k)
+            if (src[k] == '<') ++depth;
+            else if (src[k] == '>' && --depth == 0) {
+                ++k;
+                break;
+            }
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+    }
     if (k >= src.size()) return false;
     if (src[k] == '(') return true;
     if (src[k] == ':') {
@@ -221,6 +232,16 @@ bool startsFun(std::string_view src, size_t at) {
         if (w == "private" || w == "internal" || w == "public" || w == "inline" || w == "suspend") continue;
         if (w != "fun") return false;
         while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        if (k < src.size() && src[k] == '<') {  // fun <T> name: its type parameters
+            int depth = 0;
+            for (; k < src.size() && src[k] != '\n'; ++k)
+                if (src[k] == '<') ++depth;
+                else if (src[k] == '>' && --depth == 0) {
+                    ++k;
+                    break;
+                }
+            while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        }
         return k < src.size() && identChar(src[k]);
     }
 }
@@ -529,6 +550,9 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
 void declareIn(Module& module, const Found& f, bool qualified) {
     if (f.failed) return;
     if (qualified && f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
+    // (a class template is named with its namespace where it is made: inside itself its name alone is the type it is)
+    if (qualified && ((f.dataClass && !f.dataClass->typeParams.empty()) || (f.classDecl && !f.classDecl->typeParams.empty())))
+        module.qualifiers[f.name()] = f.qualifier;
     if (f.function) module.functions[f.function->name] = &*f.function;
     else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
     else if (f.property) module.properties[f.property->name] = &*f.property;
@@ -676,6 +700,16 @@ void names(const Found& f, std::set<std::string, std::less<>>& out) {
             typeNames(p.type, out);
             names(p.defaultValue.get(), out);
         }
+        for (const ClassProperty& p : f.dataClass->properties) properties(p, out);
+        for (const Function& m : f.dataClass->methods) {
+            for (const Param& p : m.params) {
+                typeNames(p.type, out);
+                names(p.defaultValue.get(), out);
+            }
+            if (m.result) typeNames(*m.result, out);
+            names(m.body.get(), out);
+        }
+        for (const NodeP& b : f.dataClass->initBlocks) names(b.get(), out);
     }
 }
 

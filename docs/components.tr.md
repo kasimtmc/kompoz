@@ -604,6 +604,10 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 376. Kotlin'in `interface`'i (soyut ve gövdeli özellikler ve işlevler, başka arayüzleri genişletir); onu sınıflar, `ViewModel`'lar, data class'lar, object'ler ve `object : Ad { }` uygular; bir lambdadan `fun interface`, arayüzlerde `is` / `as` ✅
 377. Bir sınıfın ve bir object'in `by mutableStateOf(…)` (`private set` ile), `by derivedStateOf { }`, `by lazy { }` özellikleri, `get()` ve `set(value) { field = … }` ile ✅
 378. Üst düzeyde, sınıflarda, object'lerde ve arayüzlerde `suspend fun` (türü yazılı ya da ifadesininki) ✅
+379. Bir data class'ın gövdesi: işlevler, özellikler (değer, getter, `by lazy`), `init`; alanları üzerinden `==`, `toString()`, `copy()` ✅
+380. Kotlin'in `open class` ve `abstract class`'ı (soyut ve açık işlevler ve özellikler, `override`, `super.f()`), tabanı yerine geçen alt sınıflar, `is` / `as` ✅
+381. Tür parametreli sınıflar, data class'lar, arayüzler ve fun interface'ler (`class Box<T>`, `interface Source<T>`), tür argümanları yazılı ya da değerlerden çıkarılmış ✅
+382. Tür parametreli işlevler (`fun <T> first(items: List<T>)`, `fun <T, R> map(items: List<T>, f: (T) -> R)`, `fun <T> List<T>.second()`, tür parametreli composable'lar ve sınıf işlevleri) ✅
 
 ## Sıradakiler
 

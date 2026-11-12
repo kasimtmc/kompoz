@@ -149,11 +149,13 @@ Function Parser::function() {
         annotations(&names, &f.annotationArgs);
         more = false;
         while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("inline") || isIdent("override") ||
-               isIdent("protected") || isIdent("open") || isIdent("suspend")) {
+               isIdent("protected") || isIdent("open") || isIdent("suspend") || isIdent("abstract")) {
             std::string word = take().text;
             if (word == "private") f.isPrivate = true;
             if (word == "override") f.overrides = true;
             if (word == "suspend") f.isSuspend = true;
+            if (word == "open") f.isOpen = true;
+            if (word == "abstract") f.isAbstract = true;
             more = true;
         }
     }
@@ -165,24 +167,32 @@ Function Parser::function() {
     }
     if (!isIdent("fun")) fail("expected 'fun'");
     take();
-    // fun name, or fun Receiver.name (an extension)
+    f.typeParams = typeParams();  // fun <T> name
+    // fun name, or fun Receiver.name (an extension; a generic receiver's type read whole: fun <T> List<T>.second())
     Pos at = cur().pos;
-    std::vector<std::string> parts{expectIdent()};
-    while (isOp(".") && peekRaw(1).kind == Tok::Ident) {
-        take();
-        parts.push_back(take().text);
-    }
-    f.name = parts.back();
-    parts.pop_back();
-    if (!parts.empty()) {
-        f.receiver.emplace();
-        f.receiver->pos = at;
-        for (size_t i = 0; i < parts.size(); ++i) f.receiver->name += (i ? "." : "") + parts[i];
+    if (cur().kind == Tok::Ident && peekRaw(1).kind == Tok::Op && peekRaw(1).text == "<" && !peekRaw(1).spaceBefore) {
+        f.receiver = type();
+        expectOp(".");
+        f.name = expectIdent();
+    } else {
+        std::vector<std::string> parts{expectIdent()};
+        while (isOp(".") && peekRaw(1).kind == Tok::Ident) {
+            take();
+            parts.push_back(take().text);
+        }
+        f.name = parts.back();
+        parts.pop_back();
+        if (!parts.empty()) {
+            f.receiver.emplace();
+            f.receiver->pos = at;
+            for (size_t i = 0; i < parts.size(); ++i) f.receiver->name += (i ? "." : "") + parts[i];
+        }
     }
     if (f.composable && f.isSuspend) fail(f.pos, "a @Kompozable function can't be suspend");
     f.params = params();
     if (acceptOp(":")) f.result = type();
-    if (abstractMembers_ && !isOp("=") && !opAfterNewlines("{")) {  // an interface's fun without a body
+    if (f.isAbstract || (abstractMembers_ && !isOp("=") && !opAfterNewlines("{"))) {  // an interface's fun without a body, an abstract one
+        if (isOp("=") || (f.isAbstract && opAfterNewlines("{") && !abstractMembers_)) fail(f.pos, "an abstract fun has no body");
         f.isAbstract = true;
     } else if (isOp("=")) {  // fun x() = expression
         Pos at = take().pos;
@@ -204,11 +214,16 @@ Function Parser::function() {
 ClassDecl Parser::classDecl() {
     ClassDecl c;
     c.pos = cur().pos;
-    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("open") || isIdent("abstract"))
-        if (take().text == "private") c.isPrivate = true;
+    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("open") || isIdent("abstract")) {
+        std::string word = take().text;
+        if (word == "private") c.isPrivate = true;
+        if (word == "abstract") c.isAbstract = true;
+        if (word == "open") c.isOpen = true;
+    }
     if (!isIdent("class")) fail("expected 'class'");
     take();
     c.name = expectIdent();
+    c.typeParams = typeParams();
     if (isOp("(")) {  // the primary constructor: (val a: T, b: U = d)
         NewlineMode mode(newlines_, false);
         take();
@@ -278,13 +293,15 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
         }
         // A property, or a function (its modifiers read by function()).
         size_t save = index_;
-        bool isPrivate = false, overrides = false;
+        bool isPrivate = false, overrides = false, isOpen = false, isAbstract = false;
         annotations(nullptr);
         while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected") || isIdent("open") ||
-               isIdent("override") || isIdent("const")) {
+               isIdent("override") || isIdent("const") || isIdent("abstract")) {
             std::string word = take().text;
             isPrivate = word == "private" || isPrivate;
             overrides = word == "override" || overrides;
+            isOpen = word == "open" || isOpen;
+            isAbstract = word == "abstract" || isAbstract;
         }
         std::string a = kind == "object" || kind == "interface" ? "an " + kind : "a " + kind;
         if (isIdent("val") || isIdent("var")) {
@@ -293,6 +310,8 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
             p.isVar = take().text == "var";
             p.isPrivate = isPrivate;
             p.overrides = overrides;
+            p.isOpen = isOpen;
+            p.isAbstract = isAbstract;
             p.name = expectIdent();
             if (acceptOp(":")) p.type = type();
             if (isIdent("by")) {  // var x by mutableStateOf(0): read and set through the delegate
@@ -309,6 +328,8 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
             accessors(p);
             if (p.delegated && (p.getter || p.setter)) fail(p.pos, p.name + ": a delegated property has no get() or set() of its own");
             if (p.setter && !p.isVar) fail(p.pos, p.name + ": a val has no set()");
+            if (p.isAbstract && (p.init || p.getter || p.setter)) fail(p.pos, p.name + ": an abstract property has no value or accessors");
+            if (p.isAbstract && !p.type) fail(p.pos, p.name + ": an abstract property needs a type");
             if (!p.init && !p.getter && !p.type) fail(p.pos, a + "'s property needs a value, a type or a getter");
             if (kind == "object" && !p.init && !p.getter) fail(p.pos, a + "'s property needs a value or a getter");
             if (p.getter && p.init) fail(p.pos, p.name + ": a property with get() has no value of its own here");
@@ -417,7 +438,9 @@ DataClass Parser::dataClass() {
     if (!isIdent("class")) fail("expected 'class' after 'data'");
     take();
     c.name = expectIdent();
-    NewlineMode mode(newlines_, false);
+    c.typeParams = typeParams();
+    {
+    NewlineMode mode(newlines_, false);  // (the parameters', to the `:` of its supertypes)
     expectOp("(");
     while (!isOp(")")) {
         annotations(nullptr);
@@ -439,9 +462,30 @@ DataClass Parser::dataClass() {
     }
     expectOp(")");
     c.supers = supers();
+    }
+    if (opAfterNewlines("{")) {  // its body: functions, properties, init blocks
+        skipNewlines();
+        take();
+        members(c.properties, c.methods, c.order, c.initBlocks, "data class");
+    }
     c.end = tokens_[index_ - 1].end;
     if (c.fields.empty()) fail(c.pos, "a data class needs a parameter");
     return c;
+}
+
+std::vector<std::string> Parser::typeParams() {
+    std::vector<std::string> out;
+    if (!isOp("<")) return out;
+    NewlineMode mode(newlines_, false);
+    take();
+    while (!isOp(">")) {
+        while (isIdent("out") || isIdent("in") || isIdent("reified")) take();
+        out.push_back(expectIdent());
+        if (acceptOp(":")) type();  // (a bound: C++ checks what is done with it)
+        if (!acceptOp(",")) break;
+    }
+    expectOp(">");
+    return out;
 }
 
 // : Sealed(), A, B after a data class or an object: a sealed class it is a case of (constructed, with no
@@ -511,7 +555,7 @@ InterfaceDecl Parser::interfaceDecl() {
     if (!isIdent("interface")) fail("expected 'interface'");
     take();
     i.name = expectIdent();
-    if (isOp("<")) fail("a generic interface isn't supported yet");
+    i.typeParams = typeParams();
     if (acceptOp(":")) {
         do {
             skipNewlines();
@@ -1209,6 +1253,11 @@ NodeP Parser::primary() {
                     take();
                     n->text = take().text;
                 }
+                return n;
+            }
+            if (t.text == "super") {  // super.f(): the base class's (codegen: super is a name there)
+                auto n = make(Node::Name, take().pos);
+                n->text = "super";
                 return n;
             }
             if (t.text == "if") return ifExpression();

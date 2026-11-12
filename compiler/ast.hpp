@@ -107,6 +107,7 @@ struct Param {
 // A function: [@Kompozable] fun [Receiver.]name(params): result { body }.
 struct Function {
     std::string name;
+    std::vector<std::string> typeParams;  // fun <T> first(items: List<T>): T: a function template
     bool composable = true;
     bool isPrivate = false;
     std::optional<Type> receiver;    // an extension's: fun Modifier.card()
@@ -116,7 +117,8 @@ struct Function {
     bool expressionBody = false;
     bool overrides = false;          // override fun (a class's)
     bool isSuspend = false;          // suspend fun: a coroutine (Task, TaskOf<T>)
-    bool isAbstract = false;         // an interface's fun without a body
+    bool isAbstract = false;         // an interface's fun without a body, an abstract class's abstract fun
+    bool isOpen = false;             // open fun: a subclass may override it
     std::vector<std::string> annotations;  // besides @Kompozable (Preview, ...)
     std::map<std::string, std::string> annotationArgs;  // @Preview(widthDp = 400): "widthDp" -> "400" (the text of each)
     Pos pos;                         // the @ of @Kompozable (or where it starts)
@@ -149,17 +151,22 @@ struct ClassProperty {
     bool delegated = false;     // val/var x by delegate
     bool overrides = false;     // override val/var (an interface's)
     bool privateSetter = false; // var x … private set
+    bool isAbstract = false;    // abstract val x: T (an abstract class's: its subclasses give it)
+    bool isOpen = false;        // open val: a subclass may override it
     NodeP getter;               // get() = … / get() { … }: a Block (an expression one as its Return)
     NodeP setter;               // set(v) { … }: a Block, `field` the stored value
     std::string setterParam;    // set(v)'s name
     // Whether it is read through functions of its own (x(), setX(v)) rather than a field: a delegate,
     // an accessor, or an interface's property.
-    bool accessed() const { return delegated || overrides || getter || setter || privateSetter; }
+    bool accessed() const { return delegated || overrides || getter || setter || privateSetter || isAbstract || isOpen; }
     Pos pos;
 };
 struct ClassDecl {
     std::string name;
+    std::vector<std::string> typeParams;  // class Box<T>: a C++ class template
     bool isPrivate = false;
+    bool isAbstract = false;  // abstract class: made only as one of its subclasses
+    bool isOpen = false;      // open class: subclasses may derive from it
     std::vector<Param> ctorParams;
     std::vector<char> ctorKinds;      // one per parameter: ' ' plain, 'v' val, 'm' var
     std::vector<bool> ctorPrivate;    // private val x
@@ -178,10 +185,17 @@ struct ClassDecl {
 // A data class: data class Name(val a: Int, var b: String = "").
 struct DataClass {
     std::string name;
+    std::vector<std::string> typeParams;  // data class Pair<A, B>
     std::vector<Type> supers;  // : Sealed(), A, B: a sealed class or interface it is a case of, interfaces
     std::vector<Param> fields;
     std::vector<bool> mutableFields;  // var (else val)
     std::vector<bool> overridingFields;  // override val (an interface's property)
+    // Its body: { val b = …; fun f() = …; init { … } } (not part of ==, toString or copy's arguments, as Kotlin's)
+    std::vector<ClassProperty> properties;
+    std::vector<Function> methods;
+    std::vector<size_t> order;  // as ClassDecl's
+    std::vector<NodeP> initBlocks;
+    bool hasBody() const { return !properties.empty() || !methods.empty() || !initBlocks.empty(); }
     std::vector<std::string> annotations;  // @Serializable: a route
     Pos pos;
     Pos end;
@@ -221,6 +235,7 @@ struct SealedDecl {
 // fun interface Name { fun f(…) }: made from a lambda too (Name { … }).
 struct InterfaceDecl {
     std::string name;
+    std::vector<std::string> typeParams;  // interface Source<T>
     bool isFun = false;
     std::vector<Type> bases;
     std::vector<ClassProperty> properties;

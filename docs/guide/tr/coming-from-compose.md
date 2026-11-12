@@ -154,6 +154,30 @@ class CounterViewModel : ViewModel() {
 }
 ```
 
+Sınıflar açık (`open`) ya da soyut (`abstract`) olabilir ve birbirinden türeyebilir (`override`, `super.describe()`). Bir data class'ın gövdesi olabilir: işlevler, alanlarından hesaplanan özellikler, `init`; `==`, `toString()` ve `copy`, Kotlin'deki gibi alanlarınınkidir. Sınıflar, data class'lar, arayüzler ve işlevler tür parametreli olabilir; tür argümanları yazılır ya da değerlerden çıkarılır:
+
+```kotlin
+abstract class Tile(val name: String) {
+    abstract fun area(): Float
+    open fun describe() = "$name: ${area()}"
+}
+
+class SquareTile(val side: Float) : Tile("kare") {
+    override fun area() = side * side
+}
+
+data class Tagged<T>(val tag: String, val value: T) {
+    fun show() = "$tag=$value"
+}
+
+fun <T, R> mapAll(items: List<T>, transform: (T) -> R): List<R> = items.map { transform(it) }
+
+@Kompozable
+fun Tiles() {
+    Text(SquareTile(2f).describe() + " " + Tagged("n", 3).show() + " " + mapAll(listOf(1, 2)) { it * 10 })
+}
+```
+
 Eşyordamlar: bir `LaunchedEffect` ya da `launch` bloğu bir eşyordamdır; içindeki `delay`, `animateScrollToItem`, sizin `suspend fun`'larınız ve öteki bekleyen çağrılar beklenir:
 
 ```kotlin
@@ -204,7 +228,7 @@ Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha so
 
 ## Henüz yok
 
-kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: composable'lar, düz, eklenti ve `suspend` işlevler, üst düzey `val`'ler, data class'lar, enum class'lar, temsilcili (`by`) ve erişimcili özellikleriyle sınıflar (bir ViewModel, bir depo), arayüzler, `sealed` sınıflar ile arayüzler, `@Serializable` rotalar ve üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri). Henüz okumadıkları onun yanında C++ ile yazılır: tür parametreli sınıflar ve arayüzler (`class Box<T>`), soyut sınıflar, bir data class'ın kendi işlevleri. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
+kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: composable'lar, düz, eklenti, tür parametreli ve `suspend` işlevler, üst düzey `val`'ler, data class'lar (gövdeleriyle de), enum class'lar, temsilcili (`by`) ve erişimcili özellikleriyle sınıflar (açık, soyut, tür parametreli; bir ViewModel, bir depo), arayüzler (tür parametreli de), `sealed` sınıflar ile arayüzler, `@Serializable` rotalar ve üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri). Henüz okumadıkları onun yanında C++ ile yazılır: `companion object`, kurucusu ya da gövdesi olan bir enum class, başka bir sınıfın içindeki sınıf, `typealias`, `operator fun`, eklenti özellikleri, `vararg`, `lateinit`. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
 
 kompozc olmadan Kompoz'un composable'ları C++ ile yazılır: [C++ ile yazmak](cpp.md), Kotlin'in her yapısının orada nasıl okunduğunu gösterir.
 

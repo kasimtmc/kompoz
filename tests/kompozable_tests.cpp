@@ -958,6 +958,191 @@ TEST(suspend_functions) {
     CHECK(rule.onNodeWithText("merhaba dünya [1, 2] 20 2 1").exists() || (std::printf("metin: %s\n", rule.onNodeWithText("merhaba", true).text().c_str()), false));
 }
 
+// A data class's body: functions (one implementing an interface's), a property computed as it is made, a getter, a
+// lazy one, an init block; copy() makes it again (its body's values anew), == and toString() over its fields only.
+data class Receipt(val item: String, val price: Int, val count: Int = 1) : Titled {
+    val total = price * count
+    val isBig get() = total >= 100
+    val label by lazy { "$item x$count" }
+    override val name: String get() = item
+
+    init {
+        require(count > 0)
+    }
+
+    fun withTax(rate: Int): Int = total + total * rate / 100
+    fun describe() = "$label = $total" + (if (isBig) " (büyük)" else "")
+}
+
+@Kompozable
+fun ReceiptView() {
+    val r = Receipt("kalem", 30)
+    val more = r.copy(count = 4)
+    Column {
+        Text(r.describe() + " | " + more.describe() + " | " + more.withTax(10))
+        Text("" + r + " " + (r == Receipt("kalem", 30)) + " " + titleOf(more))
+    }
+}
+
+TEST(data_class_bodies) {
+    KompozTestRule rule([] { ReceiptView(); });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("kalem x1 = 30 | kalem x4 = 120 (büyük) | 132").exists());
+    std::string second = rule.onNodeWithText("Receipt(", true).text();
+    CHECK(second == "Receipt(item=kalem, price=30, count=1) true [kalem]" || (std::printf("satır: %s\n", second.c_str()), false));
+}
+
+// Abstract and open classes: abstract properties and functions, open ones overridden (super.describe()), a final one
+// inherited; subclasses as their base (a List<Plate>), is / as on them.
+abstract class Plate(val label: String) {
+    abstract val corners: Int
+    abstract fun area(): Float
+    open fun describe() = "$label: $corners köşe, alan ${area()}"
+    fun shout() = label.uppercase()
+}
+
+class Square(val side: Float) : Plate("kare") {
+    override val corners = 4
+    override fun area() = side * side
+}
+
+class Round(val r: Float) : Plate("daire") {
+    override val corners: Int get() = 0
+    override fun area() = 3f * r * r
+    override fun describe() = "yuvarlak " + super.describe()
+}
+
+open class Stepper {
+    var total = 0
+    open fun step() = 1
+    fun tick() { total += step() }
+}
+
+class DoubleStepper : Stepper() {
+    override fun step() = 2
+}
+
+abstract class PageViewModel : ViewModel() {
+    abstract fun heading(): String
+    fun banner() = "<" + heading() + ">"
+}
+
+class StartViewModel : PageViewModel() {
+    override fun heading() = "başlangıç"
+}
+
+@Kompozable
+fun PlateForms() {
+    val plates: List<Plate> = listOf(Square(2f), Round(1f))
+    val stepper: Stepper = DoubleStepper()
+    val page = viewModel<StartViewModel>()
+    stepper.tick()
+    stepper.tick()
+    Column {
+        for (p in plates) Text(p.describe())
+        Text(page.banner())
+        Text(plates[0].shout() + " " + (plates[1] is Round) + " " + (plates[0] is Round) + " " + (plates[0] as Square).side + " " + stepper.total)
+    }
+}
+
+TEST(abstract_and_open_classes) {
+    KompozTestRule rule([] { PlateForms(); });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("kare: 4 köşe, alan 4.0").exists());
+    CHECK(rule.onNodeWithText("yuvarlak daire: 0 köşe, alan 3.0").exists() && rule.onNodeWithText("<başlangıç>").exists());
+    std::string line = rule.onNodeWithText("KARE", true).text();
+    CHECK(line == "KARE true false 2.0 4" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// Generic classes, data classes and interfaces: their type arguments written or taken from the values, an interface's
+// default function over its T, a class deriving from a generic one (super), a generic fun interface from a lambda.
+interface Feed<T> {
+    fun next(): T
+    fun two(): List<T> {
+        val first = next()
+        return listOf(first, next())
+    }
+}
+
+class Countdown(var from: Int) : Feed<Int> {
+    override fun next(): Int {
+        from -= 1
+        return from + 1
+    }
+}
+
+class Repeater<T>(private val value: T) : Feed<T> {
+    override fun next() = value
+}
+
+class Crate<T>(val value: T) {
+    fun get(): T = value
+    fun describe() = "Crate($value)"
+    fun <R> convert(f: (T) -> R): Crate<R> = Crate(f(value))
+}
+
+fun <T> firstOr(items: List<T>, fallback: T): T = if (items.isEmpty()) fallback else items.first()
+
+fun <T, R> mapAll(items: List<T>, transform: (T) -> R): List<R> = items.map { transform(it) }
+
+fun <T> List<T>.second(): T = this[1]
+
+fun <T> emptyBag(): List<T> = emptyList()
+
+@Kompozable
+fun <T> LabeledRow(items: List<T>, label: (T) -> String) {
+    Row {
+        for (x in items) Text(label(x))
+    }
+}
+
+open class Holder<T>(val item: T) {
+    open fun show() = "tutar: $item"
+}
+
+class NamedHolder(item: String) : Holder<String>(item) {
+    override fun show() = "ad " + super.show()
+}
+
+data class Duo<A, B>(val first: A, val second: B) {
+    fun swap() = Duo(second, first)
+}
+
+fun interface Mapper<T> {
+    fun map(x: T): String
+}
+
+@Kompozable
+fun GenericForms() {
+    val box = Crate("kutu")
+    val ints: Crate<Int> = Crate(3)
+    val duo = Duo(1, "bir")
+    val src: Feed<Int> = Countdown(3)
+    val rep: Feed<String> = Repeater("a")
+    val mapper = Mapper<Int> { "#$it" }
+    Column {
+        Text(box.get() + " " + ints.get() + " " + box.describe() + " " + Crate<String>("b").value)
+        Text("" + duo + " " + duo.swap() + " " + (duo == Duo(1, "bir")))
+        Text("" + src.two() + " " + rep.two() + " " + mapper.map(5) + " " + NamedHolder("x").show())
+        Text("işlev " + firstOr(listOf(4, 5), 0) + " " + firstOr(emptyBag<Int>(), 7) + " " + mapAll(listOf(1, 2)) { it * 10 } + " " +
+            listOf("a", "b").second() + " " + ints.convert { "#$it" }.get())
+        LabeledRow(listOf(1, 2)) { "etiket $it" }
+    }
+}
+
+TEST(generic_classes_and_interfaces) {
+    KompozTestRule rule([] { GenericForms(); });
+    rule.waitForIdle();
+    std::string first = rule.onNodeWithText("kutu", true).text(), second = rule.onNodeWithText("bir", true).text();
+    CHECK(first == "kutu 3 Crate(kutu) b" || (std::printf("satır: %s\n", first.c_str()), false));
+    CHECK(second == "Duo(first=1, second=bir) Duo(first=bir, second=1) true" || (std::printf("satır: %s\n", second.c_str()), false));
+    std::string line = rule.onNodeWithText("#5", true).text();
+    CHECK(line == "[3, 2] [a, a] #5 ad tutar: x" || (std::printf("satır: %s\n", line.c_str()), false));
+    std::string fn = rule.onNodeWithText("işlev", true).text();
+    CHECK(fn == "işlev 4 7 [10, 20] b #3" || (std::printf("satır: %s\n", fn.c_str()), false));
+    CHECK(rule.onNodeWithText("etiket 2").exists());
+}
+
 TEST(coroutines_await_what_suspends) {
     KompozTestRule rule([] { Awaits(); });
     CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());

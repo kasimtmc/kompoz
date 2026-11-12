@@ -150,6 +150,8 @@ void append(std::string& out, const T& v) {
         out += std::to_string(v);
     } else if constexpr (std::is_convertible_v<const T&, std::string_view>) {
         out += std::string_view(v);
+    } else if constexpr (requires { v.toString(); }) {  // (its own first: a data class with fields first and second isn't a Pair)
+        out += v.toString();
     } else if constexpr (requires { v.has_value(); *v; }) {  // a nullable: its value, or "null"
         if (v.has_value()) append(out, *v);
         else out += "null";
@@ -168,8 +170,6 @@ void append(std::string& out, const T& v) {
             append(out, e);
         }
         out += ']';
-    } else if constexpr (requires { v.toString(); }) {
-        out += v.toString();
     } else {
         static_assert(sizeof(T) == 0, "this value has no text form: give its type a toString()");
     }
@@ -1480,8 +1480,19 @@ template <class T, class F>
 T copy(const T& value, F&& change) {
     T c = value;
     change(c);
+    if constexpr (requires { c.kompoz_rebuild(); }) c.kompoz_rebuild();  // (its body's values and init blocks, made anew)
     return c;
 }
+
+// A data class's init block: run where it is made (a member's initializer), nothing kept.
+struct InitBlock {
+    template <class F>
+        requires(!std::is_same_v<std::remove_cvref_t<F>, InitBlock> && std::is_invocable_v<F&>)
+    InitBlock(F&& block) {
+        block();
+    }
+    bool operator==(const InitBlock&) const = default;
+};
 
 template <class A, class B>
 std::pair<A, B> to(A a, B b) {

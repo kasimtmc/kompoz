@@ -1143,6 +1143,25 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **A data class's body**: `data class Receipt(val item: String, val price: Int) { val total = …; val isBig get() = …;
+  val label by lazy { … }; init { require(…) }; fun withTax(rate: Int) = … }`. Its functions are const members, a
+  property with a value is computed as the value is made, a getter's each time; `==`, `toString()` and `copy()` are its
+  fields', as Kotlin's (`copy()` makes it again: its body's values and init blocks anew). It is still a value, made with
+  its fields' names: a lambda in a property's value keeps copies of the fields it reads, not the value it was made in.
+  A data class implementing an interface may give its functions too.
+- **Open and abstract classes**: a class written in Kotlin derives from an `open class` or an `abstract class` of the
+  module (`class Square(val side: Float) : Plate("kare")`), its `abstract` and `open` functions and properties virtual,
+  overridden with `override` and reached with `super.describe()`; a subclass is its base (`List<Plate>`), `is` and `as`
+  ask which. An abstract class is made only as one of its subclasses; one deriving from a `ViewModel` works the same.
+  A class's own functions (and those it inherits) come before top-level ones of the same name, as in Kotlin.
+- **Generics**: `class Box<T>`, `data class Pair<A, B>`, `interface Source<T>`, `fun interface Mapper<T>`, and
+  `fun <T> first(items: List<T>): T`, `fun <T, R> mapAll(items: List<T>, f: (T) -> R)`, `fun <T> List<T>.second()`,
+  `@Kompozable fun <T> Row(items: List<T>, label: (T) -> String)`, a class's `fun <R> convert(f: (T) -> R)`: C++ templates,
+  their type arguments written (`Box<String>("x")`, `emptyBag<Int>()`) or taken from the values; a type parameter only a
+  lambda's result names is what the lambda gives. A class implementing `Source<Int>` overrides its members with `T` as
+  `Int`. A lambda given to a module class's function that takes one giving a value gives its last expression.
+- `kt::str` writes a value with a `toString()` of its own by it first (a data class with fields `first` and `second` isn't
+  written as a Pair).
 - **Kompoz's names for what carried Compose's** (no old spelling kept): `@Composable` is `@Kompozable` (kompozc tells
   one still written so); `CompositionLocal`, `compositionLocalOf`, `staticCompositionLocalOf`,
   `CompositionLocalProvider`, `CompositionLocalContext` and
