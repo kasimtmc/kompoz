@@ -19,7 +19,11 @@ public:
     ObjectDecl objectDecl();
     // A class's or an object's body after its {: properties, functions and init blocks, to the }.
     void members(std::vector<ClassProperty>& properties, std::vector<Function>& methods, std::vector<size_t>& order,
-                 std::vector<NodeP>& initBlocks, const char* what);
+                 std::vector<NodeP>& initBlocks, const char* what, std::shared_ptr<ObjectDecl>* companion = nullptr);
+    // [private] val [<T>] Receiver.name: Type get() = … [set(v) { … }]: an extension property, as its getter
+    Function extensionProperty();
+    // [private] typealias Name<T> = Type
+    TypeAlias typeAlias();
     // [fun] interface Name : A, B { val a: T; fun f(): R; fun g() = … }
     InterfaceDecl interfaceDecl();
     // enum class Name { A, B, C }
@@ -87,6 +91,7 @@ private:
     size_t index_ = 0;
     bool newlines_ = true;  // newlines end statements (false inside ( ) and [ ])
     bool abstractMembers_ = false;  // an interface's: a fun may have no body
+    NestedDecls* nested_ = nullptr;  // the body being read: where its nested classes go
 };
 
 }  // namespace kompozc

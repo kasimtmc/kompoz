@@ -178,6 +178,30 @@ fun Tiles() {
 }
 ```
 
+Enum classes with a constructor and a body, `companion object`s, `operator fun`s, extension properties, `typealias`, `vararg` and `lateinit` read as in Kotlin, and so do classes nested in classes:
+
+```kotlin
+enum class Tier(val rank: Int) {
+    LOW(1), HIGH(9);
+    fun next() = if (this == LOW) HIGH else LOW
+}
+
+data class Coins(val cents: Int) {
+    operator fun plus(other: Coins) = Coins(cents + other.cents)
+    companion object {
+        val Zero = Coins(0)
+    }
+}
+
+val Coins.lira get() = cents / 100
+
+@Kompozable
+fun Wallet() {
+    val total = Coins(150) + Coins(250)
+    Text("${Tier.LOW.next()} ${total.lira} ${Coins.Zero} ${Tier.entries.size}")
+}
+```
+
 Coroutines: a `LaunchedEffect` or a `launch` block is a coroutine, and `delay`, `animateScrollToItem`, your `suspend fun`s and the other suspending calls in it are awaited:
 
 ```kotlin
@@ -230,7 +254,7 @@ Expressions are evaluated left to right, as Kotlin evaluates them: a call's argu
 
 ## Not yet
 
-kompozc reads the Kotlin a composable needs: composables, plain, extension, generic and `suspend` functions, top-level `val`s, data classes (with a body too), enum classes, classes (open, abstract, generic; a ViewModel, a repository) with delegated properties and accessors, interfaces (generic too), `sealed` classes and interfaces, `@Serializable` routes, and objects, with members too (`object AppIcons { val Add = … }`: an app's singletons). What it doesn't read yet is written in C++ next to it: a `companion object`, an enum class with a constructor or a body, a class nested in another, `typealias`, `operator fun`, extension properties, `vararg`, `lateinit`. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
+kompozc reads the Kotlin a composable needs: composables, plain, extension, generic, `operator` and `suspend` functions with `vararg`s, top-level `val`s and extension properties, `typealias`, data classes (with a body too), enum classes (with a constructor and a body too), classes (open, abstract, generic; a ViewModel, a repository) with delegated, `lateinit` and accessor properties and a `companion object`, interfaces (generic too), `sealed` classes and interfaces, `@Serializable` routes, objects, with members too (`object AppIcons { val Add = … }`: an app's singletons), and those declarations nested in classes. What it doesn't read yet is written in C++ next to it: `try` as an expression (`val x = try { … } catch …`; as a statement it is read), two top-level functions of the same name (overloads), an `inner class`, an enum entry with a body of its own. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
 
 Without kompozc, Kompoz's composables are written in C++: [Writing in C++](cpp.md) shows how each of Kotlin's constructs reads there.
 

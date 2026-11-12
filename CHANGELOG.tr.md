@@ -1180,6 +1180,33 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **companion object**: sınıflarda, data class'larda ve arayüzlerde; üyeleri sınıfın statik üyeleridir (`Ledger.create()`,
+  `Ledger.made`, `Money.Zero`; sınıfın içinde adlarıyla). Özellikleri, değerini ilk okunuşta yapıp tutan statik işlevlerdir
+  (`val Zero = Money(0)`: sınıf, üyelerinin bildirildiği yerde tamam değildir); bir var'ınki ayarlayıcısıyla.
+- **Kurucusu ve gövdesi olan enum class'lar**: `enum class Rank(val n: Int, val label: String = "…") { LOW(1),
+  MID(n = 5, label = "orta"); val doubled = n * 2; fun next() = …; companion object { … } }`, alanlarından oluşan bir
+  yapıdır, girdileri sabitleridir (`Rank.MID.describe()`). Her enum'un (bunların ve hâlâ C++'ın enum class'ı olan
+  yalnızca girdili olanların) `name`, `ordinal`, `entries`, `values()`, `valueOf("LOW")`'u vardır, adıyla yazılır (`"$suit"`).
+- **İç içe bildirimler**: bir sınıfın, data class'ın, object'in ya da arayüzün içinde data class'lar, enum'lar, object'ler,
+  arayüzler ve sınıflar: dışarıda `Catalog.Entry("d", Catalog.Kind.FILM)`, içeride `Entry("a")`. C++'ta dış türden önce kendi
+  yapılarındadırlar (orada tamamdırlar: iç içe bir aggregate'in varsayılanları dış türün onu kullandığı yerde tamam olmalı),
+  dış tür onları adlandırır (`Catalog::Entry`). `inner` olanlar değil (dıştakinin this'ini tutarlardı).
+- **typealias**: `typealias Names = List<String>`, `typealias Format = (Int) -> String` (bir lambda ona verilince değer
+  verir), `typealias Grid<T> = List<List<T>>` (bir şablon); data class'lardan önce (adlandırdıkları türler önce bildirilir).
+- **operator fun**: `plus`, `minus`, `times`, `div`, `rem`, `unaryMinus`, `unaryPlus`, `not`, `inc`, `dec`, `get` (`a[i]`),
+  `invoke` (`f(x)`), `compareTo` (`<`, `>`), `…Assign`'lar ve `contains` (`in`); sınıflarda, data class'larda, arayüzlerde ve
+  eklenti olarak (`operator fun Vec2.times(k: Int)`): onları çağıran C++ işleçleri (`plusAssign` yoksa `a += b`, Kotlin'deki
+  gibi `a = a + b`'dir).
+- **Eklenti özellikleri**: `val String.shout: String get() = …`, `val <T> List<T>.second: T get() = this[1]`, `var
+  Meter.doubled: Int get() = …; set(value) { … }`; Kotlin'deki gibi aynı adlı bir üye önce gelir (C++ seçer:
+  KOMPOZ_KT_GET_OR). Bir eklenti işlevinin ya da özelliğinin alıcısı, Kotlin sınıflarının üyelerine adlarıyla ulaşır.
+- **vararg**: `fun total(vararg xs: Int)` bir `List<Int>` alır; bir çağrının oradan sonraki argümanları öğeleridir,
+  `*liste` aralarına birini açar (`total(1, *more, 9)`).
+- **lateinit var**: ayarlanana dek boş tutulur (her tür, argümanla yapılan bir sınıf da); önce okunursa Kotlin'deki gibi
+  hata atar.
+- Düzeltildi: `first { … }`, `last { … }`, `firstOrNull { … }` ve `lastOrNull { … }` koşullarını yok sayıyordu; bir işlevin
+  varsayılan değeri olarak verilen lambda (`onPick: () -> Unit = {}`) ad alanı düzeyinde yakalama yapıyordu; gövdesi iç içe
+  bir bildirimle (`data class`, `object`, …) başlayan bir sınıf Kotlin olarak okunmuyordu.
 - **Kotlin'in değerlendirme sırası**: bir çağrının argümanları yazıldıkları sırayla değerlendirilir (adlı olanlar
   bildirildikleri değil yazıldıkları sırayla: `Spot(y = next(), x = next())`); bir metin şablonunun parçaları ve bir
   işlecin işlenenleri de (`next() * 10 + next()`), Kotlin'deki gibi: C++ bunların sırasını belirlemez (GCC sağdan sola

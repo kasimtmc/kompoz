@@ -34,12 +34,13 @@ struct Found {
     bool failed = false;
     std::optional<SealedDecl> sealed = std::nullopt;  // (last: the declarations above are made by place)
     std::optional<InterfaceDecl> interface = std::nullopt;
+    std::optional<TypeAlias> alias = std::nullopt;
 
-    const std::string& name() const {
+    std::string name() const {
         static const std::string none;
         return failed ? none
-               : function ? function->name : dataClass ? dataClass->name : property ? property->name : classDecl ? classDecl->name
-               : object   ? object->name   : sealed ? sealed->name : interface ? interface->name : enumClass->name;
+               : function ? (function->isExtensionProperty ? "kompoz_get_" + function->name : function->name) : dataClass ? dataClass->name : property ? property->name : classDecl ? classDecl->name
+               : object   ? object->name   : sealed ? sealed->name : interface ? interface->name : alias ? alias->name : enumClass->name;
     }
 };
 

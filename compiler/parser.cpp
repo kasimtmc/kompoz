@@ -1,5 +1,6 @@
 #include "parser.hpp"
 
+#include <cctype>
 #include <set>
 #include <utility>
 
@@ -149,8 +150,9 @@ Function Parser::function() {
         annotations(&names, &f.annotationArgs);
         more = false;
         while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("inline") || isIdent("override") ||
-               isIdent("protected") || isIdent("open") || isIdent("suspend") || isIdent("abstract")) {
+               isIdent("protected") || isIdent("open") || isIdent("suspend") || isIdent("abstract") || isIdent("operator") || isIdent("infix")) {
             std::string word = take().text;
+            if (word == "operator") f.isOperator = true;
             if (word == "private") f.isPrivate = true;
             if (word == "override") f.overrides = true;
             if (word == "suspend") f.isSuspend = true;
@@ -274,30 +276,77 @@ ClassDecl Parser::classDecl() {
     if (opAfterNewlines("{")) {
         skipNewlines();
         take();
-        members(c.properties, c.methods, c.order, c.initBlocks, "class");
+        NestedDecls* was = std::exchange(nested_, &c.nested);
+        members(c.properties, c.methods, c.order, c.initBlocks, "class", &c.companion);
+        nested_ = was;
     }
     c.end = tokens_[index_ - 1].end;
     return c;
 }
 
 void Parser::members(std::vector<ClassProperty>& properties, std::vector<Function>& methods, std::vector<size_t>& order,
-                     std::vector<NodeP>& initBlocks, const char* what) {
+                     std::vector<NodeP>& initBlocks, const char* what, std::shared_ptr<ObjectDecl>* companion) {
     std::string kind = what;
     for (skipNewlines(); !isOp("}"); skipNewlines()) {
         if (acceptOp(";")) continue;  // (members on one line: var x = 0; fun f() { })
+        if (isIdent("companion")) {  // companion object [Name] { … }: the class's own static members
+            Pos at = take().pos;
+            if (!companion) fail(at, "an " + kind + " has no companion object");
+            if (*companion) fail(at, "a class has one companion object");
+            if (!isIdent("object")) fail("expected 'object' after 'companion'");
+            take();
+            auto o = std::make_shared<ObjectDecl>();
+            o->isCompanion = true;
+            o->pos = at;
+            o->name = cur().kind == Tok::Ident ? take().text : "Companion";
+            if (isOp(":")) fail("a companion object with a supertype isn't supported");
+            if (opAfterNewlines("{")) {
+                skipNewlines();
+                take();
+                members(o->properties, o->methods, o->order, o->initBlocks, "object");
+            }
+            o->end = tokens_[index_ - 1].end;
+            *companion = std::move(o);
+            continue;
+        }
         if (isIdent("init")) {
             take();
             skipNewlines();
             initBlocks.push_back(block());
             continue;
         }
+        {  // A nested class, data class, enum, object or interface.
+            size_t save = index_;
+            annotations(nullptr);
+            std::set<std::string> words;
+            while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected") || isIdent("open") ||
+                   isIdent("abstract") || isIdent("data") || isIdent("enum") || isIdent("sealed") || isIdent("inner") || isIdent("fun"))
+                words.insert(take().text);
+            std::string keyword = cur().kind == Tok::Ident ? cur().text : std::string();
+            bool isNested = keyword == "class" || keyword == "interface" || (keyword == "object" && !words.contains("fun"));
+            Pos at = cur().pos;
+            index_ = save;
+            if (isNested) {
+                if (!nested_) fail(at, "a nested class isn't supported in " + std::string(kind == "object" || kind == "interface" || kind == "enum class" ? "an " : "a ") + kind);
+                if (words.contains("inner")) fail(at, "an inner class (holding its outer one's this) isn't supported: a nested one is (no inner)");
+                if (words.contains("sealed")) fail(at, "a nested sealed class isn't supported yet: declare it at the top level");
+                NestedDecls* into = nested_;
+                if (words.contains("data") && keyword == "class") into->dataClasses.push_back(std::make_shared<DataClass>(dataClass()));
+                else if (words.contains("enum")) into->enums.push_back(std::make_shared<EnumClass>(enumClass()));
+                else if (keyword == "object") into->objects.push_back(std::make_shared<ObjectDecl>(objectDecl()));
+                else if (keyword == "interface") into->interfaces.push_back(std::make_shared<InterfaceDecl>(interfaceDecl()));
+                else into->classes.push_back(std::make_shared<ClassDecl>(classDecl()));
+                continue;
+            }
+        }
         // A property, or a function (its modifiers read by function()).
         size_t save = index_;
-        bool isPrivate = false, overrides = false, isOpen = false, isAbstract = false;
+        bool isPrivate = false, overrides = false, isOpen = false, isAbstract = false, isLateinit = false;
         annotations(nullptr);
         while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected") || isIdent("open") ||
-               isIdent("override") || isIdent("const") || isIdent("abstract")) {
+               isIdent("override") || isIdent("const") || isIdent("abstract") || isIdent("lateinit")) {
             std::string word = take().text;
+            isLateinit = word == "lateinit" || isLateinit;
             isPrivate = word == "private" || isPrivate;
             overrides = word == "override" || overrides;
             isOpen = word == "open" || isOpen;
@@ -312,6 +361,9 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
             p.overrides = overrides;
             p.isOpen = isOpen;
             p.isAbstract = isAbstract;
+            p.isLateinit = isLateinit;
+            if (isLateinit && (!p.isVar || kind != "class"))
+                fail(p.pos, "lateinit is a class's var's (lateinit var name: Type)");
             p.name = expectIdent();
             if (acceptOp(":")) p.type = type();
             if (isIdent("by")) {  // var x by mutableStateOf(0): read and set through the delegate
@@ -329,6 +381,7 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
             if (p.delegated && (p.getter || p.setter)) fail(p.pos, p.name + ": a delegated property has no get() or set() of its own");
             if (p.setter && !p.isVar) fail(p.pos, p.name + ": a val has no set()");
             if (p.isAbstract && (p.init || p.getter || p.setter)) fail(p.pos, p.name + ": an abstract property has no value or accessors");
+            if (p.isLateinit && (p.init || p.getter || p.setter || p.delegated || !p.type)) fail(p.pos, p.name + ": a lateinit var has a type and nothing else");
             if (p.isAbstract && !p.type) fail(p.pos, p.name + ": an abstract property needs a type");
             if (!p.init && !p.getter && !p.type) fail(p.pos, a + "'s property needs a value, a type or a getter");
             if (kind == "object" && !p.init && !p.getter) fail(p.pos, a + "'s property needs a value or a getter");
@@ -415,6 +468,7 @@ ObjectDecl Parser::objectDecl() {
     ObjectDecl o;
     o.pos = cur().pos;
     annotations(&o.annotations);
+    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected")) take();
     if (isIdent("data")) take();  // data object (its toString its name: as an object's here)
     if (!isIdent("object")) fail("expected 'object' (a sealed class's body holds data classes and objects)");
     take();
@@ -423,7 +477,9 @@ ObjectDecl Parser::objectDecl() {
     if (opAfterNewlines("{")) {
         skipNewlines();
         take();
+        NestedDecls* was = std::exchange(nested_, &o.nested);
         members(o.properties, o.methods, o.order, o.initBlocks, "object");
+        nested_ = was;
     }
     o.end = tokens_[index_ - 1].end;
     return o;
@@ -433,6 +489,7 @@ DataClass Parser::dataClass() {
     DataClass c;
     c.pos = cur().pos;
     annotations(&c.annotations);
+    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected")) take();
     if (!isIdent("data")) fail("expected 'data class'");
     take();
     if (!isIdent("class")) fail("expected 'class' after 'data'");
@@ -466,7 +523,9 @@ DataClass Parser::dataClass() {
     if (opAfterNewlines("{")) {  // its body: functions, properties, init blocks
         skipNewlines();
         take();
-        members(c.properties, c.methods, c.order, c.initBlocks, "data class");
+        NestedDecls* was = std::exchange(nested_, &c.nested);
+        members(c.properties, c.methods, c.order, c.initBlocks, "data class", &c.companion);
+        nested_ = was;
     }
     c.end = tokens_[index_ - 1].end;
     if (c.fields.empty()) fail(c.pos, "a data class needs a parameter");
@@ -543,6 +602,81 @@ SealedDecl Parser::sealedDecl() {
     return s;
 }
 
+Function Parser::extensionProperty() {
+    Function f;
+    f.composable = false;
+    f.isExtensionProperty = true;
+    f.pos = cur().pos;
+    while (isIdent("private") || isIdent("internal") || isIdent("public"))
+        if (take().text == "private") f.isPrivate = true;
+    bool isVar = isIdent("var");
+    if (!isVar && !isIdent("val")) fail("expected 'val' or 'var'");
+    take();
+    f.typeParams = typeParams();
+    Pos at = cur().pos;
+    if (cur().kind == Tok::Ident && peekRaw(1).kind == Tok::Op && peekRaw(1).text == "<" && !peekRaw(1).spaceBefore) {
+        f.receiver = type();  // (a generic receiver: List<T>.second)
+        expectOp(".");
+        f.name = expectIdent();
+    } else {
+        std::vector<std::string> parts{expectIdent()};
+        while (isOp(".") && peekRaw(1).kind == Tok::Ident) {
+            take();
+            parts.push_back(take().text);
+        }
+        if (parts.size() < 2) fail(at, "an extension property is written Receiver.name");
+        f.name = parts.back();
+        parts.pop_back();
+        f.receiver.emplace();
+        f.receiver->pos = at;
+        for (size_t i = 0; i < parts.size(); ++i) f.receiver->name += (i ? "." : "") + parts[i];
+    }
+    if (acceptOp(":")) f.result = type();
+    ClassProperty p;
+    p.name = f.name;
+    p.isVar = isVar;
+    p.pos = f.pos;
+    if (f.result) p.type = *f.result;
+    accessors(p);
+    if (!p.getter) fail(f.pos, f.name + ": an extension property needs a getter (get() = …): it keeps no value");
+    if (isVar && !p.setter) fail(f.pos, f.name + ": an extension var needs set(value) { … }");
+    f.body = std::move(p.getter);
+    f.expressionBody = f.body->kids.size() == 1 && f.body->kids[0]->kind == Node::Return && !f.result;
+    if (p.setter) {
+        auto set = std::make_shared<Function>();
+        set->composable = false;
+        set->isPrivate = f.isPrivate;
+        set->typeParams = f.typeParams;
+        set->name = "kompoz_set_" + f.name;  // (a name of its own: Kotlin may also have a fun setShout)
+        set->receiver = f.receiver;
+        set->pos = f.pos;
+        Param v;
+        v.name = p.setterParam;
+        v.pos = f.pos;
+        if (!f.result) fail(f.pos, f.name + ": an extension var needs its type");
+        v.type = *f.result;
+        set->params.push_back(std::move(v));
+        set->body = std::move(p.setter);
+        f.setter = std::move(set);
+    }
+    f.end = tokens_[index_ - 1].end;
+    return f;
+}
+
+TypeAlias Parser::typeAlias() {
+    TypeAlias a;
+    a.pos = cur().pos;
+    while (isIdent("private") || isIdent("internal") || isIdent("public")) take();
+    if (!isIdent("typealias")) fail("expected 'typealias'");
+    take();
+    a.name = expectIdent();
+    a.typeParams = typeParams();
+    expectOp("=");
+    a.type = type();
+    a.end = tokens_[index_ - 1].end;
+    return a;
+}
+
 InterfaceDecl Parser::interfaceDecl() {
     InterfaceDecl i;
     i.pos = cur().pos;
@@ -567,7 +701,9 @@ InterfaceDecl Parser::interfaceDecl() {
         skipNewlines();
         take();
         std::vector<NodeP> initBlocks;
-        members(i.properties, i.methods, i.order, initBlocks, "interface");
+        NestedDecls* was = std::exchange(nested_, &i.nested);
+        members(i.properties, i.methods, i.order, initBlocks, "interface", &i.companion);
+        nested_ = was;
         if (!initBlocks.empty()) fail(i.pos, "an interface has no init block");
     }
     i.end = tokens_[index_ - 1].end;
@@ -584,20 +720,70 @@ InterfaceDecl Parser::interfaceDecl() {
 EnumClass Parser::enumClass() {
     EnumClass e;
     e.pos = cur().pos;
+    annotations(nullptr);
+    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("protected")) take();
     if (!isIdent("enum")) fail("expected 'enum class'");
     take();
     if (!isIdent("class")) fail("expected 'class' after 'enum'");
     take();
     e.name = expectIdent();
+    if (isOp("(")) {  // enum class Level(val n: Int)
+        NewlineMode mode(newlines_, false);
+        take();
+        while (!isOp(")")) {
+            annotations(nullptr);
+            while (isIdent("private") || isIdent("public") || isIdent("internal")) take();
+            if (isIdent("val") || isIdent("var")) take();
+            Param p;
+            p.pos = cur().pos;
+            p.name = expectIdent();
+            expectOp(":");
+            p.type = type();
+            if (acceptOp("=")) p.defaultValue = expression();
+            e.ctorParams.push_back(std::move(p));
+            if (!acceptOp(",")) break;
+        }
+        expectOp(")");
+    }
     skipNewlines();
     expectOp("{");
-    for (skipNewlines(); !isOp("}"); skipNewlines()) {
+    for (skipNewlines(); !isOp("}") && !isOp(";"); skipNewlines()) {
         e.entries.push_back(expectIdent());
+        e.entryArgs.emplace_back();
+        e.entryArgNames.emplace_back();
+        if (isOp("(")) {  // LOW(1): its constructor's arguments
+            NewlineMode mode(newlines_, false);
+            take();
+            while (!isOp(")")) {
+                std::string name;
+                if (cur().kind == Tok::Ident && peekRaw(1).kind == Tok::Op && peekRaw(1).text == "=") {
+                    name = take().text;
+                    take();
+                }
+                e.entryArgNames.back().push_back(name);
+                e.entryArgs.back().push_back(expression());
+                if (!acceptOp(",")) break;
+            }
+            expectOp(")");
+        }
+        if (opAfterNewlines("{")) fail("an enum entry with a body of its own isn't supported yet");
         skipNewlines();
         if (!acceptOp(",")) break;
     }
     skipNewlines();
-    if (acceptOp(";")) skipNewlines();  // (Kotlin allows one after the entries)
+    if (acceptOp(";")) {  // (after the entries: Kotlin's members, if any)
+        skipNewlines();
+        if (!isOp("}")) {
+            NestedDecls* was = std::exchange(nested_, nullptr);
+            members(e.properties, e.methods, e.order, e.initBlocks, "enum class", &e.companion);
+            nested_ = was;
+            e.end = tokens_[index_ - 1].end;
+            if (e.entries.empty()) fail(e.pos, "an enum class needs an entry");
+            for (const Function& m : e.methods)
+                if (m.isAbstract) fail(m.pos, "an enum's abstract fun needs each entry's body: not supported yet");
+            return e;
+        }
+    }
     expectOp("}");
     e.end = tokens_[index_ - 1].end;
     if (e.entries.empty()) fail(e.pos, "an enum class needs an entry");
@@ -629,9 +815,20 @@ std::vector<Param> Parser::params() {
         Param p;
         p.pos = cur().pos;
         if (isIdent("val") || isIdent("var")) take();
+        if (isIdent("vararg")) {
+            take();
+            p.isVararg = true;
+        }
         p.name = expectIdent();
         expectOp(":");
         p.type = type();
+        if (p.isVararg) {  // (the function sees a List<T>)
+            Type list;
+            list.name = "List";
+            list.pos = p.type.pos;
+            list.args.push_back(std::move(p.type));
+            p.type = std::move(list);
+        }
         if (acceptOp("=")) p.defaultValue = expression();
         out.push_back(std::move(p));
         if (!acceptOp(",")) break;
@@ -1138,7 +1335,7 @@ void Parser::arguments(Node& call) {
             name = take().text;
             take();
         }
-        acceptOp("*");  // (a spread: passed as it is)
+        if (acceptOp("*")) call.spreadArgs.push_back(call.kids.size());  // (*list: a vararg's elements, or passed as it is)
         call.kids.push_back(expression());
         call.names.push_back(name);
         if (!acceptOp(",")) break;

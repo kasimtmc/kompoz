@@ -93,14 +93,16 @@ struct Node {
     std::vector<WhenBranch> branches;
     bool flag = false;
     bool delegated = false;
+    std::vector<size_t> spreadArgs;  // a Call's arguments written *list (their indices in kids)
 
     Node(Kind k, Pos p) : kind(k), pos(p) {}
 };
 
 struct Param {
     std::string name;
-    Type type;
+    Type type;            // a vararg's: List<T> (what the function sees)
     NodeP defaultValue;
+    bool isVararg = false;  // vararg xs: T: a call's arguments from here gathered into a list
     Pos pos;
 };
 
@@ -119,6 +121,11 @@ struct Function {
     bool isSuspend = false;          // suspend fun: a coroutine (Task, TaskOf<T>)
     bool isAbstract = false;         // an interface's fun without a body, an abstract class's abstract fun
     bool isOpen = false;             // open fun: a subclass may override it
+    bool isOperator = false;         // operator fun plus(…): C++'s operator+ too
+    // val String.shout: String get() = …: an extension property's getter (a function of its receiver), a var's
+    // setter beside it (setShout(receiver, value)).
+    bool isExtensionProperty = false;
+    std::shared_ptr<Function> setter;
     std::vector<std::string> annotations;  // besides @Kompozable (Preview, ...)
     std::map<std::string, std::string> annotationArgs;  // @Preview(widthDp = 400): "widthDp" -> "400" (the text of each)
     Pos pos;                         // the @ of @Kompozable (or where it starts)
@@ -134,15 +141,25 @@ struct Property {
     Pos end;
 };
 
-// An enum class: enum class Name { A, B, C } (entries only; one with values is written in C++).
-struct EnumClass {
-    std::string name;
-    std::vector<std::string> entries;
-    Pos pos;
-    Pos end;
-};
 
 // A class: class Name(val a: Int, b: String) : Base(b) { val c = …; fun f() { … }; override fun g() { … }; init { … } }.
+struct ObjectDecl;
+struct ClassDecl;
+struct DataClass;
+struct EnumClass;
+struct InterfaceDecl;
+
+// The classes, data classes, enums, objects and interfaces declared in another's body (Kotlin's nested ones: not
+// inner, they hold no outer this): C++ types nested in it (Outer.Inner is Outer::Inner).
+struct NestedDecls {
+    std::vector<std::shared_ptr<ClassDecl>> classes;
+    std::vector<std::shared_ptr<DataClass>> dataClasses;
+    std::vector<std::shared_ptr<EnumClass>> enums;
+    std::vector<std::shared_ptr<ObjectDecl>> objects;
+    std::vector<std::shared_ptr<InterfaceDecl>> interfaces;
+    bool empty() const { return classes.empty() && dataClasses.empty() && enums.empty() && objects.empty() && interfaces.empty(); }
+};
+
 struct ClassProperty {
     std::string name;
     std::optional<Type> type;  // none: the value's
@@ -153,12 +170,13 @@ struct ClassProperty {
     bool privateSetter = false; // var x … private set
     bool isAbstract = false;    // abstract val x: T (an abstract class's: its subclasses give it)
     bool isOpen = false;        // open val: a subclass may override it
+    bool isLateinit = false;    // lateinit var x: T: set later, read only after (else it throws, as Kotlin's)
     NodeP getter;               // get() = … / get() { … }: a Block (an expression one as its Return)
     NodeP setter;               // set(v) { … }: a Block, `field` the stored value
     std::string setterParam;    // set(v)'s name
     // Whether it is read through functions of its own (x(), setX(v)) rather than a field: a delegate,
     // an accessor, or an interface's property.
-    bool accessed() const { return delegated || overrides || getter || setter || privateSetter || isAbstract || isOpen; }
+    bool accessed() const { return delegated || overrides || getter || setter || privateSetter || isAbstract || isOpen || isLateinit; }
     Pos pos;
 };
 struct ClassDecl {
@@ -174,6 +192,8 @@ struct ClassDecl {
     std::optional<Type> base;
     std::vector<NodeP> baseArgs;      // : Base(args)
     std::vector<Type> interfaces;     // : Base(), A, B (those without a constructor call)
+    std::shared_ptr<ObjectDecl> companion;  // companion object { … }: its members the class's own, static
+    NestedDecls nested;
     std::vector<ClassProperty> properties;
     std::vector<Function> methods;
     std::vector<size_t> order;        // members in declaration order: an index into properties (even) or methods (odd): i * 2 + kind
@@ -195,7 +215,9 @@ struct DataClass {
     std::vector<Function> methods;
     std::vector<size_t> order;  // as ClassDecl's
     std::vector<NodeP> initBlocks;
-    bool hasBody() const { return !properties.empty() || !methods.empty() || !initBlocks.empty(); }
+    std::shared_ptr<ObjectDecl> companion;
+    NestedDecls nested;
+    bool hasBody() const { return !properties.empty() || !methods.empty() || !initBlocks.empty() || companion || !nested.empty(); }
     std::vector<std::string> annotations;  // @Serializable: a route
     Pos pos;
     Pos end;
@@ -206,13 +228,34 @@ struct DataClass {
 // or a marker's type).
 struct ObjectDecl {
     std::string name;
+    bool isCompanion = false;  // a class's companion object: its members the class's static ones
     std::vector<Type> supers;  // : Sealed(), A, B (as a data class's)
     std::vector<std::string> annotations;
     std::vector<ClassProperty> properties;
     std::vector<Function> methods;
     std::vector<size_t> order;  // members in declaration order, as ClassDecl's
     std::vector<NodeP> initBlocks;
-    bool hasMembers() const { return !properties.empty() || !methods.empty() || !initBlocks.empty(); }
+    NestedDecls nested;
+    bool hasMembers() const { return !properties.empty() || !methods.empty() || !initBlocks.empty() || !nested.empty(); }
+    Pos pos;
+    Pos end;
+};
+
+// An enum class: enum class Name { A, B, C } (entries only: C++'s enum class), or enum class Name(val a: T) { A(1),
+// B(2); val b = …; fun f() = … } (a constructor or a body: a struct of its fields, its entries its constants).
+// (C++'s with values, enum class X { A = 1 }, is C++ and stays as it is.)
+struct EnumClass {
+    std::string name;
+    std::vector<std::string> entries;
+    std::vector<std::vector<NodeP>> entryArgs;           // each entry's constructor arguments
+    std::vector<std::vector<std::string>> entryArgNames; // and their names ("" by position)
+    std::vector<Param> ctorParams;  // (val/var or not: each a field)
+    std::vector<ClassProperty> properties;
+    std::vector<Function> methods;
+    std::vector<size_t> order;
+    std::vector<NodeP> initBlocks;
+    std::shared_ptr<ObjectDecl> companion;
+    bool rich() const { return !ctorParams.empty() || !properties.empty() || !methods.empty() || !initBlocks.empty() || companion; }
     Pos pos;
     Pos end;
 };
@@ -241,6 +284,17 @@ struct InterfaceDecl {
     std::vector<ClassProperty> properties;
     std::vector<Function> methods;
     std::vector<size_t> order;  // members in declaration order, as ClassDecl's
+    std::shared_ptr<ObjectDecl> companion;
+    NestedDecls nested;
+    Pos pos;
+    Pos end;
+};
+
+// typealias Name<T> = Type: C++'s using.
+struct TypeAlias {
+    std::string name;
+    std::vector<std::string> typeParams;
+    Type type;
     Pos pos;
     Pos end;
 };

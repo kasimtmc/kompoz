@@ -1183,6 +1183,283 @@ TEST(kotlins_order_of_evaluation) {
     CHECK(rule.onNodeWithText("çift 13 12").exists());
 }
 
+// companion object: a class's, a data class's and an interface's static members: a const val, a var, a value of the
+// class itself, functions; read by their names inside the class, as Name.member outside.
+class Ledger(val id: Int) {
+    fun label() = "$PREFIX$id"
+
+    companion object {
+        const val PREFIX = "hesap-"
+        var made = 0
+        fun create(): Ledger {
+            made++
+            return Ledger(made)
+        }
+    }
+}
+
+data class Money(val cents: Int) {
+    companion object {
+        val Zero = Money(0)
+        fun of(lira: Int) = Money(lira * 100)
+    }
+}
+
+interface Shade {
+    val tone: String
+
+    companion object {
+        const val Default = "açık"
+    }
+}
+
+@Kompozable
+fun CompanionForms() {
+    val first = remember { Ledger.create() }
+    val second = remember { Ledger.create() }
+    Text(first.label() + " " + second.label() + " " + Ledger.made + " " + Ledger.PREFIX + " " + Money.of(3) + " " + Money.Zero + " " + Shade.Default)
+}
+
+TEST(companion_objects) {
+    KompozTestRule rule([] { CompanionForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("hesap-1", true).text();
+    CHECK(line == "hesap-1 hesap-2 2 hesap- Money(cents=300) Money(cents=0) açık" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// Enum classes: one with a constructor (defaults, named arguments) and a body (a property, functions, a companion),
+// one with a body only, one of entries alone; name, ordinal, entries, values(), valueOf(), "$x", when over them.
+enum class Rank(val n: Int, val label: String = "seviye") {
+    LOW(1), MID(n = 5, label = "orta"), HIGH(9);
+
+    val doubled = n * 2
+    fun next(): Rank = if (this == LOW) MID else HIGH
+    fun describe() = "$name/$ordinal/$label/$doubled"
+
+    companion object {
+        fun of(n: Int) = Rank.entries.first { it.n >= n }
+    }
+}
+
+enum class Turn { LEFT, RIGHT; fun flip() = if (this == LEFT) RIGHT else LEFT }
+
+enum class Suit { HEART, SPADE }
+
+@Kompozable
+fun EnumForms() {
+    val low = Rank.LOW
+    Column {
+        Text("rütbe " + low.describe() + " " + low.next() + " " + Rank.MID.describe() + " " + Rank.valueOf("HIGH").n + " " + Rank.entries.size + " " + Rank.of(4))
+        Text("renk " + Turn.LEFT.flip() + " " + Suit.SPADE + " " + Suit.SPADE.name + " " + Suit.SPADE.ordinal + " " + Suit.values().size + " " +
+            Suit.valueOf("HEART") + " " + when (low) {
+                Rank.LOW -> "düşük"
+                else -> "başka"
+            })
+        val nums = listOf(1, 2, 3, 4)
+        Text("koşul " + nums.first { it > 1 } + " " + nums.last { it % 2 == 1 } + " " + nums.firstOrNull { it > 9 } + " " + nums.lastOrNull { it < 3 })
+    }
+}
+
+TEST(enum_classes_with_bodies) {
+    KompozTestRule rule([] { EnumForms(); });
+    rule.waitForIdle();
+    std::string first = rule.onNodeWithText("rütbe", true).text(), second = rule.onNodeWithText("renk", true).text();
+    CHECK(first == "rütbe LOW/0/seviye/2 MID MID/1/orta/10 9 3 MID" || (std::printf("satır: %s\n", first.c_str()), false));
+    CHECK(second == "renk RIGHT SPADE SPADE 1 2 HEART düşük" || (std::printf("satır: %s\n", second.c_str()), false));
+    CHECK(rule.onNodeWithText("koşul 2 3 null 2").exists());
+}
+
+// Nested declarations: a data class, enums (entries alone, and with a constructor), an object, an interface and a
+// class inside a class, named alone inside it and with it outside (Catalog.Entry, Catalog.Kind.FILM).
+class Catalog {
+    data class Entry(val title: String, val kind: Kind = Kind.BOOK)
+    enum class Kind { BOOK, FILM }
+    enum class Tier(val price: Int) { FREE(0), PAID(5) }
+    object Defaults {
+        const val limit = 2
+    }
+    interface Filter {
+        fun keep(e: Entry): Boolean
+    }
+    class Shelf(val entries: List<Entry>) {
+        fun count() = entries.size
+    }
+
+    private val items = listOf(Entry("a"), Entry("b", Kind.FILM), Entry("c"))
+    fun films(): List<Entry> = items.filter { it.kind == Kind.FILM }
+    fun shelf() = Shelf(items.take(Defaults.limit))
+}
+
+@Kompozable
+fun NestedForms() {
+    val catalog = remember { Catalog() }
+    val entry = Catalog.Entry("d", Catalog.Kind.FILM)
+    val books = object : Catalog.Filter {
+        override fun keep(e: Catalog.Entry) = e.kind == Catalog.Kind.BOOK
+    }
+    Text("iç " + catalog.films().size + " " + catalog.shelf().count() + " " + entry + " " + Catalog.Tier.PAID.price + " " + Catalog.Kind.entries.size +
+        " " + books.keep(entry) + " " + Catalog.Defaults.limit)
+}
+
+TEST(nested_declarations) {
+    KompozTestRule rule([] { NestedForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("iç", true).text();
+    CHECK(line == "iç 1 2 Entry(title=d, kind=FILM) 5 2 false 2" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// typealias: of a list, of function types (a lambda given one that gives a value gives it), a generic one and one of
+// it, one naming a data class.
+typealias Names = List<String>
+typealias Pick = (String) -> Unit
+typealias Format = (Int) -> String
+typealias Cells<T> = List<List<T>>
+typealias Board = Cells<Int>
+typealias Stock = List<Receipt>
+
+fun countNames(names: Names) = names.size
+fun formatAll(xs: List<Int>, f: Format): Names = xs.map { f(it) }
+fun total(grid: Cells<Int>) = grid.sumOf { it.sum() }
+
+@Kompozable
+fun AliasForms(onPick: Pick = {}) {
+    val names: Names = listOf("a", "b")
+    val board: Board = listOf(listOf(1, 2), listOf(3))
+    val stock: Stock = listOf(Receipt("kalem", 30))
+    Text("ad " + countNames(names) + " " + formatAll(listOf(1, 2)) { "#$it" } + " " + total(board) + " " + stock.size)
+}
+
+TEST(type_aliases) {
+    KompozTestRule rule([] { AliasForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("ad ", true).text();
+    CHECK(line == "ad 2 [#1, #2] 6 1" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// operator fun: a data class's +, -, unary -, ++, [], compareTo, contains (and += from plus), an extension's *, a
+// class's invoke and plusAssign.
+data class Vec2(val x: Int, val y: Int) {
+    operator fun plus(o: Vec2) = Vec2(x + o.x, y + o.y)
+    operator fun minus(o: Vec2) = Vec2(x - o.x, y - o.y)
+    operator fun unaryMinus() = Vec2(-x, -y)
+    operator fun inc() = Vec2(x + 1, y + 1)
+    operator fun get(i: Int) = if (i == 0) x else y
+    operator fun compareTo(o: Vec2) = (x + y) - (o.x + o.y)
+    operator fun contains(v: Int) = v == x || v == y
+}
+
+operator fun Vec2.times(k: Int) = Vec2(x * k, y * k)
+
+class Meter {
+    var total = 0
+    operator fun invoke(n: Int): Int {
+        total += n
+        return total
+    }
+    operator fun plusAssign(n: Int) {
+        total += n
+    }
+}
+
+@Kompozable
+fun OperatorForms() {
+    val a = Vec2(1, 2)
+    val b = Vec2(3, 4)
+    var c = a + b
+    c += a
+    c++
+    val meter = Meter()
+    meter += 5
+    Text("işleç " + c + " " + (-a) + " " + (b - a) + " " + a * 3 + " " + a[1] + " " + (a < b) + " " + (2 in a) + " " + meter(10) + " " + meter.total)
+}
+
+TEST(operator_functions) {
+    KompozTestRule rule([] { OperatorForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("işleç", true).text();
+    CHECK(line == "işleç Vec2(x=6, y=9) Vec2(x=-1, y=-2) Vec2(x=2, y=2) Vec2(x=3, y=6) 2 true true 15 15" ||
+          (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// Extension properties: a val on String, a generic one on List<T>, a var on a Kotlin class (its setter), one on a data
+// class reading its fields; used before they are declared in the file.
+@Kompozable
+fun ExtensionPropertyForms() {
+    val m = remember { Meter() }
+    m.doubled = 8
+    m.doubled += 2
+    Text("eklenti " + "selam".shout + " " + listOf(1, 2, 3).second + " " + m.total + " " + m.doubled + " " + Vec2(3, 4).norm)
+}
+
+val String.shout: String get() = this + "!"
+
+val <T> List<T>.second: T get() = this[1]
+
+var Meter.doubled: Int
+    get() = total * 2
+    set(value) {
+        total = value / 2
+    }
+
+val Vec2.norm get() = x * x + y * y
+
+TEST(extension_properties) {
+    KompozTestRule rule([] { ExtensionPropertyForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("eklenti", true).text();
+    CHECK(line == "eklenti selam! 2 5 10 25" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// vararg: none, several, *list spread among them, after another parameter, a generic one.
+fun sumAll(vararg xs: Int): Int = xs.sum()
+fun joinAll(sep: String, vararg parts: String) = parts.joinToString(sep)
+fun <T> bag(vararg items: T): List<T> = items
+
+@Kompozable
+fun VarargForms() {
+    val more = listOf(4, 5)
+    Text("çok " + sumAll() + " " + sumAll(1, 2, 3) + " " + sumAll(1, *more, 9) + " " + joinAll("-", "a", "b") + " " + bag("x", "y").size)
+}
+
+TEST(vararg_parameters) {
+    KompozTestRule rule([] { VarargForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("çok", true).text();
+    CHECK(line == "çok 0 6 19 a-b 2" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// lateinit var: set later (in init, in a function), of a type without a default (a class made with arguments); read
+// before it is set, it throws, as Kotlin's does.
+class Session {
+    lateinit var user: String
+    lateinit var ledger: Ledger
+
+    fun open(name: String) {
+        user = name
+        ledger = Ledger(7)
+    }
+}
+
+@Kompozable
+fun LateinitForms() {
+    val session = remember { Session() }
+    var early = "?"
+    try {
+        early = session.user
+    } catch (e: Exception) {
+        early = "henüz yok"
+    }
+    session.open("ayşe")
+    Text("geç " + early + " " + session.user + " " + session.ledger.label())
+}
+
+TEST(lateinit_properties) {
+    KompozTestRule rule([] { LateinitForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("geç", true).text();
+    CHECK(line == "geç henüz yok ayşe hesap-7" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
 TEST(coroutines_await_what_suspends) {
     KompozTestRule rule([] { Awaits(); });
     CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());

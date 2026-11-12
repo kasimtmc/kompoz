@@ -43,6 +43,8 @@
             else if constexpr (requires { kompoz_o.name; }) return (kompoz_o.name); \
             else if constexpr (requires { kompoz_o.properties().name; })      \
                 return (kompoz_o.properties().name); /* a GraphicsLayer's: Compose's layer.alpha */ \
+            else if constexpr (requires { kompoz_kt_property_##name(kompoz_o); }) \
+                return kompoz_kt_property_##name(kompoz_o); /* an enum's name, ordinal (ADL) */ \
             else                                                             \
                 static_assert(::kompoz::kt::detail::noMember<decltype(kompoz_o)>, \
                               "kompoz: no property, member or field named " #name); \
@@ -61,6 +63,27 @@
             else kompoz_o.properties().name = kompoz_v;                                                   \
         },                                                                                               \
         ::kompoz::kt::deref(object), (value))
+
+// The same, where an extension property of the name may be what is meant: the object's own member first (as
+// Kotlin's members come before extensions), else extension(object) ("abc".shout: shout's getter given "abc").
+#define KOMPOZ_KT_GET_OR(object, name, extension)                                                   \
+    ::kompoz::kt::detail::getOr(                                                                    \
+        [](auto&& kompoz_o) -> decltype(auto) {                                                     \
+            if constexpr (requires { kompoz_o.name(); }) return kompoz_o.name();                    \
+            else if constexpr (requires { kompoz_o.name; }) return (kompoz_o.name);                 \
+            else if constexpr (requires { kompoz_o.properties().name; }) return (kompoz_o.properties().name); \
+            else if constexpr (requires { kompoz_kt_property_##name(kompoz_o); }) return kompoz_kt_property_##name(kompoz_o); \
+            else return ::kompoz::kt::detail::NoMember{};                                           \
+        },                                                                                          \
+        [](auto&& kompoz_x) -> decltype(auto) { return extension(kompoz_x); }, (object))
+#define KOMPOZ_KT_SET_OR(object, name, setter, extensionSetter, value)                              \
+    ::kompoz::kt::detail::setOr(                                                                    \
+        [](auto&& kompoz_o, auto&& kompoz_v) {                                                      \
+            if constexpr (requires { kompoz_o.setter(kompoz_v); }) kompoz_o.setter(kompoz_v);       \
+            else if constexpr (requires { kompoz_o.name = kompoz_v; }) kompoz_o.name = kompoz_v;    \
+            else return ::kompoz::kt::detail::NoMember{};                                           \
+        },                                                                                          \
+        [](auto&& kompoz_x, auto&& kompoz_v) { extensionSetter(kompoz_x, kompoz_v); }, (object), (value))
 
 namespace kompoz::kt {
 
@@ -91,6 +114,17 @@ decltype(auto) get(F&& f, T&& object) {
 template <class F, class T, class V>
 void set(F&& f, T&& object, V&& value) {
     f(std::forward<T>(object), std::forward<V>(value));
+}
+struct NoMember {};
+template <class F, class E, class T>
+decltype(auto) getOr(F&& member, E&& extension, T&& object) {
+    if constexpr (std::is_same_v<std::remove_cvref_t<decltype(member(deref(object)))>, NoMember>) return extension(std::forward<T>(object));
+    else return member(deref(std::forward<T>(object)));
+}
+template <class F, class E, class T, class V>
+void setOr(F&& member, E&& extension, T&& object, V&& value) {
+    if constexpr (std::is_same_v<decltype(member(deref(object), value)), NoMember>) extension(std::forward<T>(object), std::forward<V>(value));
+    else member(deref(std::forward<T>(object)), std::forward<V>(value));
 }
 }  // namespace detail
 
@@ -152,6 +186,8 @@ void append(std::string& out, const T& v) {
         out += std::string_view(v);
     } else if constexpr (requires { v.toString(); }) {  // (its own first: a data class with fields first and second isn't a Pair)
         out += v.toString();
+    } else if constexpr (requires { kompoz_kt_property_name(v); }) {  // an enum: its entry's name
+        out += kompoz_kt_property_name(v);
     } else if constexpr (requires { v.has_value(); *v; }) {  // a nullable: its value, or "null"
         if (v.has_value()) append(out, *v);
         else out += "null";
@@ -387,11 +423,33 @@ decltype(auto) size(const C& c) {
     }
 }
 
-// An enum's ordinal: its place among the values.
+// An enum's ordinal: its place among the values (a Kotlin enum with a body: its entry's).
 template <class E>
     requires std::is_enum_v<E>
 int ordinal(E e) {
     return static_cast<int>(e);
+}
+template <class E>
+    requires requires(const E& e) { e.kompoz_entry; }
+int ordinal(const E& e) {
+    return static_cast<int>(e.kompoz_entry);
+}
+// Level.entries, Level.values(): an enum's entries in order; Level.valueOf("LOW"): the entry of the name.
+template <class E>
+std::vector<E> enumEntries() {
+    if constexpr (requires { E::kompoz_entries(); }) {
+        return E::kompoz_entries();
+    } else {
+        std::vector<E> all;
+        for (int i = 0; i < kompoz_enumCount(E{}); ++i) all.push_back(static_cast<E>(i));
+        return all;
+    }
+}
+template <class E>
+E enumValueOf(std::string_view name) {
+    for (const E& e : enumEntries<E>())
+        if (kompoz_kt_property_name(e) == name) return e;
+    throw std::invalid_argument("No enum constant " + std::string(name));
 }
 
 // A map's keys and values (map.keys, map.values), as lists; of anything else, its member of the name.
@@ -624,12 +682,37 @@ auto lazy(F make) -> Lazy<std::decay_t<std::invoke_result_t<F&>>> {
     return Lazy<std::decay_t<std::invoke_result_t<F&>>>(std::move(make));
 }
 
+// lateinit var name: T: its value once set; read before, Kotlin's UninitializedPropertyAccessException.
+template <class T>
+const T& initialized(const std::optional<T>& value, std::string_view name) {
+    if (!value) throw std::logic_error("lateinit property " + std::string(name) + " has not been initialized");
+    return *value;
+}
+
 // A function giving a T, as a type (declared only): what a class's delegate's lambda stands for where its
 // type is written (`val doubled by derivedStateOf { count * 2 }`: derivedStateOf(returning<int>())).
 template <class T>
 std::function<T()> returning();
 
 // ---- Collections: listOf, mapOf, ... ----
+
+// A vararg's elements with *list among them: f(1, *rest, 9) gives f the list 1, rest's elements, 9 (in order).
+template <class C>
+struct Spread {
+    const C& items;
+};
+template <class C>
+Spread(const C&) -> Spread<C>;
+template <class T, class... A>
+std::vector<T> varargOf(A&&... args) {
+    std::vector<T> out;
+    auto add = [&](auto&& a) {
+        if constexpr (requires { a.items; }) out.insert(out.end(), std::begin(a.items), std::end(a.items));
+        else out.push_back(T(std::forward<decltype(a)>(a)));
+    };
+    (add(std::forward<A>(args)), ...);
+    return out;
+}
 
 template <class T, class... R>
 std::vector<std::decay_t<T>> listOf(T&& first, R&&... rest) {
@@ -918,7 +1001,11 @@ std::string toString(const C& c, A&&... args) {
 }
 template <class C, class... A>
 decltype(auto) first(C&& c, A&&... args) {
-    KOMPOZ_KT_OWN(first()) {
+    if constexpr (sizeof...(A) == 1) {  // first { predicate }: the first that matches
+        for (auto&& v : c)
+            if ((args(v), ...)) return detail::Element<C>(v);
+        throw std::out_of_range("no element matches the predicate");
+    } else KOMPOZ_KT_OWN(first()) {
         if (std::begin(c) == std::end(c)) throw std::out_of_range("the list is empty");
         // The element itself from a list that stays (event.changes.first().consume()); a copy from one that goes.
         if constexpr (std::is_lvalue_reference_v<C>) return (*std::begin(c));
@@ -927,21 +1014,36 @@ decltype(auto) first(C&& c, A&&... args) {
 }
 template <class C, class... A>
 decltype(auto) last(const C& c, A&&... args) {
-    KOMPOZ_KT_OWN(last()) {
+    if constexpr (sizeof...(A) == 1) {  // last { predicate }: the last that matches
+        std::optional<detail::Element<C>> found;
+        for (const auto& v : c)
+            if ((args(v), ...)) found.emplace(v);
+        if (!found) throw std::out_of_range("no element matches the predicate");
+        return detail::Element<C>(*found);  // (a value: found goes)
+    } else KOMPOZ_KT_OWN(last()) {
         if (std::begin(c) == std::end(c)) throw std::out_of_range("the list is empty");
         return *std::prev(std::end(c));
     }
 }
 template <class C, class... A>
 auto firstOrNull(const C& c, A&&... args) {
-    KOMPOZ_KT_OWN(firstOrNull()) {
+    if constexpr (sizeof...(A) == 1) {  // firstOrNull { predicate }
+        for (const auto& v : c)
+            if ((args(v), ...)) return std::optional<detail::Element<C>>(v);
+        return std::optional<detail::Element<C>>{};
+    } else KOMPOZ_KT_OWN(firstOrNull()) {
         if (std::begin(c) == std::end(c)) return std::optional<detail::Element<C>>{};
         return std::optional<detail::Element<C>>(*std::begin(c));
     }
 }
 template <class C, class... A>
 auto lastOrNull(const C& c, A&&... args) {
-    KOMPOZ_KT_OWN(lastOrNull()) {
+    if constexpr (sizeof...(A) == 1) {  // lastOrNull { predicate }
+        std::optional<detail::Element<C>> found;
+        for (const auto& v : c)
+            if ((args(v), ...)) found.emplace(v);
+        return found;
+    } else KOMPOZ_KT_OWN(lastOrNull()) {
         if (std::begin(c) == std::end(c)) return std::optional<detail::Element<C>>{};
         return std::optional<detail::Element<C>>(*std::prev(std::end(c)));
     }
@@ -1779,6 +1881,19 @@ inline bool sameObject(const InterfaceObject* a, const InterfaceObject* b) {
 }
 // A handle made from an object (kompoz_from).
 struct FromObject {};
+// What a member function gives (an override's type: its interface's function's, whatever its parameters are named).
+template <class F>
+struct ResultOfT;
+template <class R, class C, class... A>
+struct ResultOfT<R (C::*)(A...) const> {
+    using type = R;
+};
+template <class R, class C, class... A>
+struct ResultOfT<R (C::*)(A...)> {
+    using type = R;
+};
+template <class F>
+using ResultOf = typename ResultOfT<F>::type;
 // T, named where a template's parameter D is in scope: what it says is looked up when the template is used,
 // not where it is written (an interface is declared first and defined later).
 template <class D, class T>

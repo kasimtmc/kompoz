@@ -608,6 +608,14 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 380. Kotlin'in `open class` ve `abstract class`'ı (soyut ve açık işlevler ve özellikler, `override`, `super.f()`), tabanı yerine geçen alt sınıflar, `is` / `as` ✅
 381. Tür parametreli sınıflar, data class'lar, arayüzler ve fun interface'ler (`class Box<T>`, `interface Source<T>`), tür argümanları yazılı ya da değerlerden çıkarılmış ✅
 382. Tür parametreli işlevler (`fun <T> first(items: List<T>)`, `fun <T, R> map(items: List<T>, f: (T) -> R)`, `fun <T> List<T>.second()`, tür parametreli composable'lar ve sınıf işlevleri) ✅
+383. Sınıflarda, data class'larda ve arayüzlerde Kotlin'in `companion object`'i ✅
+384. Kurucusu ve gövdesi olan enum class'lar; her enum'da `name`, `ordinal`, `entries`, `values()`, `valueOf()` ✅
+385. İç içe data class'lar, enum'lar, object'ler, arayüzler ve sınıflar ✅
+386. `typealias` (tür parametreli olanlar da) ✅
+387. `operator fun` (aritmetik, tekli, `inc`/`dec`, `get`, `invoke`, `compareTo`, `…Assign`, `contains`), üye ve eklenti olarak ✅
+388. Eklenti özellikleri (`val String.shout get() = …`, ayarlayıcılı bir `var`, tür parametreli olanlar) ✅
+389. `vararg` parametreleri, `*liste` açma ✅
+390. `lateinit var` ✅
 
 ## Sıradakiler
 

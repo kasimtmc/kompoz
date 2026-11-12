@@ -53,12 +53,19 @@ bool startsEnumClass(std::string_view src, size_t at) {
     };
     if (word() != "enum" || word() != "class" || word().empty()) return false;
     while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+    if (k < src.size() && src[k] == '(') return true;  // enum class Level(val n: Int): Kotlin's constructor
     if (k >= src.size() || src[k] != '{') return false;
-    size_t close = src.find('}', k);
-    if (close == std::string_view::npos) return false;
-    for (size_t i = k + 1; i < close; ++i)
-        if (!identChar(src[i]) && !std::isspace(static_cast<unsigned char>(src[i])) && src[i] != ',' && src[i] != ';') return false;
-    return true;
+    // Its entries, to a ; or the }: names, commas and Kotlin's arguments, LOW(1) (C++'s have values, A = 1).
+    int depth = 0;
+    for (size_t i = k + 1; i < src.size(); ++i) {
+        char c = src[i];
+        if (c == '(') ++depth;
+        else if (c == ')') --depth;
+        else if (depth > 0) continue;
+        else if (c == ';' || c == '}') return true;
+        else if (!identChar(c) && !std::isspace(static_cast<unsigned char>(c)) && c != ',') return false;
+    }
+    return false;
 }
 
 // Whether Kotlin's class starts at `at`: [private | internal | public | open | abstract]... class Name, then a
@@ -110,8 +117,26 @@ bool startsClass(std::string_view src, size_t at) {
         if (k < src.size() && src[k] == ':') return false;  // C++'s access label
         first = word();
     }
-    static const std::set<std::string_view> kotlin = {"val", "var", "fun", "init", "override", "open", "abstract", "suspend", "lateinit"};
-    return kotlin.contains(first);
+    static const std::set<std::string_view> kotlin = {"val",       "var",    "fun",       "init",   "override", "open",   "abstract", "suspend",
+                                                      "lateinit",  "data",   "companion", "object", "interface", "sealed", "inner",    "const",
+                                                      "operator", "vararg"};
+    if (kotlin.contains(first)) return true;
+    size_t firstAt = k - first.size();
+    if (first == "class") return startsClass(src, firstAt);  // (a nested class: Kotlin's if it is one)
+    if (first == "enum" && startsEnumClass(src, firstAt)) {
+        // Kotlin's nested enum (C++'s ends with };): a constructor, or no ; after its body
+        size_t open = src.find_first_of("({", firstAt);
+        if (open != std::string_view::npos && src[open] == '(') return true;
+        int depth = 0;
+        for (size_t i = open; i < src.size(); ++i) {
+            if (src[i] == '{') ++depth;
+            else if (src[i] == '}' && --depth == 0) {
+                size_t after = src.find_first_not_of(" \t", i + 1);
+                return after == std::string_view::npos || src[after] != ';';
+            }
+        }
+    }
+    return false;
 }
 
 // Whether Kotlin's sealed class or interface starts at `at` (C++ has no `sealed`).
@@ -137,6 +162,38 @@ bool startsInterface(std::string_view src, size_t at) {
     while (w == "private" || w == "internal" || w == "public") w = word();
     if (w == "fun") w = word();
     return w == "interface" && !word().empty();
+}
+
+// Whether Kotlin's extension property starts at `at`: [private]… val|var [<T>] Receiver.name (C++ has no `val`).
+bool startsExtensionProperty(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    std::string_view w = word();
+    while (w == "private" || w == "internal" || w == "public") w = word();
+    if ((w != "val" && w != "var") || k >= src.size() || (src[k] != ' ' && src[k] != '\t')) return false;
+    while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+    if (k < src.size() && src[k] == '<') return true;  // val <T> List<T>.second
+    if (word().empty()) return false;
+    return k < src.size() && (src[k] == '.' || src[k] == '<');
+}
+
+// Whether Kotlin's typealias starts at `at` (C++ has no `typealias`).
+bool startsAlias(std::string_view src, size_t at) {
+    size_t k = at;
+    auto word = [&] {
+        while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
+        size_t b = k;
+        while (k < src.size() && identChar(src[k])) ++k;
+        return src.substr(b, k - b);
+    };
+    std::string_view w = word();
+    while (w == "private" || w == "internal" || w == "public") w = word();
+    return w == "typealias" && !word().empty();
 }
 
 // Whether Kotlin's object starts at `at`: object Name, with no body or an empty one (C++ has no `object`).
@@ -229,7 +286,7 @@ bool startsFun(std::string_view src, size_t at) {
         size_t b = k;
         while (k < src.size() && identChar(src[k])) ++k;
         std::string_view w = src.substr(b, k - b);
-        if (w == "private" || w == "internal" || w == "public" || w == "inline" || w == "suspend") continue;
+        if (w == "private" || w == "internal" || w == "public" || w == "inline" || w == "suspend" || w == "operator" || w == "infix") continue;
         if (w != "fun") return false;
         while (k < src.size() && (src[k] == ' ' || src[k] == '\t')) ++k;
         if (k < src.size() && src[k] == '<') {  // fun <T> name: its type parameters
@@ -451,6 +508,19 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
                 f.begin = i, f.end = f.sealed->end.offset, f.qualifier = qualifier();
                 i = f.end;
                 found.push_back(std::move(f));
+            } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsExtensionProperty(src, i)) {
+                Parser parser(src, positionOf(src, i));
+                Function f = parser.extensionProperty();
+                size_t end = f.end.offset;
+                found.push_back({std::move(f), std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, i, end, qualifier()});
+                i = end;
+            } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsAlias(src, i)) {
+                Parser parser(src.substr(0, valEnd(src, i)), positionOf(src, i));  // (its type ends with its line)
+                Found f;
+                f.alias = parser.typeAlias();
+                f.begin = i, f.end = f.alias->end.offset, f.qualifier = qualifier();
+                i = f.end;
+                found.push_back(std::move(f));
             } else if (identChar(c) && (i == 0 || !identChar(src[i - 1])) && startsLine(src, i) && startsInterface(src, i)) {
                 Parser parser(src, positionOf(src, i));
                 Found f;
@@ -547,12 +617,50 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
     return found;
 }
 
+// A body's nested declarations, by their dotted names (Outer.Inner). (Inside it, by their own: codegen's Module copy.)
+void declareNested(Module& module, const std::string& outer, const NestedDecls& n) {
+    auto both = [&](auto& map, const std::string& name, auto value) { map[outer + "." + name] = value; };
+    for (const auto& c : n.classes) {
+        both(module.classDecls, c->name, c.get());
+        declareNested(module, outer + "." + c->name, c->nested);
+        if (c->companion) module.objectDecls[outer + "." + c->name] = c->companion.get();
+    }
+    for (const auto& d : n.dataClasses) {
+        both(module.classes, d->name, d.get());
+        declareNested(module, outer + "." + d->name, d->nested);
+    }
+    for (const auto& e : n.enums) both(module.enums, e->name, e.get());
+    for (const auto& o : n.objects) {
+        module.objects.insert(outer + "." + o->name);
+        both(module.objectDecls, o->name, o.get());
+        declareNested(module, outer + "." + o->name, o->nested);
+    }
+    for (const auto& i : n.interfaces) {
+        both(module.interfaces, i->name, i.get());
+        declareNested(module, outer + "." + i->name, i->nested);
+    }
+}
+
 void declareIn(Module& module, const Found& f, bool qualified) {
     if (f.failed) return;
+    if (f.classDecl) declareNested(module, f.name(), f.classDecl->nested);
+    if (f.dataClass) declareNested(module, f.name(), f.dataClass->nested);
+    if (f.object) declareNested(module, f.name(), f.object->nested);
+    if (f.interface) declareNested(module, f.name(), f.interface->nested);
+    // A companion object: Name.member is the class's own (read through a function where it is one of an object's).
+    const ObjectDecl* companion = f.classDecl ? f.classDecl->companion.get() : f.dataClass ? f.dataClass->companion.get()
+                                  : f.interface ? f.interface->companion.get() : nullptr;
+    if (companion) module.objectDecls[f.name()] = companion;
     if (qualified && f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
     // (a class template is named with its namespace where it is made: inside itself its name alone is the type it is)
     if (qualified && ((f.dataClass && !f.dataClass->typeParams.empty()) || (f.classDecl && !f.classDecl->typeParams.empty())))
         module.qualifiers[f.name()] = f.qualifier;
+    if (f.enumClass) module.enums[f.enumClass->name] = &*f.enumClass;
+    if (f.alias) module.aliases[f.alias->name] = &*f.alias;
+    if (f.function && f.function->isExtensionProperty) {
+        module.extensionProperties[f.function->name] = &*f.function;
+        return;
+    }
     if (f.function) module.functions[f.function->name] = &*f.function;
     else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
     else if (f.property) module.properties[f.property->name] = &*f.property;
@@ -611,6 +719,10 @@ void typeNames(const Type& t, std::set<std::string, std::less<>>& out) {
 void names(const Node* n, std::set<std::string, std::less<>>& out) {
     if (!n) return;
     if (n->kind == Node::Name) out.insert(n->text);
+    if (n->kind == Node::Member) {  // x.shout, x.second(): an extension property's getter, an extension function
+        out.insert(n->text);
+        out.insert("kompoz_get_" + n->text);
+    }
     if (n->type) typeNames(*n->type, out);
     for (const Type& t : n->typeArgs) typeNames(t, out);
     for (const NodeP& k : n->kids) names(k.get(), out);
@@ -627,89 +739,100 @@ void properties(const ClassProperty& p, std::set<std::string, std::less<>>& out)
     names(p.getter.get(), out);
     names(p.setter.get(), out);
 }
-void names(const Found& f, std::set<std::string, std::less<>>& out) {
+using NameSet = std::set<std::string, std::less<>>;
+void functionNames(const Function& m, NameSet& out) {
+    for (const Param& p : m.params) {
+        typeNames(p.type, out);
+        names(p.defaultValue.get(), out);
+    }
+    if (m.result) typeNames(*m.result, out);
+    if (m.receiver) typeNames(*m.receiver, out);
+    names(m.body.get(), out);
+    if (m.setter) functionNames(*m.setter, out);
+}
+void nestedNames(const NestedDecls& n, NameSet& out);
+void objectNames(const ObjectDecl* o, NameSet& out) {
+    if (!o) return;
+    for (const Type& t : o->supers) typeNames(t, out);
+    for (const ClassProperty& p : o->properties) properties(p, out);
+    for (const Function& m : o->methods) functionNames(m, out);
+    for (const NodeP& b : o->initBlocks) names(b.get(), out);
+    nestedNames(o->nested, out);
+}
+void interfaceNames(const InterfaceDecl& i, NameSet& out) {
+    for (const Type& t : i.bases) typeNames(t, out);
+    for (const ClassProperty& p : i.properties) properties(p, out);
+    for (const Function& m : i.methods) functionNames(m, out);
+    objectNames(i.companion.get(), out);
+    nestedNames(i.nested, out);
+}
+void enumNames(const EnumClass& e, NameSet& out) {  // (its entries are its own; a constructor's and a body's names)
+    for (const Param& p : e.ctorParams) {
+        typeNames(p.type, out);
+        names(p.defaultValue.get(), out);
+    }
+    for (const auto& args : e.entryArgs)
+        for (const NodeP& a : args) names(a.get(), out);
+    for (const ClassProperty& p : e.properties) properties(p, out);
+    for (const Function& m : e.methods) functionNames(m, out);
+    for (const NodeP& b : e.initBlocks) names(b.get(), out);
+    objectNames(e.companion.get(), out);
+}
+void classNames(const ClassDecl& c, NameSet& out) {
+    for (const Param& p : c.ctorParams) {
+        typeNames(p.type, out);
+        names(p.defaultValue.get(), out);
+    }
+    if (c.base) typeNames(*c.base, out);
+    for (const Type& t : c.interfaces) typeNames(t, out);
+    for (const NodeP& a : c.baseArgs) names(a.get(), out);
+    for (const ClassProperty& p : c.properties) properties(p, out);
+    for (const Function& m : c.methods) functionNames(m, out);
+    for (const NodeP& b : c.initBlocks) names(b.get(), out);
+    objectNames(c.companion.get(), out);
+    nestedNames(c.nested, out);
+}
+void dataClassNames(const DataClass& d, NameSet& out) {
+    for (const Type& t : d.supers) typeNames(t, out);
+    for (const Param& p : d.fields) {
+        typeNames(p.type, out);
+        names(p.defaultValue.get(), out);
+    }
+    for (const ClassProperty& p : d.properties) properties(p, out);
+    for (const Function& m : d.methods) functionNames(m, out);
+    for (const NodeP& b : d.initBlocks) names(b.get(), out);
+    objectNames(d.companion.get(), out);
+    nestedNames(d.nested, out);
+}
+void nestedNames(const NestedDecls& n, NameSet& out) {
+    for (const auto& c : n.classes) classNames(*c, out);
+    for (const auto& d : n.dataClasses) dataClassNames(*d, out);
+    for (const auto& e : n.enums) enumNames(*e, out);
+    for (const auto& o : n.objects) objectNames(o.get(), out);
+    for (const auto& i : n.interfaces) interfaceNames(*i, out);
+}
+void names(const Found& f, NameSet& out) {
     if (f.function) {
-        for (const Param& p : f.function->params) {
-            typeNames(p.type, out);
-            names(p.defaultValue.get(), out);
-        }
-        if (f.function->result) typeNames(*f.function->result, out);
-        if (f.function->receiver) typeNames(*f.function->receiver, out);
-        names(f.function->body.get(), out);
+        functionNames(*f.function, out);
     } else if (f.property) {
         if (f.property->decl->type) typeNames(*f.property->decl->type, out);
         names(f.property->decl.get(), out);
     } else if (f.object) {  // (an object without members is its name and its interfaces)
-        for (const Type& t : f.object->supers) typeNames(t, out);
-        for (const ClassProperty& p : f.object->properties) properties(p, out);
-        for (const Function& m : f.object->methods) {
-            for (const Param& p : m.params) {
-                typeNames(p.type, out);
-                names(p.defaultValue.get(), out);
-            }
-            if (m.result) typeNames(*m.result, out);
-            names(m.body.get(), out);
-        }
-        for (const NodeP& b : f.object->initBlocks) names(b.get(), out);
+        objectNames(&*f.object, out);
     } else if (f.sealed) {  // its subclasses: those in it, and those of its file (taken with it)
-        for (const DataClass& d : f.sealed->dataClasses)
-            for (const Type& t : d.supers) typeNames(t, out);
-        for (const ObjectDecl& o : f.sealed->objects)
-            for (const Type& t : o.supers) typeNames(t, out);
-        for (const DataClass& d : f.sealed->dataClasses)
-            for (const Param& p : d.fields) {
-                typeNames(p.type, out);
-                names(p.defaultValue.get(), out);
-            }
+        for (const DataClass& d : f.sealed->dataClasses) dataClassNames(d, out);
+        for (const ObjectDecl& o : f.sealed->objects) objectNames(&o, out);
         for (const std::string& t : f.sealed->topLevel) out.insert(t);
     } else if (f.interface) {
-        for (const Type& t : f.interface->bases) typeNames(t, out);
-        for (const ClassProperty& p : f.interface->properties) properties(p, out);
-        for (const Function& m : f.interface->methods) {
-            for (const Param& p : m.params) {
-                typeNames(p.type, out);
-                names(p.defaultValue.get(), out);
-            }
-            if (m.result) typeNames(*m.result, out);
-            names(m.body.get(), out);
-        }
+        interfaceNames(*f.interface, out);
     } else if (f.enumClass) {
-        // (nothing: its entries are its own)
+        enumNames(*f.enumClass, out);
     } else if (f.classDecl) {
-        const ClassDecl& c = *f.classDecl;
-        for (const Param& p : c.ctorParams) {
-            typeNames(p.type, out);
-            names(p.defaultValue.get(), out);
-        }
-        if (c.base) typeNames(*c.base, out);
-        for (const Type& t : c.interfaces) typeNames(t, out);
-        for (const NodeP& a : c.baseArgs) names(a.get(), out);
-        for (const ClassProperty& p : c.properties) properties(p, out);
-        for (const Function& m : c.methods) {
-            for (const Param& p : m.params) {
-                typeNames(p.type, out);
-                names(p.defaultValue.get(), out);
-            }
-            if (m.result) typeNames(*m.result, out);
-            names(m.body.get(), out);
-        }
-        for (const NodeP& b : c.initBlocks) names(b.get(), out);
-    } else {
-        for (const Type& t : f.dataClass->supers) typeNames(t, out);
-        for (const Param& p : f.dataClass->fields) {
-            typeNames(p.type, out);
-            names(p.defaultValue.get(), out);
-        }
-        for (const ClassProperty& p : f.dataClass->properties) properties(p, out);
-        for (const Function& m : f.dataClass->methods) {
-            for (const Param& p : m.params) {
-                typeNames(p.type, out);
-                names(p.defaultValue.get(), out);
-            }
-            if (m.result) typeNames(*m.result, out);
-            names(m.body.get(), out);
-        }
-        for (const NodeP& b : f.dataClass->initBlocks) names(b.get(), out);
+        classNames(*f.classDecl, out);
+    } else if (f.dataClass) {
+        dataClassNames(*f.dataClass, out);
+    } else if (f.alias) {
+        typeNames(f.alias->type, out);
     }
 }
 
@@ -876,15 +999,40 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             if (g->interface) declareInterface(out, *g->interface);
         for (const Found& g : found)
             if (g.interface) declareInterface(out, *g.interface);
+        // Type aliases (enums first: an alias may name one), the types they may name declared before them.
+        bool anyAlias = std::any_of(found.begin(), found.end(), [](const Found& g) { return g.alias.has_value(); }) ||
+                        std::any_of(imported.begin(), imported.end(), [](const auto& i) { return i.second->alias.has_value(); });
+        if (anyAlias) {
+            auto declareTypes = [&](const Found& g) {
+                if (g.enumClass) generateEnum(out, *g.enumClass, module);
+                if (g.dataClass) declareType(out, g.dataClass->name, g.dataClass->typeParams, false);
+                if (g.classDecl) declareType(out, g.classDecl->name, g.classDecl->typeParams, true);
+                if (g.sealed) declareType(out, g.sealed->name, {}, false);
+            };
+            for (auto [o, g] : imported) {
+                out.setFile(o->lineFile);
+                declareTypes(*g);
+            }
+            out.setFile(lineFile);
+            for (const Found& g : found) declareTypes(g);
+            for (auto [o, g] : imported)
+                if (g->alias) {
+                    out.setFile(o->lineFile);
+                    generateAlias(out, *g->alias, module);
+                }
+            out.setFile(lineFile);
+            for (const Found& g : found)
+                if (g.alias) generateAlias(out, *g.alias, module);
+        }
         for (auto [o, g] : imported) {  // (from their own files: #line says which)
             out.setFile(o->lineFile);
-            if (g->enumClass) generateEnum(out, *g->enumClass);
+            if (g->enumClass && !anyAlias) generateEnum(out, *g->enumClass, module);
             if (g->dataClass) generateClass(out, *g->dataClass, module);
             if (g->object && !g->object->hasMembers()) generateObject(out, *g->object, module);
         }
         out.setFile(lineFile);
         for (const Found& g : found) {
-            if (g.enumClass) generateEnum(out, *g.enumClass);
+            if (g.enumClass && !anyAlias) generateEnum(out, *g.enumClass, module);
             if (g.dataClass) generateClass(out, *g.dataClass, module);
             if (g.object && !g.object->hasMembers()) generateObject(out, *g.object, module);
         }
@@ -1049,7 +1197,8 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
             else if (f.object) generateObject(o, *f.object, module);
             else if (f.sealed) generateSealed(o, *f.sealed, module);
             else if (f.interface) generateInterface(o, *f.interface, module);
-            else if (f.enumClass) generateEnum(o, *f.enumClass);
+            else if (f.alias) generateAlias(o, *f.alias, module);
+            else if (f.enumClass) generateEnum(o, *f.enumClass, module);
             std::string text = std::move(o).str();
             std::istringstream lines(text);
             for (std::string line; std::getline(lines, line);) {

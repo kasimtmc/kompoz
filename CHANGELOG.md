@@ -1143,6 +1143,34 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **companion object**: in classes, data classes and interfaces, its members the class's static ones (`Ledger.create()`,
+  `Ledger.made`, `Money.Zero`; by their names inside the class). Its properties are static functions holding their
+  value, made the first time they are read (`val Zero = Money(0)`: the class isn't complete where its members are
+  declared), a var's with a setter.
+- **Enum classes with a constructor and a body**: `enum class Rank(val n: Int, val label: String = "…") { LOW(1),
+  MID(n = 5, label = "orta"); val doubled = n * 2; fun next() = …; companion object { … } }` is a struct of its fields, its
+  entries its constants (`Rank.MID.describe()`). Every enum, these and those of entries alone (still C++'s enum class),
+  has `name`, `ordinal`, `entries`, `values()`, `valueOf("LOW")` and is written as its name (`"$suit"`).
+- **Nested declarations**: data classes, enums, objects, interfaces and classes in a class, a data class, an object or an
+  interface: `Catalog.Entry("d", Catalog.Kind.FILM)` outside, `Entry("a")` inside. In C++ they are in a struct of their
+  own before the outer type (complete there, as a nested aggregate's defaults must be where the outer one uses them),
+  the outer one naming them (`Catalog::Entry`). Not `inner` ones (they would hold the outer this).
+- **typealias**: `typealias Names = List<String>`, `typealias Format = (Int) -> String` (a lambda given one gives a value),
+  `typealias Grid<T> = List<List<T>>` (a template), before the data classes (the types they name declared first).
+- **operator fun**: `plus`, `minus`, `times`, `div`, `rem`, `unaryMinus`, `unaryPlus`, `not`, `inc`, `dec`, `get` (`a[i]`),
+  `invoke` (`f(x)`), `compareTo` (`<`, `>`), the `…Assign` ones and `contains` (`in`), on classes, data classes, interfaces
+  and as extensions (`operator fun Vec2.times(k: Int)`): C++'s operators calling them (`a += b` is `a = a + b` without a
+  `plusAssign`, as Kotlin's).
+- **Extension properties**: `val String.shout: String get() = …`, `val <T> List<T>.second: T get() = this[1]`, `var
+  Meter.doubled: Int get() = …; set(value) { … }`; a member of the name comes first, as in Kotlin (C++ chooses:
+  KOMPOZ_KT_GET_OR). An extension function's or property's receiver reaches a Kotlin class's members by their names.
+- **vararg**: `fun total(vararg xs: Int)` takes a `List<Int>`; a call's arguments from there are its elements, `*list`
+  spreads one among them (`total(1, *more, 9)`).
+- **lateinit var**: kept empty until it is set (any type, a class made with arguments too); read before, it throws as
+  Kotlin's does.
+- Fixed: `first { … }`, `last { … }`, `firstOrNull { … }` and `lastOrNull { … }` ignored their predicate; a lambda given
+  as a function's default value (`onPick: () -> Unit = {}`) captured at namespace scope; a class whose body starts with
+  a nested declaration (`data class`, `object`, …) wasn't read as Kotlin.
 - **Kotlin's order of evaluation**: a call's arguments are evaluated in the order they are written (named ones as
   written, not as declared: `Spot(y = next(), x = next())`), and so are a string template's parts and an operator's
   operands (`next() * 10 + next()`), as Kotlin does: C++ leaves them unordered (GCC went right to left). Where two of

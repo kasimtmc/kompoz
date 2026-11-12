@@ -607,6 +607,14 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 380. Kotlin's `open class` and `abstract class` (abstract and open functions and properties, `override`, `super.f()`), subclasses as their base, `is` / `as` ✅
 381. Generic classes, data classes, interfaces and fun interfaces (`class Box<T>`, `interface Source<T>`), their type arguments written or taken from the values ✅
 382. Generic functions (`fun <T> first(items: List<T>)`, `fun <T, R> map(items: List<T>, f: (T) -> R)`, `fun <T> List<T>.second()`, generic composables and class functions) ✅
+383. Kotlin's `companion object` in classes, data classes and interfaces ✅
+384. Enum classes with a constructor and a body; `name`, `ordinal`, `entries`, `values()`, `valueOf()` on every enum ✅
+385. Nested data classes, enums, objects, interfaces and classes ✅
+386. `typealias` (generic ones too) ✅
+387. `operator fun` (arithmetic, unary, `inc`/`dec`, `get`, `invoke`, `compareTo`, `…Assign`, `contains`), as members and extensions ✅
+388. Extension properties (`val String.shout get() = …`, a `var` with a setter, generic ones) ✅
+389. `vararg` parameters, `*list` spread ✅
+390. `lateinit var` ✅
 
 ## Next
 

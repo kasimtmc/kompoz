@@ -23,6 +23,9 @@ struct Module {
     std::set<std::string, std::less<>> objects;  // objects: a name that is a type and its one value
     std::map<std::string, const ObjectDecl*, std::less<>> objectDecls;  // the objects declared so (not a sealed class's nested ones)
     std::map<std::string, const InterfaceDecl*, std::less<>> interfaces;
+    std::map<std::string, const EnumClass*, std::less<>> enums;
+    std::map<std::string, const TypeAlias*, std::less<>> aliases;
+    std::map<std::string, const Function*, std::less<>> extensionProperties;  // val String.shout: by its name
     // How a call names each of the file's (or another file's, defined here) functions and vals: its
     // namespace, "::" at the top (a name of all of Kompoz's, label or shape, is not it then).
     std::map<std::string, std::string, std::less<>> qualifiers;
@@ -62,7 +65,7 @@ private:
 };
 
 // An enum class: C++'s enum class, its entries in order.
-void generateEnum(Output& out, const EnumClass& e);
+void generateEnum(Output& out, const EnumClass& e, const Module& module);
 // An object: an empty struct, a route when @Serializable; one with members, a struct of static members.
 void generateObject(Output& out, const ObjectDecl& o, const Module& module);
 // A sealed class or interface: a struct holding one of its subclasses (a variant), its nested ones inside it.
@@ -71,6 +74,10 @@ void generateSealed(Output& out, const SealedDecl& s, const Module& module);
 void generateClass(Output& out, const DataClass& c, const Module& module);
 // A top-level val: a constant of the namespace.
 void generateProperty(Output& out, const Property& p, const Module& module);
+// A typealias: C++'s using (a template's for a generic one).
+void generateAlias(Output& out, const TypeAlias& a, const Module& module);
+// Declarations of the types an alias may name before they are defined (data classes, classes, sealed ones).
+void declareType(Output& out, const std::string& name, const std::vector<std::string>& typeParams, bool isClass);
 // An interface: a handle to an object implementing it (its abstract C++ class, Name::Object).
 void generateInterface(Output& out, const InterfaceDecl& i, const Module& module);
 // Its name declared (data classes and objects implementing it name it before it is defined).
