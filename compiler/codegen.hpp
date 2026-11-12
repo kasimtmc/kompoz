@@ -16,7 +16,7 @@ namespace kompozc {
 // their arguments by position, named ones put in place and defaults filled in) and the data
 // classes (made with their fields in the order they are declared).
 struct Module {
-    std::map<std::string, const Function*, std::less<>> functions;
+    std::map<std::string, std::vector<const Function*>, std::less<>> functions;  // (a name's overloads)
     std::map<std::string, const DataClass*, std::less<>> classes;
     std::map<std::string, const Property*, std::less<>> properties;  // top-level vals
     std::map<std::string, const ClassDecl*, std::less<>> classDecls;  // classes (constructed with their parameters in order)
@@ -26,6 +26,8 @@ struct Module {
     std::map<std::string, const EnumClass*, std::less<>> enums;
     std::map<std::string, const TypeAlias*, std::less<>> aliases;
     std::map<std::string, const Function*, std::less<>> extensionProperties;  // val String.shout: by its name
+    // inner classes by their names, each with its outer class's (dotted) name: outer.Counter(…) makes one
+    std::map<std::string, std::vector<std::pair<std::string, const ClassDecl*>>, std::less<>> innerClasses;
     // How a call names each of the file's (or another file's, defined here) functions and vals: its
     // namespace, "::" at the top (a name of all of Kompoz's, label or shape, is not it then).
     std::map<std::string, std::string, std::less<>> qualifiers;

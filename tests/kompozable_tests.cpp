@@ -1460,6 +1460,209 @@ TEST(lateinit_properties) {
     CHECK(line == "geç henüz yok ayşe hesap-7" || (std::printf("satır: %s\n", line.c_str()), false));
 }
 
+// try as a value: the body's last expression, or the catching block's (finally runs, giving nothing); throw,
+// as a statement and as a value (?: throw); Kotlin's exceptions as they derive from one another (a
+// NumberFormatException is an IllegalArgumentException), their message, rethrown as they are.
+fun parsedOr(text: String, fallback: Int): Int = try {
+    if (text.isEmpty()) throw IllegalArgumentException("boş")
+    text.toInt()
+} catch (e: IllegalArgumentException) {
+    fallback
+}
+
+fun firstWord(line: String?): String = line?.split(" ")?.firstOrNull() ?: throw IllegalStateException("satır yok")
+
+class Refused(val code: Int) : IllegalStateException("kod $code")
+
+fun rethrown(): String {
+    try {
+        try {
+            check(false) { "iç" }
+        } catch (e: IllegalStateException) {
+            throw e
+        }
+    } catch (e: RuntimeException) {
+        return "yine " + e.message
+    }
+    return "?"
+}
+
+@Kompozable
+fun TryForms() {
+    var cleaned = 0
+    val a = parsedOr("41", 0)
+    val b = parsedOr("", -1)
+    val c = parsedOr("12abc", -2)
+    val d: String? = try { error("yok") } catch (e: IllegalStateException) { null } finally { cleaned++ }
+    val f = listOf("7", "x").map { s -> try { s.toInt() * 2 } catch (e: NumberFormatException) { 0 } }
+    val g = try { firstWord(null) } catch (e: Exception) { e.message ?: "?" }
+    val h = try { listOf<Int>().first().toString() } catch (e: NoSuchElementException) { "$e" }
+    val r = try { throw Refused(7) } catch (e: Refused) { "${e.code} ${e.message}" }
+    val r2 = try { throw Refused(2) } catch (e: IllegalStateException) { "$e" }
+    Text("dene $a $b $c ${d ?: "boş"} $cleaned ${f.joinToString(",")} $g ${firstWord("iki söz")} ${rethrown()} $h | $r | $r2")
+}
+
+TEST(try_as_a_value_and_throw) {
+    KompozTestRule rule([] { TryForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("dene", true).text();
+    CHECK(line == "dene 41 -1 -2 boş 1 14,0 satır yok iki yine iç NoSuchElementException: List is empty. | 7 kod 7 | Refused: kod 2" ||
+          (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// Overloads: functions of one name taking different parameters, as Kotlin chooses between them: by the arguments'
+// number and names, by a literal's type, the one needing no default first, else by their types (C++'s choice);
+// at the top level, as extensions, composables, a class's and an interface's (overridden each).
+fun describe(n: Int): String = "sayı $n"
+fun describe(s: String): String = "yazı $s"
+fun describe(a: Int, b: Int): String = "çift ${a + b}"
+fun describe(label: String, times: Int = 2): String = label.repeat(times)
+fun describe(flag: Boolean, onYes: () -> String): String = if (flag) onYes() else "hayır"
+
+fun Int.tagged() = "i$this"
+fun String.tagged() = "s$this"
+
+@Kompozable
+fun Chip(n: Int) {
+    Text("çip sayı $n")
+}
+
+@Kompozable
+fun Chip(text: String, suffix: String = "!") {
+    Text("çip $text$suffix")
+}
+
+interface Sink {
+    fun take(x: Int): String
+    fun take(x: String): String
+}
+
+class Printer : Sink {
+    override fun take(x: Int) = "p$x"
+    override fun take(x: String) = "p'$x'"
+    fun put(x: Int, times: Int = 1) = take(x * times)
+    fun put(x: String) = take(x)
+    fun both() = put(2) + put("b") + put(2, times = 3)
+}
+
+@Kompozable
+fun OverloadForms() {
+    val count = 4
+    val name = "ali"
+    val sink: Sink = object : Sink {
+        override fun take(x: Int) = "o$x"
+        override fun take(x: String) = "o'$x'"
+    }
+    Text("aşırı " + describe(3) + "|" + describe("a") + "|" + describe(1, 2) + "|" + describe(label = "ab") + "|" + describe("c", 3) + "|" +
+         describe(true) { "evet" } + "|" + describe(1.5) + "|" + describe(count) + "|" + describe(name) + "|" + 5.tagged() + name.tagged() + "|" +
+         Printer().both() + "|" + sink.take(1) + sink.take("z"))
+    Chip(7)
+    Chip("a")
+    Chip("b", suffix = "?")
+}
+
+TEST(overloads_by_arguments_and_types) {
+    KompozTestRule rule([] { OverloadForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("aşırı", true).text();
+    CHECK(line == "aşırı sayı 3|yazı a|çift 3|abab|ccc|evet|ondalık 1.5|sayı 4|yazı ali|i5sali|p2p'b'p6|o1o'z'" ||
+          (std::printf("satır: %s\n", line.c_str()), false));
+    CHECK(rule.onNodeWithText("çip sayı 7").exists() && rule.onNodeWithText("çip a!").exists() && rule.onNodeWithText("çip b?").exists());
+}
+
+// inner class: an object holding its outer one, made as outer.Counter(…) or Counter(…) in it; it reaches the outer
+// one's members by their names (its own first, private ones too), the outer object as this@Scoreboard; an inner class's
+// inner class reaches both.
+class Scoreboard(val name: String) {
+    var count = 0
+    private var bumps = 0
+    fun note(by: Int) {
+        count += by
+        bumps++
+    }
+    fun counter() = Counter(2)
+
+    inner class Counter(val step: Int) {
+        val name = "sayaç"
+        fun bump() {
+            note(step)
+            count++
+        }
+        fun label() = "$name/${this@Scoreboard.name}:$count:$bumps"
+        fun owner() = this@Scoreboard
+        fun twin() = Counter(step * 10)
+        fun take(n: Int) = step * n  // (named as Kotlin's take: its own, as Kotlin's member comes first)
+
+        inner class Mark(val tag: String) {
+            fun text() = "$tag$step$count"
+        }
+    }
+}
+
+fun innerReport(): String {
+    val tally = Scoreboard("t")
+    val c = tally.counter()
+    c.bump()
+    val d = tally.Counter(5)
+    d.bump()
+    val mark = d.Mark("m")
+    return "iç sınıf " + c.label() + " " + d.twin().step + " " + (d.owner() == tally) + " " + mark.text() + " " + tally.count + " " + d.take(2)
+}
+
+@Kompozable
+fun InnerForms() {
+    Text(innerReport())
+}
+
+TEST(inner_classes_hold_their_outer_object) {
+    KompozTestRule rule([] { InnerForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("iç sınıf", true).text();
+    CHECK(line == "iç sınıf sayaç/t:9:2 50 true m59 9 10" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// An enum entry with a body of its own: what it overrides of its class's (an abstract fun, an open fun, an open val,
+// toString), its parameters named its own way too; the class's own for the entries without one.
+enum class Calc(val symbol: String) {
+    PLUS("+") {
+        override fun apply(a: Int, b: Int) = a + b
+        override val loud = true
+    },
+    TIMES("*") {
+        override fun apply(x: Int, y: Int): Int = x * y
+        override fun describe() = "çarpı $symbol"
+        override fun toString() = "kez"
+    },
+    MINUS("-") {
+        override fun apply(a: Int, b: Int) = a - b
+    };
+
+    abstract fun apply(a: Int, b: Int): Int
+    open fun describe() = "işlem $symbol"
+    open val loud: Boolean = false
+    fun shown() = "$this=${apply(6, 3)}${if (loud) "!" else ""}"
+}
+
+enum class Sign {
+    POS { override fun of(n: Int) = n },
+    NEG { override fun of(n: Int) = -n };
+    abstract fun of(n: Int): Int
+}
+
+@Kompozable
+fun EntryBodyForms() {
+    Text("girdi " + Calc.entries.joinToString(" ") { it.shown() } + " " + Calc.TIMES.describe() + " " + Calc.MINUS.describe() + " " + Calc.PLUS.loud + " " +
+         listOf(1, 2, 3).joinToString(", ", "[", "]", 2) + " " + "a/b/c.txt".substringAfterLast('/') + "a:b".substringBefore(":") +
+         "x".substringAfter("-", "yok") + " " + Sign.NEG.of(4))
+}
+
+TEST(enum_entries_with_bodies_of_their_own) {
+    KompozTestRule rule([] { EntryBodyForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("girdi", true).text();
+    CHECK(line == "girdi PLUS=9! kez=18 MINUS=3 çarpı * işlem - true [1, 2, ...] c.txtayok -4" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
 TEST(coroutines_await_what_suspends) {
     KompozTestRule rule([] { Awaits(); });
     CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());
@@ -1531,7 +1734,7 @@ TEST(top_level_vals_and_content_by_name) {
     bool threw = false;
     try {
         LocalAccount.current();  // (no provider, outside a composition: its default)
-    } catch (const std::logic_error&) {
+    } catch (const kompoz::kt::IllegalStateException&) {  // (error()'s, as Kotlin's)
         threw = true;
     }
     CHECK(threw);

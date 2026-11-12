@@ -615,6 +615,11 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 388. Extension properties (`val String.shout get() = …`, a `var` with a setter, generic ones) ✅
 389. `vararg` parameters, `*list` spread ✅
 390. `lateinit var` ✅
+391. `try` as an expression, `throw` (a value too: `x ?: throw …`), Kotlin's exceptions (`IllegalStateException`, `NumberFormatException`, … and classes deriving from them), `e.message` ✅
+392. Overloads: functions of one name taking different parameters (top-level, extensions, composables, a class's and an interface's) ✅
+393. `inner class` (`outer.Inner(…)`, `this@Outer`) ✅
+394. An enum entry with a body of its own (overriding an abstract or open fun, an open val, `toString`) ✅
+395. `joinToString(separator, prefix, postfix, limit) { transform }`, `substringBefore` / `After` / `BeforeLast` / `AfterLast` ✅
 
 ## Next
 

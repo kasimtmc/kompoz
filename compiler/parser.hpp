@@ -81,6 +81,7 @@ private:
     NodeP objectExpression();  // object : Interface { override fun … }
     NodeP ifExpression();
     NodeP whenExpression();
+    NodeP tryExpression();
     NodeP string(const Token& t);
     void arguments(Node& call);
     bool typeArguments(std::vector<Type>& out);  // <...> before ( or {: false (nothing taken) if not

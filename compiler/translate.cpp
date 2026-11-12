@@ -55,7 +55,7 @@ bool startsEnumClass(std::string_view src, size_t at) {
     while (k < src.size() && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
     if (k < src.size() && src[k] == '(') return true;  // enum class Level(val n: Int): Kotlin's constructor
     if (k >= src.size() || src[k] != '{') return false;
-    // Its entries, to a ; or the }: names, commas and Kotlin's arguments, LOW(1) (C++'s have values, A = 1).
+    // Its entries, to a ; or the }: names, commas and Kotlin's arguments, LOW(1), or bodies (C++'s have values, A = 1).
     int depth = 0;
     for (size_t i = k + 1; i < src.size(); ++i) {
         char c = src[i];
@@ -63,6 +63,7 @@ bool startsEnumClass(std::string_view src, size_t at) {
         else if (c == ')') --depth;
         else if (depth > 0) continue;
         else if (c == ';' || c == '}') return true;
+        else if (c == '{') return true;  // PLUS { override fun … }: an entry's body of its own
         else if (!identChar(c) && !std::isspace(static_cast<unsigned char>(c)) && c != ',') return false;
     }
     return false;
@@ -639,6 +640,11 @@ void declareNested(Module& module, const std::string& outer, const NestedDecls& 
         both(module.interfaces, i->name, i.get());
         declareNested(module, outer + "." + i->name, i->nested);
     }
+    for (const auto& c : n.innerClasses) {  // (made through an outer object: outer.Inner(…), by its name alone)
+        auto& outers = module.innerClasses[c->name];
+        if (std::none_of(outers.begin(), outers.end(), [&](const auto& o) { return o.second == c.get(); })) outers.emplace_back(outer, c.get());
+        declareNested(module, outer + "." + c->name, c->nested);
+    }
 }
 
 void declareIn(Module& module, const Found& f, bool qualified) {
@@ -661,7 +667,10 @@ void declareIn(Module& module, const Found& f, bool qualified) {
         module.extensionProperties[f.function->name] = &*f.function;
         return;
     }
-    if (f.function) module.functions[f.function->name] = &*f.function;
+    if (f.function) {  // (overloads: each once)
+        auto& overloads = module.functions[f.function->name];
+        if (std::find(overloads.begin(), overloads.end(), &*f.function) == overloads.end()) overloads.push_back(&*f.function);
+    }
     else if (f.dataClass) module.classes[f.dataClass->name] = &*f.dataClass;
     else if (f.property) module.properties[f.property->name] = &*f.property;
     else if (f.classDecl) module.classDecls[f.classDecl->name] = &*f.classDecl;
@@ -777,6 +786,11 @@ void enumNames(const EnumClass& e, NameSet& out) {  // (its entries are its own;
     for (const Function& m : e.methods) functionNames(m, out);
     for (const NodeP& b : e.initBlocks) names(b.get(), out);
     objectNames(e.companion.get(), out);
+    for (const auto& b : e.entryBodies)
+        if (b) {
+            for (const ClassProperty& p : b->properties) properties(p, out);
+            for (const Function& m : b->methods) functionNames(m, out);
+        }
 }
 void classNames(const ClassDecl& c, NameSet& out) {
     for (const Param& p : c.ctorParams) {
@@ -810,6 +824,7 @@ void nestedNames(const NestedDecls& n, NameSet& out) {
     for (const auto& e : n.enums) enumNames(*e, out);
     for (const auto& o : n.objects) objectNames(o.get(), out);
     for (const auto& i : n.interfaces) interfaceNames(*i, out);
+    for (const auto& c : n.innerClasses) classNames(*c, out);
 }
 void names(const Found& f, NameSet& out) {
     if (f.function) {
@@ -917,7 +932,12 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             for (const OtherSource& o : others)
                 for (const Found& f : o.found) {
                     const std::string& name = f.name();
-                    if (taken.contains(&f) || !used.contains(name) || module.functions.contains(name) || module.classes.contains(name) ||
+                    // (a function of a name defined here too: an overload of it, unless it takes the same parameters)
+                    auto here = module.functions.find(name);
+                    bool defined = here != module.functions.end() &&
+                                   (!f.function || std::any_of(here->second.begin(), here->second.end(),
+                                                               [&](const Function* g) { return sameParams(*g, *f.function); }));
+                    if (taken.contains(&f) || !used.contains(name) || defined || module.classes.contains(name) ||
                         module.properties.contains(name) || module.classDecls.contains(name) || module.interfaces.contains(name))
                         continue;
                     // A private val or function only for what is taken from its own file (uses it there).
@@ -941,49 +961,51 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     out.line(1);
     fs::path dir = source.parent_path();
     size_t done = 0;
-    std::set<std::string, std::less<>> declared;  // the functions declared so far
+    std::set<const Function*> declared;  // the functions declared so far
     // The @Kompozable functions a definition uses, declared before it (their prototypes), of this
     // file or another, as late as can be (a parameter's type may be a struct of the file's declared
     // above the function, not at its top).
     auto declare = [&](const std::set<std::string, std::less<>>& used) {
         for (auto [o, g] : imported)
-            if (g->function && g->function->composable && used.contains(g->function->name) && declared.insert(g->function->name).second) {
+            if (g->function && g->function->composable && used.contains(g->function->name) && declared.insert(&*g->function).second) {
                 out.setFile(o->lineFile);
                 generatePrototype(out, *g->function, module);
             }
         out.setFile(lineFile);
         for (const Found& g : found)
-            if (g.function && g.function->composable && used.contains(g.function->name) && declared.insert(g.function->name).second)
+            if (g.function && g.function->composable && used.contains(g.function->name) && declared.insert(&*g.function).second)
                 generatePrototype(out, *g.function, module);
     };
     // A top-level val or a plain function (whose type may be its body's), defined where it is or
     // before the first definition that uses it (C++ reads in order, Kotlin doesn't), after what it
     // uses; one of another file, from its file.
-    std::map<std::string, std::pair<std::string, const Found*>, std::less<>> early;
+    std::map<std::string, std::vector<std::pair<std::string, const Found*>>, std::less<>> early;  // (a name's overloads together)
     auto isEarly = [](const Found& g) {
         return g.property || g.classDecl || g.interface || (g.function && !g.function->composable) || (g.object && g.object->hasMembers());
     };
     for (const Found& g : found)
-        if (isEarly(g)) early[g.name()] = {lineFile, &g};
+        if (isEarly(g)) early[g.name()].emplace_back(lineFile, &g);
     for (auto [o, g] : imported)
-        if (isEarly(*g)) early[g->name()] = {o->lineFile, g};
+        if (isEarly(*g)) early[g->name()].emplace_back(o->lineFile, g);
     std::set<std::string, std::less<>> defined;
     // (`where`: the qualifier of where it is defined, the namespace its calls name)
     auto define = [&](auto&& self, const std::string& name, const std::string& where) -> void {
         auto v = early.find(name);
         if (v == early.end() || !defined.insert(name).second) return;
-        const Found& g = *v->second.second;
         module.qualifiers[name] = where;
         std::set<std::string, std::less<>> used;
-        names(g, used);
+        for (auto& [file, g] : v->second) names(*g, used);
         for (const std::string& u : used) self(self, u, where);
         declare(used);
-        out.setFile(v->second.first);
-        if (g.property) generateProperty(out, *g.property, module);
-        else if (g.classDecl) generateClassDecl(out, *g.classDecl, module);
-        else if (g.interface) generateInterface(out, *g.interface, module);
-        else if (g.object) generateObject(out, *g.object, module);
-        else generateDefinition(out, *g.function, module);
+        for (auto& [file, gp] : v->second) {
+            const Found& g = *gp;
+            out.setFile(file);
+            if (g.property) generateProperty(out, *g.property, module);
+            else if (g.classDecl) generateClassDecl(out, *g.classDecl, module);
+            else if (g.interface) generateInterface(out, *g.interface, module);
+            else if (g.object) generateObject(out, *g.object, module);
+            else generateDefinition(out, *g.function, module);
+        }
         out.setFile(lineFile);
     };
     // Before the first declaration: the helpers the translations use, and the data classes, enums

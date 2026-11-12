@@ -202,6 +202,37 @@ fun Wallet() {
 }
 ```
 
+`try` is an expression, `throw` too, with Kotlin's exceptions and your own classes deriving from them; functions may share a name (overloads); an `inner class` holds its outer object; an enum entry may have a body of its own:
+
+```kotlin
+class Refused(val code: Int) : IllegalStateException("refused $code")
+
+fun parsed(text: String): Int = try { text.toInt() } catch (e: NumberFormatException) { -1 }
+fun parsed(text: String, fallback: Int): Int = if (parsed(text) < 0) fallback else parsed(text)
+fun checked(n: Int): Int = if (n >= 0) n else throw Refused(n)
+
+enum class Op {
+    PLUS { override fun apply(a: Int, b: Int) = a + b },
+    TIMES { override fun apply(a: Int, b: Int) = a * b };
+    abstract fun apply(a: Int, b: Int): Int
+}
+
+class Basket {
+    var count by mutableStateOf(0)
+    inner class Adder(val step: Int) {
+        fun add() { count += step }
+    }
+}
+
+@Kompozable
+fun Checkout() {
+    val basket = remember { Basket() }
+    val code = try { checked(-3) } catch (e: Refused) { e.code }
+    Text("${parsed("12")} ${parsed("x", 0)} ${Op.TIMES.apply(3, 4)} $code ${basket.count}")
+    Button(onClick = { basket.Adder(2).add() }) { Text("Add") }
+}
+```
+
 Coroutines: a `LaunchedEffect` or a `launch` block is a coroutine, and `delay`, `animateScrollToItem`, your `suspend fun`s and the other suspending calls in it are awaited:
 
 ```kotlin
@@ -254,7 +285,7 @@ Expressions are evaluated left to right, as Kotlin evaluates them: a call's argu
 
 ## Not yet
 
-kompozc reads the Kotlin a composable needs: composables, plain, extension, generic, `operator` and `suspend` functions with `vararg`s, top-level `val`s and extension properties, `typealias`, data classes (with a body too), enum classes (with a constructor and a body too), classes (open, abstract, generic; a ViewModel, a repository) with delegated, `lateinit` and accessor properties and a `companion object`, interfaces (generic too), `sealed` classes and interfaces, `@Serializable` routes, objects, with members too (`object AppIcons { val Add = … }`: an app's singletons), and those declarations nested in classes. What it doesn't read yet is written in C++ next to it: `try` as an expression (`val x = try { … } catch …`; as a statement it is read), two top-level functions of the same name (overloads), an `inner class`, an enum entry with a body of its own. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
+kompozc reads the Kotlin a composable needs: composables, plain, extension, generic, `operator` and `suspend` functions with `vararg`s (overloads too), top-level `val`s and extension properties, `typealias`, data classes (with a body too), enum classes (with a constructor and a body too, their entries' own too), classes (open, abstract, generic; a ViewModel, a repository) with delegated, `lateinit` and accessor properties and a `companion object`, interfaces (generic too), `sealed` classes and interfaces, `@Serializable` routes, objects, with members too (`object AppIcons { val Add = … }`: an app's singletons), those declarations nested in classes and inner classes, `try` and `throw` as expressions with Kotlin's exceptions. What it doesn't read yet is written in C++ next to it: a sealed class with a constructor (its subclasses hold the fields), a sealed class or a generic class nested in another (declared at the top level, they are read), an inner class of anything but a class. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
 
 Without kompozc, Kompoz's composables are written in C++: [Writing in C++](cpp.md) shows how each of Kotlin's constructs reads there.
 

@@ -27,7 +27,7 @@ namespace {
 // Words that can't be an infix function's name.
 const std::set<std::string, std::less<>> kKeywords = {
     "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface", "is", "null", "object",
-    "package", "return", "super", "this", "throw", "true", "try", "typealias", "val", "var", "when", "while", "by"};
+    "package", "return", "super", "this", "throw", "true", "try", "typealias", "val", "var", "when", "while"};
 
 // While alive: newlines count (true) or not (false), as they do inside braces or parentheses.
 struct NewlineMode {
@@ -216,7 +216,7 @@ Function Parser::function() {
 ClassDecl Parser::classDecl() {
     ClassDecl c;
     c.pos = cur().pos;
-    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("open") || isIdent("abstract")) {
+    while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("open") || isIdent("abstract") || isIdent("inner")) {
         std::string word = take().text;
         if (word == "private") c.isPrivate = true;
         if (word == "abstract") c.isAbstract = true;
@@ -328,13 +328,18 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
             index_ = save;
             if (isNested) {
                 if (!nested_) fail(at, "a nested class isn't supported in " + std::string(kind == "object" || kind == "interface" || kind == "enum class" ? "an " : "a ") + kind);
-                if (words.contains("inner")) fail(at, "an inner class (holding its outer one's this) isn't supported: a nested one is (no inner)");
+                if (words.contains("inner") && (keyword != "class" || words.contains("data") || words.contains("enum")))
+                    fail(at, "inner is a class's (inner class Name)");
+                if (words.contains("inner") && kind != "class")
+                    fail(at, "an inner class of " + std::string(kind == "object" || kind == "interface" || kind == "enum class" ? "an " : "a ") + kind +
+                                 " isn't supported: of a class it is" + (kind == "data class" ? " (a data class is a value here, not an object)" : ""));
                 if (words.contains("sealed")) fail(at, "a nested sealed class isn't supported yet: declare it at the top level");
                 NestedDecls* into = nested_;
                 if (words.contains("data") && keyword == "class") into->dataClasses.push_back(std::make_shared<DataClass>(dataClass()));
                 else if (words.contains("enum")) into->enums.push_back(std::make_shared<EnumClass>(enumClass()));
                 else if (keyword == "object") into->objects.push_back(std::make_shared<ObjectDecl>(objectDecl()));
                 else if (keyword == "interface") into->interfaces.push_back(std::make_shared<InterfaceDecl>(interfaceDecl()));
+                else if (words.contains("inner")) into->innerClasses.push_back(std::make_shared<ClassDecl>(classDecl()));
                 else into->classes.push_back(std::make_shared<ClassDecl>(classDecl()));
                 continue;
             }
@@ -766,7 +771,23 @@ EnumClass Parser::enumClass() {
             }
             expectOp(")");
         }
-        if (opAfterNewlines("{")) fail("an enum entry with a body of its own isn't supported yet");
+        e.entryBodies.emplace_back();
+        if (opAfterNewlines("{")) {  // PLUS { override fun apply(…) = … }: what it overrides of the class's
+            skipNewlines();
+            auto body = std::make_shared<EnumEntryBody>();
+            body->pos = take().pos;
+            std::vector<size_t> order;
+            std::vector<NodeP> initBlocks;
+            NestedDecls* was = std::exchange(nested_, nullptr);
+            members(body->properties, body->methods, order, initBlocks, "enum entry", nullptr);
+            nested_ = was;
+            if (!initBlocks.empty()) fail(body->pos, "an enum entry's body has no init block here: its class's constructor runs for it");
+            for (const ClassProperty& p : body->properties)
+                if (!p.overrides) fail(p.pos, "an enum entry's body overrides its class's members: override val " + p.name);
+            for (const Function& m : body->methods)
+                if (!m.overrides) fail(m.pos, "an enum entry's body overrides its class's members: override fun " + m.name);
+            e.entryBodies.back() = std::move(body);
+        }
         skipNewlines();
         if (!acceptOp(",")) break;
     }
@@ -779,8 +800,16 @@ EnumClass Parser::enumClass() {
             nested_ = was;
             e.end = tokens_[index_ - 1].end;
             if (e.entries.empty()) fail(e.pos, "an enum class needs an entry");
-            for (const Function& m : e.methods)
-                if (m.isAbstract) fail(m.pos, "an enum's abstract fun needs each entry's body: not supported yet");
+            for (const Function& m : e.methods)  // (an abstract one: each entry's body has it)
+                for (size_t i = 0; m.isAbstract && i < e.entries.size(); ++i)
+                    if (!e.entryBodies[i] || std::none_of(e.entryBodies[i]->methods.begin(), e.entryBodies[i]->methods.end(),
+                                                          [&](const Function& f) { return f.name == m.name && f.params.size() == m.params.size(); }))
+                        fail(m.pos, e.entries[i] + " doesn't implement the abstract fun " + m.name);
+            for (const ClassProperty& p : e.properties)
+                for (size_t i = 0; p.isAbstract && i < e.entries.size(); ++i)
+                    if (!e.entryBodies[i] || std::none_of(e.entryBodies[i]->properties.begin(), e.entryBodies[i]->properties.end(),
+                                                          [&](const ClassProperty& q) { return q.name == p.name; }))
+                        fail(p.pos, e.entries[i] + " doesn't implement the abstract val " + p.name);
             return e;
         }
     }
@@ -995,36 +1024,7 @@ NodeP Parser::statement() {
             w->kids.push_back(body());
             return w;
         }
-        if (t.text == "try") {
-            auto y = make(Node::Try, take().pos);
-            y->kids.push_back(block());
-            for (;;) {  // catch and finally may follow on later lines; nothing else is taken
-                size_t before = index_;
-                skipNewlines();
-                if (isIdent("catch")) {
-                    take();
-                    {
-                        NewlineMode mode(newlines_, false);
-                        expectOp("(");
-                        if (cur().kind != Tok::Ident) fail(cur().pos, "expected the exception's name");
-                        y->names.push_back(take().text);
-                        expectOp(":");
-                        y->typeArgs.push_back(type());
-                        expectOp(")");
-                    }
-                    y->kids.push_back(block());
-                    continue;
-                }
-                if (isIdent("finally")) {
-                    take();
-                    y->flag = true;
-                    y->kids.push_back(block());
-                }
-                else index_ = before;
-                break;
-            }
-            return y;
-        }
+        if (t.text == "try") return tryExpression();
         if (t.text == "do") {
             auto d = make(Node::DoWhile, take().pos);
             d->kids.push_back(body());
@@ -1176,7 +1176,8 @@ NodeP Parser::elvis() {
 // a until b, a downTo b, r step 2, a to b: a name between two operands on one line.
 NodeP Parser::infixCall() {
     NodeP l = range();
-    while (cur().kind == Tok::Ident && !kKeywords.contains(cur().text)) {
+    // (`by` is a name too, as in Kotlin: a soft keyword, delegation's only after a property's name)
+    while (cur().kind == Tok::Ident && !kKeywords.contains(cur().text) && cur().text != "by") {
         auto b = make(Node::Binary, cur().pos);
         b->text = take().text;
         skipNewlines();
@@ -1459,6 +1460,13 @@ NodeP Parser::primary() {
             }
             if (t.text == "if") return ifExpression();
             if (t.text == "when") return whenExpression();
+            if (t.text == "try") return tryExpression();
+            if (t.text == "throw") {  // throw e: an expression (Kotlin's Nothing), x ?: throw … too
+                auto n = make(Node::Unary, take().pos);
+                n->text = "throw";
+                n->kids.push_back(expression());
+                return n;
+            }
             if (t.text == "object" && peekRaw(1).kind == Tok::Op && peekRaw(1).text == ":") return objectExpression();
             if (kKeywords.contains(t.text)) fail("unexpected '" + t.text + "'");
             auto n = make(Node::Name, t.pos);
@@ -1517,6 +1525,38 @@ NodeP Parser::lambda() {
     statements(*l, true);
     expectOp("}");
     return l;
+}
+
+// try { } catch (e: T) { } finally { }: a statement, or a value (the body's or the catching block's last expression).
+NodeP Parser::tryExpression() {
+    auto y = make(Node::Try, take().pos);
+    y->kids.push_back(block());
+    for (;;) {  // catch and finally may follow on later lines; nothing else is taken
+        size_t before = index_;
+        skipNewlines();
+        if (isIdent("catch")) {
+            take();
+            {
+                NewlineMode mode(newlines_, false);
+                expectOp("(");
+                if (cur().kind != Tok::Ident) fail(cur().pos, "expected the exception's name");
+                y->names.push_back(take().text);
+                expectOp(":");
+                y->typeArgs.push_back(type());
+                expectOp(")");
+            }
+            y->kids.push_back(block());
+            continue;
+        }
+        if (isIdent("finally")) {
+            take();
+            y->flag = true;
+            y->kids.push_back(block());
+        }
+        else index_ = before;
+        break;
+    }
+    return y;
 }
 
 NodeP Parser::ifExpression() {
@@ -1605,8 +1645,8 @@ NodeP Parser::string(const Token& t) {
             Parser inner(src_, part.pos);  // ${expression}
             s->kids.push_back(inner.templateExpression());
         } else {
-            auto n = make(Node::Name, part.pos);  // $name
-            n->text = part.text;
+            auto n = make(part.text == "this" ? Node::This : Node::Name, part.pos);  // $name ($this: the receiver)
+            if (n->kind == Node::Name) n->text = part.text;
             s->kids.push_back(std::move(n));
         }
     }

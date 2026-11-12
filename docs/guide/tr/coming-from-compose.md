@@ -202,6 +202,37 @@ fun Wallet() {
 }
 ```
 
+`try` bir ifadedir, `throw` da; Kotlin'in istisnaları ve onlardan türeyen kendi sınıflarınızla. İşlevler aynı adı paylaşabilir (aşırı yükleme); bir `inner class` dış nesnesini tutar; bir enum girdisinin kendi gövdesi olabilir:
+
+```kotlin
+class Refused(val code: Int) : IllegalStateException("refused $code")
+
+fun parsed(text: String): Int = try { text.toInt() } catch (e: NumberFormatException) { -1 }
+fun parsed(text: String, fallback: Int): Int = if (parsed(text) < 0) fallback else parsed(text)
+fun checked(n: Int): Int = if (n >= 0) n else throw Refused(n)
+
+enum class Op {
+    PLUS { override fun apply(a: Int, b: Int) = a + b },
+    TIMES { override fun apply(a: Int, b: Int) = a * b };
+    abstract fun apply(a: Int, b: Int): Int
+}
+
+class Basket {
+    var count by mutableStateOf(0)
+    inner class Adder(val step: Int) {
+        fun add() { count += step }
+    }
+}
+
+@Kompozable
+fun Checkout() {
+    val basket = remember { Basket() }
+    val code = try { checked(-3) } catch (e: Refused) { e.code }
+    Text("${parsed("12")} ${parsed("x", 0)} ${Op.TIMES.apply(3, 4)} $code ${basket.count}")
+    Button(onClick = { basket.Adder(2).add() }) { Text("Ekle") }
+}
+```
+
 Eşyordamlar: bir `LaunchedEffect` ya da `launch` bloğu bir eşyordamdır; içindeki `delay`, `animateScrollToItem`, sizin `suspend fun`'larınız ve öteki bekleyen çağrılar beklenir:
 
 ```kotlin
@@ -254,7 +285,7 @@ Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha so
 
 ## Henüz yok
 
-kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: `vararg`'lı düz, eklenti, tür parametreli, `operator` ve `suspend` işlevler, üst düzey `val`'ler ve eklenti özellikleri, `typealias`, data class'lar (gövdeleriyle de), enum class'lar (kurucu ve gövdeleriyle de), temsilcili (`by`), `lateinit` ve erişimcili özellikleri ve `companion object`'leriyle sınıflar (açık, soyut, tür parametreli; bir ViewModel, bir depo), arayüzler (tür parametreli de), `sealed` sınıflar ile arayüzler, `@Serializable` rotalar, üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri) ve sınıfların içinde bu bildirimler. Henüz okumadıkları onun yanında C++ ile yazılır: ifade olarak `try` (`val x = try { … } catch …`; deyim olarak okunur), aynı adlı iki üst düzey işlev (aşırı yükleme), `inner class`, kendi gövdesi olan bir enum girdisi. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
+kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: `vararg`'lı düz, eklenti, tür parametreli, `operator` ve `suspend` işlevler (aynı adlı olanlar da), üst düzey `val`'ler ve eklenti özellikleri, `typealias`, data class'lar (gövdeleriyle de), enum class'lar (kurucu ve gövdeleriyle, girdilerinin kendi gövdeleriyle de), temsilcili (`by`), `lateinit` ve erişimcili özellikleri ve `companion object`'leriyle sınıflar (açık, soyut, tür parametreli; bir ViewModel, bir depo), arayüzler (tür parametreli de), `sealed` sınıflar ile arayüzler, `@Serializable` rotalar, üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri), sınıfların içinde bu bildirimler ve inner class'lar, Kotlin'in istisnalarıyla ifade olarak `try` ve `throw`. Henüz okumadıkları onun yanında C++ ile yazılır: kurucusu olan bir sealed sınıf (alanları alt sınıfları tutar), başka birinin içinde bir sealed sınıf ya da tür parametreli bir sınıf (üst düzeyde bildirilince okunurlar), bir sınıftan başka bir şeyin inner class'ı. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
 
 kompozc olmadan Kompoz'un composable'ları C++ ile yazılır: [C++ ile yazmak](cpp.md), Kotlin'in her yapısının orada nasıl okunduğunu gösterir.
 

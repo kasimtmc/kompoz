@@ -1143,6 +1143,37 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **try as an expression, throw, Kotlin's exceptions**: `val n = try { text.toInt() } catch (e: NumberFormatException) { 0 }
+  finally { … }` (the body's or the catching block's last expression; a lambda's last one too), `throw
+  IllegalStateException("…")` as a statement and as a value (`x ?: throw …`), `throw e` throwing the caught one again as it
+  was thrown. Kotlin's exceptions are kt's (`Exception`, `RuntimeException`, `IllegalStateException`,
+  `IllegalArgumentException`, `NumberFormatException`, `NoSuchElementException`, `IndexOutOfBoundsException`,
+  `UnsupportedOperationException`, `ArithmeticException`, `NullPointerException`, `ClassCastException`,
+  `UninitializedPropertyAccessException`, `Error`, `NotImplementedError`), deriving from one another as Kotlin's do, and a
+  Kotlin class may derive from them (`class Refused(val code: Int) : IllegalStateException("…")`); `catch (e: Exception)`
+  catches C++'s too; `e.message` is a `String?`, `"$e"` Kotlin's text (`Refused: …`). kt's functions throw Kotlin's:
+  `check` and `require` (with a lazy message too: `check(ok) { "…" }`; without one, Kotlin's), `error`, `TODO`, `!!` (on null
+  it was undefined behavior), `toInt()`, `toLong()`, `toFloat()`, `toDouble()` (which now read all of the text: `"12abc".toInt()`
+  gave 12), `first()`, `as`, a lateinit read early, `valueOf`.
+- **Overloads**: functions of one name taking different parameters, at the top level (in several files too), as
+  extensions, composables, a class's and an interface's (each overridden by its parameters). kompozc chooses as Kotlin
+  does where it can see it: by the arguments' number and names, a trailing lambda, a literal's type (`"x"` doesn't go to
+  an `Int`), the one needing no default before one that does; between those differing only in their types, C++ chooses
+  (`describe(count)`). A top-level overload's defaults are given by its calls (C++'s own would make `f(x)` ambiguous
+  with `f(x, n = 1)`).
+- **inner class**: an object holding its outer one, made as `tally.Counter(5)`, or `Counter(2)` in the outer class; its
+  body reaches the outer object's members by their names (its own first, private ones too, as Kotlin's do), and
+  `this@Tally` is the outer object; an inner class's inner class reaches both. In C++ it is defined in the outer class,
+  after its object, holding that object shared (`kt::Shared`; one made while the outer one is still being made reaches
+  it alone: the outer one keeps it).
+- **An enum entry with a body of its own**: `PLUS("+") { override fun apply(a: Int, b: Int) = a + b; override val loud =
+  true }`, overriding an abstract or open fun, an open val or `toString`; each such member is a function of the enum
+  choosing by the entry, the class's own for the entries without one.
+- Fixed: `by` is a name too (`fun note(by: Int)`), as in Kotlin; `joinToString` ignored its transform lambda and took no
+  prefix, postfix or limit; `substringBefore`, `substringAfter`, `substringBeforeLast` and `substringAfterLast` were
+  missing; a base class's arguments read a val parameter's member before it was set (`class A(val x: Int) : Base(x)`);
+  `$this` in a string template; `+=` and `++` on an implicit receiver's member; a Kotlin class's function named as one
+  of Kotlin's standard ones (`take`, `filter`, …) went to the standard one.
 - **companion object**: in classes, data classes and interfaces, its members the class's static ones (`Ledger.create()`,
   `Ledger.made`, `Money.Zero`; by their names inside the class). Its properties are static functions holding their
   value, made the first time they are read (`val Zero = Money(0)`: the class isn't complete where its members are

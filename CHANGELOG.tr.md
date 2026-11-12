@@ -1180,6 +1180,37 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **İfade olarak try, throw, Kotlin'in istisnaları**: `val n = try { text.toInt() } catch (e: NumberFormatException) { 0 }
+  finally { … }` (gövdenin ya da yakalayan bloğun son ifadesi; bir lambdanın sonuncusu da), deyim ve değer olarak `throw
+  IllegalStateException("…")` (`x ?: throw …`), yakalananı atıldığı gibi yeniden atan `throw e`. Kotlin'in istisnaları
+  kt'nin sınıflarıdır (`Exception`, `RuntimeException`, `IllegalStateException`, `IllegalArgumentException`,
+  `NumberFormatException`, `NoSuchElementException`, `IndexOutOfBoundsException`, `UnsupportedOperationException`,
+  `ArithmeticException`, `NullPointerException`, `ClassCastException`, `UninitializedPropertyAccessException`, `Error`,
+  `NotImplementedError`), Kotlin'dekiler gibi birbirinden türer; bir Kotlin sınıfı da onlardan türeyebilir (`class
+  Refused(val code: Int) : IllegalStateException("…")`). `catch (e: Exception)` C++'ın istisnalarını da yakalar;
+  `e.message` bir `String?`, `"$e"` Kotlin'in metni (`Refused: …`). kt'nin işlevleri Kotlin'inkileri atar: `check` ve
+  `require` (tembel iletiyle de: `check(ok) { "…" }`; iletisiz Kotlin'inki), `error`, `TODO`, `!!` (null'da tanımsız
+  davranıştı), `toInt()`, `toLong()`, `toFloat()`, `toDouble()` (artık metnin tamamını okurlar: `"12abc".toInt()` 12
+  veriyordu), `first()`, `as`, erken okunan bir lateinit, `valueOf`.
+- **Aşırı yükleme**: farklı parametreler alan aynı adlı işlevler; üst düzeyde (birkaç dosyada da), eklenti, composable,
+  bir sınıfın ve bir arayüzün işlevi olarak (her biri parametreleriyle ezilir). kompozc, görebildiği yerde Kotlin gibi
+  seçer: bağımsız değişkenlerin sayısı ve adları, sondaki lambda, bir sabitin türü (`"x"` bir `Int`'e gitmez),
+  varsayılana gerek duymayan önce; yalnızca türleriyle ayrılanlar arasında C++ seçer (`describe(count)`). Üst düzey
+  aşırı yüklemelerin varsayılanlarını çağrıları verir (C++'ınkiler `f(x)`'i `f(x, n = 1)` ile belirsiz yapardı).
+- **inner class**: dış nesnesini tutan bir nesne; `tally.Counter(5)` ile ya da dış sınıfın içinde `Counter(2)` ile
+  yapılır. Gövdesi dış nesnenin üyelerine adlarıyla ulaşır (önce kendininkiler, Kotlin'deki gibi özel olanlar da),
+  `this@Tally` dış nesnedir; bir inner class'ın inner class'ı ikisine de ulaşır. C++'ta dış sınıfın içinde, nesnesinden
+  sonra tanımlanır ve o nesneyi paylaşarak tutar (`kt::Shared`; dış nesne daha yapılırken yapılan biri ona tek başına
+  ulaşır: dış nesne onu tutar).
+- **Kendi gövdesi olan bir enum girdisi**: `PLUS("+") { override fun apply(a: Int, b: Int) = a + b; override val loud =
+  true }`; soyut ya da açık bir fun'ı, açık bir val'i ya da `toString`'i ezer. Böyle her üye, enum'un girdiye göre
+  seçen bir işlevidir; gövdesi olmayan girdiler için sınıfın kendi gövdesi.
+- Düzeltildi: `by` Kotlin'deki gibi bir ad da olabilir (`fun note(by: Int)`); `joinToString` dönüşüm lambdasını yok
+  sayıyordu, önek, sonek ve sınır almıyordu; `substringBefore`, `substringAfter`, `substringBeforeLast` ve
+  `substringAfterLast` yoktu; temel sınıfa verilen bağımsız değişkenler bir val parametresinin üyesini o kurulmadan
+  okuyordu (`class A(val x: Int) : Base(x)`); bir dizgi şablonundaki `$this`; örtük bir alıcının üyesinde `+=` ve `++`;
+  bir Kotlin sınıfının Kotlin'in standart işlevlerinden biriyle (`take`, `filter`, …) aynı adlı işlevi standart olana
+  gidiyordu.
 - **companion object**: sınıflarda, data class'larda ve arayüzlerde; üyeleri sınıfın statik üyeleridir (`Ledger.create()`,
   `Ledger.made`, `Money.Zero`; sınıfın içinde adlarıyla). Özellikleri, değerini ilk okunuşta yapıp tutan statik işlevlerdir
   (`val Zero = Money(0)`: sınıf, üyelerinin bildirildiği yerde tamam değildir); bir var'ınki ayarlayıcısıyla.

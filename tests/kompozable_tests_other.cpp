@@ -17,6 +17,9 @@ val StickerGreeting = "selam " + Shout
 
 private val Shout = "!"
 
+// An overload of kompozable_tests.cpp's describe: one name's functions may be in several files.
+fun describe(d: Double): String = "ondalık $d"
+
 // An interface of this file, implemented in kompozable_tests.cpp (an object, a data class).
 interface Emblem {
     val text: String

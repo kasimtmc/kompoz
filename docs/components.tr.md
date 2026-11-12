@@ -616,6 +616,11 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 388. Eklenti özellikleri (`val String.shout get() = …`, ayarlayıcılı bir `var`, tür parametreli olanlar) ✅
 389. `vararg` parametreleri, `*liste` açma ✅
 390. `lateinit var` ✅
+391. İfade olarak `try`, `throw` (değer olarak da: `x ?: throw …`), Kotlin'in istisnaları (`IllegalStateException`, `NumberFormatException`, … ve onlardan türeyen sınıflar), `e.message` ✅
+392. Aşırı yükleme: farklı parametreler alan aynı adlı işlevler (üst düzey, eklenti, composable, bir sınıfın ve bir arayüzün) ✅
+393. `inner class` (`dış.İç(…)`, `this@Dış`) ✅
+394. Kendi gövdesi olan bir enum girdisi (soyut ya da açık bir fun'ı, açık bir val'i, `toString`'i ezen) ✅
+395. `joinToString(separator, prefix, postfix, limit) { dönüşüm }`, `substringBefore` / `After` / `BeforeLast` / `AfterLast` ✅
 
 ## Sıradakiler
 

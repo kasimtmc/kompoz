@@ -121,12 +121,88 @@ decltype(auto) getOr(F&& member, E&& extension, T&& object) {
     if constexpr (std::is_same_v<std::remove_cvref_t<decltype(member(deref(object)))>, NoMember>) return extension(std::forward<T>(object));
     else return member(deref(std::forward<T>(object)));
 }
+// obj.take(x) where a Kotlin class has a take of its own: its member where it takes the arguments, else Kotlin's (kt's).
+template <class F, class E, class T, class... A>
+decltype(auto) callOr(F&& member, E&& standard, T&& object, A&&... args) {
+    if constexpr (std::is_invocable_v<F&, T&, A&&...>) return member(object, std::forward<A>(args)...);
+    else return standard(object, std::forward<A>(args)...);
+}
 template <class F, class E, class T, class V>
 void setOr(F&& member, E&& extension, T&& object, V&& value) {
     if constexpr (std::is_same_v<decltype(member(deref(object), value)), NoMember>) extension(std::forward<T>(object), std::forward<V>(value));
     else member(deref(std::forward<T>(object)), std::forward<V>(value));
 }
 }  // namespace detail
+
+// ---- Inner classes: outer.Counter(…) holds its outer object ----
+
+// A Kotlin class's object that inner classes' objects hold (Outer::Object derives from it): shared, so one made in
+// it reaches it as its handles do.
+struct Shared : std::enable_shared_from_this<Shared> {
+    virtual ~Shared() = default;
+};
+// The object `self` as an inner object made in it holds it: shared with its handles (it lives while the inner one
+// does, as Kotlin's); while it is still being made (its properties' values, its init blocks) it isn't shared yet,
+// and is reached alone (an inner object made then is kept by it, as a rule).
+template <class T>
+std::shared_ptr<T> selfOf(const T* self) {
+    T* object = const_cast<T*>(self);
+    if (auto owner = static_cast<const Shared*>(self)->weak_from_this().lock()) return std::shared_ptr<T>(std::const_pointer_cast<Shared>(owner), object);
+    return std::shared_ptr<T>(std::shared_ptr<T>(), object);
+}
+// outer.Counter(…): what the inner object holds of `outer`, its object (shared); of a class with a C++ base (a
+// ViewModel's: its owner keeps it), the class itself.
+template <class T>
+auto outerOf(const T& outer) {
+    if constexpr (requires { outer.kompoz_shared(); }) return outer.kompoz_shared();
+    else return const_cast<std::remove_cvref_t<decltype(deref(outer))>*>(&deref(outer));
+}
+
+// ---- Exceptions: throw IllegalStateException("…"), catch (e: IllegalArgumentException) ----
+//
+// Kotlin's exceptions by their names and as they derive from one another (a NumberFormatException is an
+// IllegalArgumentException, a RuntimeException...), thrown by Kotlin code and by kt's functions where
+// Kotlin's throw (check, require, error, !!, toInt, first...). A message is a String?: none, or text.
+// catch (e: Exception) and catch (e: Throwable) are std::exception's: they catch C++'s exceptions too.
+class Throwable : public std::exception {
+public:
+    Throwable() = default;
+    explicit Throwable(std::optional<std::string> message) : message_(std::move(message)) {}
+    const char* what() const noexcept override { return message_ ? message_->c_str() : ""; }
+    const std::optional<std::string>& message() const { return message_; }
+    virtual const char* kotlinName() const { return "Throwable"; }  // (its text: "IllegalStateException: …")
+
+private:
+    std::optional<std::string> message_;
+};
+
+#define KOMPOZ_KT_EXCEPTION(Name, Base)                                 \
+    class Name : public Base {                                          \
+    public:                                                             \
+        using Base::Base;                                               \
+        const char* kotlinName() const override { return #Name; }      \
+    };
+KOMPOZ_KT_EXCEPTION(Exception, Throwable)
+KOMPOZ_KT_EXCEPTION(Error, Throwable)
+KOMPOZ_KT_EXCEPTION(NotImplementedError, Error)
+KOMPOZ_KT_EXCEPTION(RuntimeException, Exception)
+KOMPOZ_KT_EXCEPTION(IllegalStateException, RuntimeException)
+KOMPOZ_KT_EXCEPTION(IllegalArgumentException, RuntimeException)
+KOMPOZ_KT_EXCEPTION(NumberFormatException, IllegalArgumentException)
+KOMPOZ_KT_EXCEPTION(IndexOutOfBoundsException, RuntimeException)
+KOMPOZ_KT_EXCEPTION(NoSuchElementException, RuntimeException)
+KOMPOZ_KT_EXCEPTION(UnsupportedOperationException, RuntimeException)
+KOMPOZ_KT_EXCEPTION(ArithmeticException, RuntimeException)
+KOMPOZ_KT_EXCEPTION(NullPointerException, RuntimeException)
+KOMPOZ_KT_EXCEPTION(ClassCastException, RuntimeException)
+KOMPOZ_KT_EXCEPTION(UninitializedPropertyAccessException, RuntimeException)
+#undef KOMPOZ_KT_EXCEPTION
+
+// A caught exception's message (e.message): a Kotlin one's, or a C++ one's what().
+inline std::optional<std::string> message(const std::exception& e) {
+    if (auto* t = dynamic_cast<const Throwable*>(&e)) return t->message();
+    return std::string(e.what());
+}
 
 // ---- Strings: "Count: $count" ----
 
@@ -184,6 +260,13 @@ void append(std::string& out, const T& v) {
         out += std::to_string(v);
     } else if constexpr (std::is_convertible_v<const T&, std::string_view>) {
         out += std::string_view(v);
+    } else if constexpr (std::is_base_of_v<std::exception, D>) {  // an exception: "IllegalStateException: its message"
+        if (auto* t = dynamic_cast<const Throwable*>(&v)) {
+            out += t->kotlinName();
+            if (t->message()) out += ": " + *t->message();
+        } else {
+            out += v.what();
+        }
     } else if constexpr (requires { v.toString(); }) {  // (its own first: a data class with fields first and second isn't a Pair)
         out += v.toString();
     } else if constexpr (requires { kompoz_kt_property_name(v); }) {  // an enum: its entry's name
@@ -252,8 +335,13 @@ bool isNull(const T& v) {
 // x!!: the value of a nullable.
 template <class T>
 decltype(auto) notNull(T&& v) {
-    if constexpr (requires { v.has_value(); *v; }) return *std::forward<T>(v);
-    else if constexpr (PointerLike<T>) return (*v);  // (a pointer, a shared_ptr: the object)
+    if constexpr (requires { v.has_value(); *v; }) {
+        if (!v.has_value()) throw NullPointerException();
+        return *std::forward<T>(v);
+    } else if constexpr (PointerLike<T>) {  // (a pointer, a shared_ptr: the object)
+        if (!v) throw NullPointerException();
+        return (*v);
+    }
     else return std::forward<T>(v);
 }
 
@@ -449,7 +537,7 @@ template <class E>
 E enumValueOf(std::string_view name) {
     for (const E& e : enumEntries<E>())
         if (kompoz_kt_property_name(e) == name) return e;
-    throw std::invalid_argument("No enum constant " + std::string(name));
+    throw IllegalArgumentException("No enum constant " + std::string(name));
 }
 
 // A map's keys and values (map.keys, map.values), as lists; of anything else, its member of the name.
@@ -685,7 +773,7 @@ auto lazy(F make) -> Lazy<std::decay_t<std::invoke_result_t<F&>>> {
 // lateinit var name: T: its value once set; read before, Kotlin's UninitializedPropertyAccessException.
 template <class T>
 const T& initialized(const std::optional<T>& value, std::string_view name) {
-    if (!value) throw std::logic_error("lateinit property " + std::string(name) + " has not been initialized");
+    if (!value) throw UninitializedPropertyAccessException("lateinit property " + std::string(name) + " has not been initialized");
     return *value;
 }
 
@@ -817,24 +905,43 @@ template <class A, class B>
 auto minOf(const A& a, const B& b) {
     return b < a ? b : a;
 }
-template <class F = int>
-void require(bool condition, F&& message = 0) {
-    if (!condition) throw std::invalid_argument(str(message));
+namespace detail {
+struct NoMessage {};
+// require(c) { "…" } / check(c) { "…" }: the lambda's text, made only when it fails; with none, Kotlin's own.
+template <class F>
+std::string lazyMessage(F& message, const char* none) {
+    if constexpr (std::is_same_v<std::decay_t<F>, NoMessage>) return none;
+    else if constexpr (std::is_invocable_v<F&>) return str(message());
+    else return str(message);
 }
-template <class F = int>
-void check(bool condition, F&& message = 0) {
-    if (!condition) throw std::logic_error(str(message));
+}  // namespace detail
+template <class F = detail::NoMessage>
+void require(bool condition, F&& message = {}) {
+    if (!condition) throw IllegalArgumentException(detail::lazyMessage(message, "Failed requirement."));
+}
+template <class F = detail::NoMessage>
+void check(bool condition, F&& message = {}) {
+    if (!condition) throw IllegalStateException(detail::lazyMessage(message, "Check failed."));
 }
 // Kotlin's Nothing: what error() and TODO() give, as they never return. It goes for a value of any
 // type: kompozitionLocalOf<User> { error("…") }, x ?: error("…").
 struct Nothing {
     template <class T>
     [[noreturn]] operator T() const {
-        throw std::logic_error("kompoz: Nothing has no value");
+        throw IllegalStateException("kompoz: Nothing has no value");
     }
 };
-[[noreturn]] inline Nothing error(const std::string& message) { throw std::logic_error(message); }
-[[noreturn]] inline Nothing TODO(const std::string& reason = "") { throw std::logic_error("not implemented: " + reason); }
+[[noreturn]] inline Nothing error(const std::string& message) { throw IllegalStateException(message); }
+[[noreturn]] inline Nothing TODO(const std::string& reason = "") {
+    throw NotImplementedError(reason.empty() ? "An operation is not implemented." : "An operation is not implemented: " + reason);
+}
+// throw e as a value (x ?: throw IllegalStateException("…")): it goes for any type, as error()'s does.
+template <class E>
+[[noreturn]] Nothing raise(E&& e) {
+    throw std::forward<E>(e);
+}
+// throw e of the exception just caught: it again, as it was thrown (not a copy of what the catch names).
+[[noreturn]] inline Nothing rethrow() { throw; }
 
 // ---- Members of Kotlin's standard types: kt::trim(text) for text.trim() ----
 //
@@ -975,25 +1082,48 @@ std::string lowercase(const C& c, A&&... args) {
         return s;
     }
 }
+namespace detail {
+// Text as a number, as Kotlin's toInt(), toDouble()... read it: all of it, else a NumberFormatException.
+template <class N>
+N parseNumber(std::string_view text) {
+    std::string_view s = text;
+    N n{};
+    bool read;
+    if constexpr (std::is_floating_point_v<N>) {  // (Java's parseDouble: blanks around it are let be)
+        while (!s.empty() && (unsigned char)s.front() <= ' ') s.remove_prefix(1);
+        while (!s.empty() && (unsigned char)s.back() <= ' ') s.remove_suffix(1);
+        std::string held(s);
+        char* end = nullptr;
+        n = N(std::strtod(held.c_str(), &end));
+        read = !held.empty() && end == held.c_str() + held.size();
+    } else {
+        if (s.size() > 1 && s[0] == '+' && s[1] != '-') s.remove_prefix(1);
+        auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), n);
+        read = !s.empty() && ec == std::errc() && end == s.data() + s.size();
+    }
+    if (!read) throw NumberFormatException("For input string: \"" + std::string(text) + "\"");
+    return n;
+}
+}  // namespace detail
 template <class C, class... A>
 auto toInt(const C& c, A&&... args) {
     KOMPOZ_KT_OWN(toInt()) if constexpr (std::is_arithmetic_v<C>) return int(c);
-    else return std::stoi(std::string(c));
+    else return detail::parseNumber<int>(c);
 }
 template <class C, class... A>
 auto toLong(const C& c, A&&... args) {
     KOMPOZ_KT_OWN(toLong()) if constexpr (std::is_arithmetic_v<C>) return (long long)(c);
-    else return std::stoll(std::string(c));
+    else return detail::parseNumber<long long>(c);
 }
 template <class C, class... A>
 auto toFloat(const C& c, A&&... args) {
     KOMPOZ_KT_OWN(toFloat()) if constexpr (std::is_arithmetic_v<C>) return float(c);
-    else return std::stof(std::string(c));
+    else return detail::parseNumber<float>(c);
 }
 template <class C, class... A>
 auto toDouble(const C& c, A&&... args) {
     KOMPOZ_KT_OWN(toDouble()) if constexpr (std::is_arithmetic_v<C>) return double(c);
-    else return std::stod(std::string(c));
+    else return detail::parseNumber<double>(c);
 }
 template <class C, class... A>
 std::string toString(const C& c, A&&... args) {
@@ -1004,9 +1134,9 @@ decltype(auto) first(C&& c, A&&... args) {
     if constexpr (sizeof...(A) == 1) {  // first { predicate }: the first that matches
         for (auto&& v : c)
             if ((args(v), ...)) return detail::Element<C>(v);
-        throw std::out_of_range("no element matches the predicate");
+        throw NoSuchElementException("Collection contains no element matching the predicate.");
     } else KOMPOZ_KT_OWN(first()) {
-        if (std::begin(c) == std::end(c)) throw std::out_of_range("the list is empty");
+        if (std::begin(c) == std::end(c)) throw NoSuchElementException("List is empty.");
         // The element itself from a list that stays (event.changes.first().consume()); a copy from one that goes.
         if constexpr (std::is_lvalue_reference_v<C>) return (*std::begin(c));
         else return std::remove_cvref_t<decltype(*std::begin(c))>(*std::begin(c));
@@ -1018,10 +1148,10 @@ decltype(auto) last(const C& c, A&&... args) {
         std::optional<detail::Element<C>> found;
         for (const auto& v : c)
             if ((args(v), ...)) found.emplace(v);
-        if (!found) throw std::out_of_range("no element matches the predicate");
+        if (!found) throw NoSuchElementException("Collection contains no element matching the predicate.");
         return detail::Element<C>(*found);  // (a value: found goes)
     } else KOMPOZ_KT_OWN(last()) {
-        if (std::begin(c) == std::end(c)) throw std::out_of_range("the list is empty");
+        if (std::begin(c) == std::end(c)) throw NoSuchElementException("List is empty.");
         return *std::prev(std::end(c));
     }
 }
@@ -1051,16 +1181,29 @@ auto lastOrNull(const C& c, A&&... args) {
 template <class C, class... A>
 std::string joinToString(const C& c, A&&... args) {
     KOMPOZ_KT_OWN(joinToString(args...)) {
-        std::string separator = ", ";
-        if constexpr (sizeof...(A) > 0) separator = std::string(std::get<0>(std::forward_as_tuple(args...)));
-        std::string out;
-        bool any = false;
+        // Kotlin's (separator, prefix, postfix, limit, truncated, transform): the texts in that order, a number the
+        // limit, a function (the trailing lambda) each element's text.
+        std::string texts[4] = {", ", "", "", "..."};
+        int given = 0, limit = -1;
+        std::function<std::string(const detail::Element<C>&)> transform;
+        auto take = [&](auto&& a) {
+            using T = std::decay_t<decltype(a)>;
+            if constexpr (std::is_invocable_v<T&, const detail::Element<C>&>) transform = [&a](const detail::Element<C>& v) { return str(a(v)); };
+            else if constexpr (std::is_integral_v<T>) limit = int(a), given = std::max(given, 3);
+            else if (given < 4) texts[given == 3 ? 3 : given++] = std::string(a);
+        };
+        (take(args), ...);
+        std::string out = texts[1];
+        int count = 0;
         for (const auto& v : c) {
-            if (any) out += separator;
-            any = true;
-            out += str(v);
+            if (limit >= 0 && count == limit) {
+                out += texts[0] + texts[3];
+                break;
+            }
+            if (count++) out += texts[0];
+            out += transform ? transform(v) : str(v);
         }
-        return out;
+        return out + texts[2];
     }
 }
 template <class C, class X, class... A>
@@ -1078,6 +1221,36 @@ std::string substring(const C& c, int from, A&&... args) {
         if constexpr (sizeof...(A) > 0) return std::string(v.substr(size_t(from), size_t(int(std::get<0>(std::forward_as_tuple(args...))) - from)));
         else return std::string(v.substr(size_t(from)));
     }
+}
+// text.substringBefore(":") / After / BeforeLast / AfterLast: around the delimiter's first or last place (a String or
+// a Char); without it, the text itself, or what is given for that (missingDelimiterValue).
+namespace detail {
+template <class C, class D, class... A>
+std::string substringAround(const C& c, const D& delimiter, bool last, bool after, A&&... missing) {
+    std::string text{std::string_view(c)}, d = str(delimiter);
+    size_t at = last ? text.rfind(d) : text.find(d);
+    if (at == std::string::npos) {
+        if constexpr (sizeof...(A) > 0) return std::string(std::get<0>(std::forward_as_tuple(missing...)));
+        else return text;
+    }
+    return after ? text.substr(at + d.size()) : text.substr(0, at);
+}
+}  // namespace detail
+template <class C, class D, class... A>
+std::string substringBefore(const C& c, const D& d, A&&... args) {
+    KOMPOZ_KT_OWN(substringBefore(d, args...)) return detail::substringAround(c, d, false, false, std::forward<A>(args)...);
+}
+template <class C, class D, class... A>
+std::string substringAfter(const C& c, const D& d, A&&... args) {
+    KOMPOZ_KT_OWN(substringAfter(d, args...)) return detail::substringAround(c, d, false, true, std::forward<A>(args)...);
+}
+template <class C, class D, class... A>
+std::string substringBeforeLast(const C& c, const D& d, A&&... args) {
+    KOMPOZ_KT_OWN(substringBeforeLast(d, args...)) return detail::substringAround(c, d, true, false, std::forward<A>(args)...);
+}
+template <class C, class D, class... A>
+std::string substringAfterLast(const C& c, const D& d, A&&... args) {
+    KOMPOZ_KT_OWN(substringAfterLast(d, args...)) return detail::substringAround(c, d, true, true, std::forward<A>(args)...);
 }
 template <class C, class... A>
 auto reversed(const C& c, A&&... args) {
@@ -1276,7 +1449,7 @@ template <class C, class F, class... A>
 auto maxOf(const C& c, F&& f, A&&... args) {
     KOMPOZ_KT_OWN(maxOf(f)) {
         auto it = std::begin(c);
-        if (it == std::end(c)) throw std::out_of_range("maxOf of an empty collection");
+        if (it == std::end(c)) throw NoSuchElementException();
         auto best = f(*it);
         for (++it; it != std::end(c); ++it)
             if (auto v = f(*it); best < v) best = v;
@@ -1288,7 +1461,7 @@ template <class C, class F, class... A>
 auto minOf(const C& c, F&& f, A&&... args) {
     KOMPOZ_KT_OWN(minOf(f)) {
         auto it = std::begin(c);
-        if (it == std::end(c)) throw std::out_of_range("minOf of an empty collection");
+        if (it == std::end(c)) throw NoSuchElementException();
         auto best = f(*it);
         for (++it; it != std::end(c); ++it)
             if (auto v = f(*it); v < best) best = v;
@@ -1838,18 +2011,21 @@ decltype(auto) as(const V& value) {
         return T(value);
     } else if constexpr (detail::sharesObject<V> && detail::HasObject<T>) {
         auto object = std::dynamic_pointer_cast<typename T::Object>(detail::sharedOf(value));
-        if (!object) throw std::bad_cast();  // (Kotlin's ClassCastException)
+        if (!object) throw ClassCastException();
         return T(T::kompoz_from(object));
     } else if constexpr (detail::sharesObject<V> && detail::sharedPointer<T>) {
         auto object = std::dynamic_pointer_cast<typename T::element_type>(detail::sharedOf(value));
-        if (!object) throw std::bad_cast();
+        if (!object) throw ClassCastException();
         return T(object);
     } else if constexpr (!detail::sharesObject<V> && std::is_convertible_v<const V&, T>) {
         return T(value);
     } else {
     const auto& v = deref(value);
     using U = std::remove_cvref_t<decltype(v)>;
-    if constexpr (detail::Sealed<U> && detail::alternativeOf<T, decltype(v.kompoz_value)>) return std::get<T>(v.kompoz_value);
+    if constexpr (detail::Sealed<U> && detail::alternativeOf<T, decltype(v.kompoz_value)>) {
+        if (!std::holds_alternative<T>(v.kompoz_value)) throw ClassCastException();
+        return std::get<T>(v.kompoz_value);
+    }
     else return static_cast<T>(v);
     }
 }

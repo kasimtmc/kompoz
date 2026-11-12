@@ -4,6 +4,7 @@
 
 #include "lexer.hpp"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <optional>
@@ -132,6 +133,27 @@ struct Function {
     Pos end;                         // just past the closing brace
 };
 
+// Whether two types are written alike (a name with its outer types or alone: Catalog.Entry is Entry inside Catalog).
+inline bool sameType(const Type& a, const Type& b) {
+    auto last = [](const std::string& n) { return n.substr(n.rfind('.') + 1); };
+    if (last(a.name) != last(b.name) || a.nullable != b.nullable || a.function != b.function || a.args.size() != b.args.size() ||
+        a.params.size() != b.params.size() || bool(a.result) != bool(b.result) || bool(a.receiver) != bool(b.receiver))
+        return false;
+    for (size_t i = 0; i < a.args.size(); ++i)
+        if (!sameType(a.args[i], b.args[i])) return false;
+    for (size_t i = 0; i < a.params.size(); ++i)
+        if (!sameType(a.params[i], b.params[i])) return false;
+    return (!a.result || sameType(*a.result, *b.result)) && (!a.receiver || sameType(*a.receiver, *b.receiver));
+}
+// Whether two functions take the same parameters (and receiver): overloads of a name differ in them.
+inline bool sameParams(const Function& a, const Function& b) {
+    if (a.params.size() != b.params.size() || bool(a.receiver) != bool(b.receiver) || (a.receiver && !sameType(*a.receiver, *b.receiver)))
+        return false;
+    for (size_t i = 0; i < a.params.size(); ++i)
+        if (!sameType(a.params[i].type, b.params[i].type)) return false;
+    return true;
+}
+
 // A top-level property: [private] val name[: Type] = value.
 struct Property {
     std::string name;
@@ -157,6 +179,8 @@ struct NestedDecls {
     std::vector<std::shared_ptr<EnumClass>> enums;
     std::vector<std::shared_ptr<ObjectDecl>> objects;
     std::vector<std::shared_ptr<InterfaceDecl>> interfaces;
+    // inner class: one holding its outer object (made as outer.Inner(…)); defined in the outer class, not with these
+    std::vector<std::shared_ptr<ClassDecl>> innerClasses;
     bool empty() const { return classes.empty() && dataClasses.empty() && enums.empty() && objects.empty() && interfaces.empty(); }
 };
 
@@ -244,9 +268,17 @@ struct ObjectDecl {
 // An enum class: enum class Name { A, B, C } (entries only: C++'s enum class), or enum class Name(val a: T) { A(1),
 // B(2); val b = …; fun f() = … } (a constructor or a body: a struct of its fields, its entries its constants).
 // (C++'s with values, enum class X { A = 1 }, is C++ and stays as it is.)
+// An enum entry's body: PLUS { override fun apply(a: Int, b: Int) = a + b }: what it overrides of its class's.
+struct EnumEntryBody {
+    std::vector<ClassProperty> properties;
+    std::vector<Function> methods;
+    Pos pos;
+};
+
 struct EnumClass {
     std::string name;
     std::vector<std::string> entries;
+    std::vector<std::shared_ptr<EnumEntryBody>> entryBodies;  // each entry's (none: it has none)
     std::vector<std::vector<NodeP>> entryArgs;           // each entry's constructor arguments
     std::vector<std::vector<std::string>> entryArgNames; // and their names ("" by position)
     std::vector<Param> ctorParams;  // (val/var or not: each a field)
@@ -255,7 +287,10 @@ struct EnumClass {
     std::vector<size_t> order;
     std::vector<NodeP> initBlocks;
     std::shared_ptr<ObjectDecl> companion;
-    bool rich() const { return !ctorParams.empty() || !properties.empty() || !methods.empty() || !initBlocks.empty() || companion; }
+    bool rich() const {
+        return !ctorParams.empty() || !properties.empty() || !methods.empty() || !initBlocks.empty() || companion ||
+               std::any_of(entryBodies.begin(), entryBodies.end(), [](const auto& b) { return b != nullptr; });
+    }
     Pos pos;
     Pos end;
 };
