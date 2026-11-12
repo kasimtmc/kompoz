@@ -1143,6 +1143,12 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Kotlin's order of evaluation**: a call's arguments are evaluated in the order they are written (named ones as
+  written, not as declared: `Spot(y = next(), x = next())`), and so are a string template's parts and an operator's
+  operands (`next() * 10 + next()`), as Kotlin does: C++ leaves them unordered (GCC went right to left). Where two of
+  them could see each other's effects (one calls a module function, a member that isn't a pure one, increments or
+  assigns; the other isn't a constant, a lambda or a val), kompozc evaluates them through `kt::Args{…}` (a braced list,
+  in order, each its value then: `pairOf(i, i++)` is given 0, 0) and makes the call on them (`kt::inOrder`).
 - **A data class's body**: `data class Receipt(val item: String, val price: Int) { val total = …; val isBig get() = …;
   val label by lazy { … }; init { require(…) }; fun withTax(rate: Int) = … }`. Its functions are const members, a
   property with a value is computed as the value is made, a getter's each time; `==`, `toString()` and `copy()` are its

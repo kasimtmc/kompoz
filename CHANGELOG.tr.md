@@ -1180,6 +1180,13 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Kotlin'in değerlendirme sırası**: bir çağrının argümanları yazıldıkları sırayla değerlendirilir (adlı olanlar
+  bildirildikleri değil yazıldıkları sırayla: `Spot(y = next(), x = next())`); bir metin şablonunun parçaları ve bir
+  işlecin işlenenleri de (`next() * 10 + next()`), Kotlin'deki gibi: C++ bunların sırasını belirlemez (GCC sağdan sola
+  gidiyordu). İkisi birbirinin etkisini görebilecekse (biri modülün bir işlevini, saf olmayan bir üyeyi çağırıyor,
+  artırıyor ya da atıyorsa; öteki bir sabit, bir lambda ya da bir val değilse), kompozc onları `kt::Args{…}` ile
+  (sırayla değerlendirilen süslü bir liste, her biri o anki değeriyle: `pairOf(i, i++)` 0, 0 alır) değerlendirip çağrıyı
+  onlarla yapar (`kt::inOrder`).
 - **Bir data class'ın gövdesi**: `data class Receipt(val item: String, val price: Int) { val total = …; val isBig get() = …;
   val label by lazy { … }; init { require(…) }; fun withTax(rate: Int) = … }`. İşlevleri const üyelerdir; değeri verilen bir
   özellik değer yapılırken, getter'lı biri her okunuşta hesaplanır; `==`, `toString()` ve `copy()` Kotlin'deki gibi

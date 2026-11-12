@@ -147,6 +147,19 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "mapNotNull", "filterIndexed", "distinctBy", "takeUnless", "groupBy", "associateBy", "associateWith", "chunked", "partition",
     "ifEmpty", "ifBlank", "shuffle", "isDigit", "isLetter", "isLetterOrDigit", "isWhitespace", "isUpperCase", "isLowerCase"};
 
+// Kotlin's members that change nothing (what else a value's member call does may be anything: next(), add(x)).
+const std::set<std::string, std::less<>> kPureMembers = {
+    "map", "mapIndexed", "filter", "filterNot", "isEmpty", "isNotEmpty", "isBlank", "isNotBlank", "trim", "trimIndent",
+    "uppercase", "lowercase", "toInt", "toFloat", "toDouble", "toLong", "toString", "first", "last", "firstOrNull",
+    "lastOrNull", "joinToString", "startsWith", "endsWith", "contains", "substring", "take", "drop", "reversed", "sorted",
+    "sortedBy", "any", "all", "none", "count", "sum", "sumOf", "maxOf", "minOf", "maxOfOrNull", "minOfOrNull", "indexOf",
+    "getOrNull", "getOrElse", "takeIf", "takeUnless", "withIndex", "toList", "toSet", "distinct", "split", "replace", "coerceIn",
+    "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "format", "indexOfFirst", "indexOfLast",
+    "flatMap", "sortedByDescending", "maxByOrNull", "minByOrNull", "mapNotNull", "filterIndexed", "distinctBy", "groupBy",
+    "associateBy", "associateWith", "chunked", "partition", "ifEmpty", "ifBlank", "isDigit", "isLetter", "isLetterOrDigit",
+    "isWhitespace", "isUpperCase", "isLowerCase", "copy", "padStart", "padEnd", "plus", "minus", "times", "div", "rem", "toChar",
+    "code", "equals", "hashCode", "compareTo", "copyOf", "get", "keys", "values", "containsKey", "lerp", "compositeOver"};
+
 // Calls whose lambda has a receiver, Kotlin's T.() -> R: the C++ lambda takes it
 // first, and the names the body doesn't declare that are the receiver's members are the receiver's
 // (Modifier.graphicsLayer { scaleX = 2f }, Canvas(m) { drawCircle(Color.Red) }).
@@ -543,6 +556,120 @@ public:
         for (auto& [n, m] : inherited)
             if (m.method) out.emplace(n, m.method);
         return out;
+    }
+
+    // ---- Kotlin's order of evaluation: left to right ----
+
+    // Whether evaluating a node may change what another one reads: an increment, an assignment, a call of the
+    // module's (a function, a class made), a member call on a value that isn't one of Kotlin's pure ones (next(),
+    // add(x)), a local function called; and the lambda an inline function runs at once (map { }). Kompoz's own
+    // calls (Modifier chains, colors, sizes) don't.
+    bool effectful(const Node* n) {
+        if (!n) return false;
+        switch (n->kind) {
+            case Node::Lambda:
+            case Node::Object: return false;
+            case Node::Assign: return true;
+            case Node::Unary:
+                if (n->text == "++" || n->text == "--") return true;
+                break;
+            case Node::Call: {
+                const Node& callee = companionless(*n->kids[0]);
+                bool effect = false;
+                if (callee.kind == Node::Name) {
+                    const VarKind* k = lookup(callee.text);
+                    effect = (k && *k == Callable) || (!k && (module_.functions.contains(callee.text) || module_.classDecls.contains(callee.text) ||
+                                                              classMethods_.contains(callee.text) || callee.text == "println"));
+                } else if (callee.kind == Node::Member) {
+                    const Node* root = callee.kids[0].get();  // (a Modifier chain's start)
+                    while ((root->kind == Node::Call || root->kind == Node::Member) && !root->kids.empty()) root = root->kids[0].get();
+                    bool modifier = root->kind == Node::Name && root->text == "Modifier" && !lookup("Modifier");
+                    bool staticCall = qualifier(*callee.kids[0]) && !module_.objectDecls.contains(dotted(*callee.kids[0]));
+                    effect = !modifier && !staticCall && !kPureMembers.contains(callee.text);
+                } else {
+                    effect = true;
+                }
+                if (effect) return true;
+                if (n->lambda && kInlineLambdas.contains(callee.text) && effectful(n->lambda.get()->kids.empty() ? nullptr : n->lambda.get())) return true;
+                for (const NodeP& k : n->kids)
+                    if (effectful(k.get())) return true;
+                return callee.kind == Node::Member && effectful(callee.kids[0].get());
+            }
+            default: break;
+        }
+        for (const NodeP& k : n->kids)
+            if (effectful(k.get())) return true;
+        for (const auto& b : n->branches) {
+            for (const auto& c : b.conds)
+                if (effectful(c.second.get())) return true;
+            if (effectful(b.body.get())) return true;
+        }
+        return false;
+    }
+    // Whether when a node is evaluated may change its value: anything but a constant, a lambda, or a val's or a
+    // parameter's name (nothing changes those).
+    bool orderMatters(const Node* n) const {
+        switch (n->kind) {
+            case Node::Name:
+                if (const VarKind* k = lookup(n->text); k && *k == Local) return varLocals_.contains(n->text);
+                return !module_.properties.contains(n->text) || lookup(n->text);
+            case Node::Number:
+            case Node::Bool:
+            case Node::Null:
+            case Node::Char:
+            case Node::Lambda:
+            case Node::Object: return false;
+            case Node::String: return !n->kids.empty();
+            default: return true;
+        }
+    }
+    // An expression whose operands C++ evaluates in no fixed order (a call's arguments, a + b, a string template's
+    // parts), written so that they are evaluated as Kotlin does, left to right, where it can matter (two of them
+    // whose order counts, one changing something): ::kompoz::kt::inOrder([&](auto&& a0, …) { the expression on
+    // a0, … }, ::kompoz::kt::Args{operand0, …}) (a braced list's are in order). `emit` writes the expression; the
+    // operands (`nodes`, in their order) are written in it as the lambda's parameters. False: not needed, nothing
+    // written.
+    bool ordered(const Node& owner, const std::vector<const Node*>& nodes, const std::function<void()>& emit) {
+        if (orderingNow_.contains(&owner) || awaitedTypes_ || classTyping_) return false;
+        std::vector<const Node*> held;
+        bool effects = false;
+        for (const Node* n : nodes)
+            if (n && orderMatters(n)) {
+                held.push_back(n);
+                effects = effects || effectful(n);
+            }
+        if (held.size() < 2 || !effects) return false;
+        Output::Mark mark = out_.mark();
+        std::string id = std::to_string(ordered_++), params;
+        for (size_t i = 0; i < held.size(); ++i) params += (i ? ", auto&& kompoz_arg" : "auto&& kompoz_arg") + id + "_" + std::to_string(i);
+        out_.text("::kompoz::kt::inOrder(" + capture("[&]") + "(" + params + ") -> decltype(auto) { return ");
+        for (size_t i = 0; i < held.size(); ++i) {
+            std::string a = "kompoz_arg" + id + "_" + std::to_string(i);
+            substitutes_[held[i]] = {"std::forward<decltype(" + a + ")>(" + a + ")", nullptr, false};
+        }
+        orderingNow_.insert(&owner);
+        bool wasSuspend = std::exchange(suspend_, false);  // (the operands are awaited where they are: in the Args)
+        emit();
+        suspend_ = wasSuspend;
+        orderingNow_.erase(&owner);
+        std::vector<Substitute> written;
+        bool all = true;
+        for (const Node* n : held) {
+            written.push_back(substitutes_[n]);
+            all = all && substitutes_[n].used;
+            substitutes_.erase(n);
+        }
+        if (!all) {  // (an operand the expression's form writes otherwise: as it is, then)
+            out_.rewind(mark);
+            return false;
+        }
+        out_.text("; }, ::kompoz::kt::Args{");
+        for (size_t i = 0; i < held.size(); ++i) {
+            if (i) out_.text(", ");
+            expr(*held[i], written[i].expected);
+        }
+        out_.text("})");
+        return true;
     }
 
     // A class's base when it is a class written in Kotlin here (open or abstract), else none.
@@ -1746,6 +1873,7 @@ private:
         }
         out_.text(";");
         declare(d.text, d.type && d.type->function ? Callable : Local);
+        if (d.flag) varLocals_.insert(d.text);  // (a var: an operand may change it)
     }
 
     void assignment(const Node& a) {
@@ -2031,6 +2159,12 @@ private:
 
     // `expected`: the type the value goes to, where it is known (a declaration's).
     void expr(const Node& e, const Type* expected = nullptr) {
+        if (auto s = substitutes_.find(&e); s != substitutes_.end()) {  // (an operand evaluated before, in order)
+            s->second.used = true;
+            s->second.expected = expected;
+            out_.text(s->second.spelled);
+            return;
+        }
         switch (e.kind) {
             case Node::Name: return name(e);
             case Node::Number: out_.text(number(e.text)); return;
@@ -2175,6 +2309,9 @@ private:
             out_.text("std::string(\"" + text + "\")");
             return;
         }
+        std::vector<const Node*> parts;  // "${next()} ${next()}": its parts left to right
+        for (const NodeP& k : e.kids) parts.push_back(k.get());
+        if (ordered(e, parts, [&] { string(e); })) return;
         out_.text("::kompoz::kt::str(");
         size_t k = 0;
         for (size_t i = 0; i < e.parts.size(); ++i) {
@@ -2317,6 +2454,18 @@ private:
 
     void call(const Node& c) {
         const Type* expected = std::exchange(expectedCall_, nullptr);
+        {  // Its arguments (and receiver) in Kotlin's order where that can matter.
+            std::vector<const Node*> operands;
+            const Node& head = companionless(*c.kids[0]);
+            // (its receiver only when evaluating it changes something: a value it is called on is that value, not a copy)
+            if (head.kind == Node::Member && !qualifier(*head.kids[0]) && effectful(head.kids[0].get())) operands.push_back(head.kids[0].get());
+            for (size_t i = 1; i < c.kids.size(); ++i) operands.push_back(c.kids[i].get());
+            if (ordered(c, operands, [&] {
+                    expectedCall_ = expected;
+                    call(c);
+                }))
+                return;
+        }
         const Node& callee = companionless(*c.kids[0]);
         std::string calleeName = callee.kind == Node::Name ? callee.text : callee.kind == Node::Member ? callee.text : "";
         if (callee.kind == Node::Member && callee.kids[0]->kind == Node::Name && callee.kids[0]->text == "super" && !lookup("super")) {
@@ -3046,6 +3195,8 @@ private:
         const std::string& op = b.text;
         const Node& l = *b.kids[0];
         const Node& r = *b.kids[1];
+        // next() * 10 + next(): its operands left to right (&&, || and ?: evaluate the right one only if needed: as they are)
+        if (op != "&&" && op != "||" && op != "?:" && ordered(b, {&l, &r}, [&] { binary(b); })) return;
         auto helper = [&](const char* fn, const Node& first, const Node& second) {
             out_.text(std::string("::kompoz::kt::") + fn + "(");
             expr(first);
@@ -3179,6 +3330,15 @@ private:
     bool awaitedTypes_ = false;  // in a suspend fun's result type (decltype): calls give what they give once awaited
     bool taskBlock_ = false, inTaskBlock_ = false;
     const DataClass* dataInit_ = nullptr;
+    struct Substitute {
+        std::string spelled;
+        const Type* expected;
+        bool used;
+    };
+    std::map<const Node*, Substitute> substitutes_;  // operands written as an in-order call's parameters (ordered)
+    std::set<const Node*> orderingNow_;              // and the expressions being written so
+    std::set<std::string, std::less<>> varLocals_;   // the locals declared var (what an operand may change)
+    int ordered_ = 0;
     std::map<std::string, const Function*, std::less<>> classMethods_;  // in a class, an interface or an object: its functions
     std::string superObject_;  // in a class with a base: what `super` is (its base's object, or the base class)
     const InterfaceMembers* superMembers_ = nullptr;  // and what it inherits  // in a data class's property's value: its lambdas keep copies of the fields  // the lambda written next is async's (it gives a task), and in it

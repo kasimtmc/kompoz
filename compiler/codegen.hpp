@@ -43,6 +43,16 @@ public:
         current_ = 0;
     }
     std::string str() && { return std::move(out_); }
+    // Where the output is, to go back to it (what was written since, undone).
+    struct Mark {
+        size_t size;
+        int current;
+    };
+    Mark mark() const { return {out_.size(), current_}; }
+    void rewind(const Mark& m) {
+        out_.resize(m.size);
+        current_ = m.current;
+    }
     const std::string& file() const { return file_; }
 
 private:

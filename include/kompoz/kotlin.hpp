@@ -566,6 +566,24 @@ decltype(auto) await(Held<T> held) {
 }
 inline Ready<void> await(VoidMark) { return {}; }
 
+// ---- Kotlin's order: arguments left to right ----
+
+// A call's arguments evaluated in the order they are written, as Kotlin evaluates them (C++ leaves a call's
+// arguments unordered; a braced list's are in order): inOrder([&](auto&&... a) { return f(a...); }, Args{x(), y()}).
+// Each is its value then (a variable copied: f(i, i++) is given i as it was), handed on as it is.
+template <class... T>
+struct Args {
+    std::tuple<std::decay_t<T>...> values;
+    // (by value: each parameter is made from its argument in the list's order, before the next is evaluated)
+    Args(std::decay_t<T>... u) : values(std::move(u)...) {}
+};
+template <class... U>
+Args(U&&...) -> Args<U...>;
+template <class F, class... T>
+decltype(auto) inOrder(F&& call, Args<T...>&& args) {
+    return std::apply([&](auto&&... a) -> decltype(auto) { return call(std::forward<decltype(a)>(a)...); }, std::move(args.values));
+}
+
 // What a call gives once awaited, as a type (declared only: for decltype). A suspend fun whose
 // result is its expression's, `suspend fun twice(x: Int) = load(x) + load(x)`, is a
 // TaskFor<decltype(that expression, each call's awaitedType)>.

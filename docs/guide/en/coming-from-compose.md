@@ -226,6 +226,8 @@ A Unit `@Kompozable fun` is restartable and skippable, as the compiler plugin ma
 
 Lambdas capture by value, as Kotlin's capture: a block can run again later on its own, so it never holds a reference to something gone. A `var` changed inside a lambda changes the lambda's copy, not the variable: keep what changes in a state (`mutableStateOf`), as Compose wants it anyway.
 
+Expressions are evaluated left to right, as Kotlin evaluates them: a call's arguments in the order they are written (named ones too), a string template's parts, an operator's operands. C++ leaves those unordered; kompozc orders them where it can matter, `listOf(next(), next())` giving the first `next()` first.
+
 ## Not yet
 
 kompozc reads the Kotlin a composable needs: composables, plain, extension, generic and `suspend` functions, top-level `val`s, data classes (with a body too), enum classes, classes (open, abstract, generic; a ViewModel, a repository) with delegated properties and accessors, interfaces (generic too), `sealed` classes and interfaces, `@Serializable` routes, and objects, with members too (`object AppIcons { val Add = … }`: an app's singletons). What it doesn't read yet is written in C++ next to it: a `companion object`, an enum class with a constructor or a body, a class nested in another, `typealias`, `operator fun`, extension properties, `vararg`, `lateinit`. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.

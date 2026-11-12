@@ -226,6 +226,8 @@ Unit dönen bir `@Kompozable fun`, derleyici eklentisinin yaptığı gibi yenide
 
 Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha sonra kendi başına yeniden çalışabilir, bu yüzden hiçbir zaman yok olmuş bir şeye başvuru tutmaz. Bir lambda içinde değiştirilen bir `var`, değişkeni değil lambdanın kopyasını değiştirir: değişeni bir durumda (`mutableStateOf`) tutun, Compose da zaten bunu ister.
 
+İfadeler Kotlin'deki gibi soldan sağa değerlendirilir: bir çağrının argümanları yazıldıkları sırayla (adlı olanlar da), bir metin şablonunun parçaları, bir işlecin işlenenleri. C++ bunların sırasını belirlemez; kompozc sıranın önemli olabileceği yerde onları sıralar, `listOf(next(), next())`'te ilk `next()` önce çalışır.
+
 ## Henüz yok
 
 kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: composable'lar, düz, eklenti, tür parametreli ve `suspend` işlevler, üst düzey `val`'ler, data class'lar (gövdeleriyle de), enum class'lar, temsilcili (`by`) ve erişimcili özellikleriyle sınıflar (açık, soyut, tür parametreli; bir ViewModel, bir depo), arayüzler (tür parametreli de), `sealed` sınıflar ile arayüzler, `@Serializable` rotalar ve üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri). Henüz okumadıkları onun yanında C++ ile yazılır: `companion object`, kurucusu ya da gövdesi olan bir enum class, başka bir sınıfın içindeki sınıf, `typealias`, `operator fun`, eklenti özellikleri, `vararg`, `lateinit`. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.

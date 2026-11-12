@@ -1058,10 +1058,7 @@ TEST(abstract_and_open_classes) {
 // default function over its T, a class deriving from a generic one (super), a generic fun interface from a lambda.
 interface Feed<T> {
     fun next(): T
-    fun two(): List<T> {
-        val first = next()
-        return listOf(first, next())
-    }
+    fun two(): List<T> = listOf(next(), next())  // (Kotlin's order: the first next() first)
 }
 
 class Countdown(var from: Int) : Feed<Int> {
@@ -1141,6 +1138,49 @@ TEST(generic_classes_and_interfaces) {
     std::string fn = rule.onNodeWithText("işlev", true).text();
     CHECK(fn == "işlev 4 7 [10, 20] b #3" || (std::printf("satır: %s\n", fn.c_str()), false));
     CHECK(rule.onNodeWithText("etiket 2").exists());
+}
+
+// Kotlin's order of evaluation, left to right: a call's arguments (named ones as written, not as declared), a
+// string template's parts, an operator's operands, a variable read before what changes it.
+class Clicker {
+    var n = 0
+    fun next(): Int {
+        n++
+        return n
+    }
+}
+
+fun pairOf(a: Int, b: Int) = "$a,$b"
+
+data class Spot(val x: Int, val y: Int)
+
+@Kompozable
+fun ShowPair(a: Int, b: Int) {
+    Text("çift $a $b")
+}
+
+@Kompozable
+fun OrderForms() {
+    val c = remember { Clicker() }
+    val list = listOf(c.next(), c.next(), c.next())
+    val text = "${c.next()}-${c.next()}"
+    val sum = c.next() * 10 + c.next()
+    val pair = pairOf(c.next(), c.next())
+    val spot = Spot(y = c.next(), x = c.next())
+    var i = 0
+    val read = pairOf(i, i++)
+    Column {
+        Text("sıra $list $text $sum $pair $spot $read")
+        ShowPair(b = c.next(), a = c.next())
+    }
+}
+
+TEST(kotlins_order_of_evaluation) {
+    KompozTestRule rule([] { OrderForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("sıra", true).text();
+    CHECK(line == "sıra [1, 2, 3] 4-5 67 8,9 Spot(x=11, y=10) 0,0" || (std::printf("satır: %s\n", line.c_str()), false));
+    CHECK(rule.onNodeWithText("çift 13 12").exists());
 }
 
 TEST(coroutines_await_what_suspends) {
