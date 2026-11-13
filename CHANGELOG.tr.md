@@ -1180,6 +1180,13 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Editörler**: dil sunucusunun bir dosyaya bakışı artık dosyanın C++'ının adını andığı öteki dosyaların Kotlin'ini de
+  içeriyor (C++'ında yapılan başka bir dosyanın data class'ını clangd orada tanımıyordu) ve bir Kotlin bölgesinin boş
+  satırlarından birine düşen bildirimler artık kaybolmuyor (kendi satırında bir data class, ardından boş bir satır,
+  görünümde yoktu). Bir lambdanın ya da işlevin değerini veren `else`'siz bir `when`, bir val'e verilen gibi
+  `noBranch()` ile bitiyor (clang, lambdanın değersiz bitebileceği uyarısını veriyordu). CLion eklentisi (0.2.1), bir
+  dosyanın vurgulama düzeyini yazma için güvenli bir anda indiriyor (dosya açılırken CLion bundan bir IDE hatası
+  bildiriyordu).
 - **Tür parametreli data class'ların inner class'ları ve bir C++ sınıfından türeyen inner class'lar**: bir
   `Parcel<Int>`'in `parcel.Label(2)`'si (türü, C++'ın bulduğu gibi dış değerin kendi türünün), `inner class Polite :
   Greeting()` (dış nesneyi sınıfın kendisi tutar).

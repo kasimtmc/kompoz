@@ -702,7 +702,17 @@ private:
         std::string view = doc.text;
         if (doc.kotlin) {
             try {
-                view = maskedView(doc.text, found, structsFor(doc));
+                // (the module's other sources, as the editor has them: what this one's C++ uses of their Kotlin too)
+                std::vector<OtherSource> others;
+                if (doc.translation) {
+                    std::map<std::string, std::string> open;
+                    for (const auto& [u, d] : docs_) open[fileKey(d.path)] = d.text;
+                    others = readOthers(doc.translation->modules, doc.path, [&](const fs::path& p) -> std::optional<std::string> {
+                        auto o = open.find(fileKey(p));
+                        return o == open.end() ? std::nullopt : std::optional(o->second);
+                    });
+                }
+                view = maskedView(doc.text, found, structsFor(doc), others);
             } catch (const CompileError&) {
                 view = maskedView(doc.text, {}, Structs());
             }

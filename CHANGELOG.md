@@ -1143,6 +1143,12 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Editors**: the language server's view of a file now has the other files' Kotlin that its C++ names (a data class
+  of another file made in its C++ was unknown to clangd there), and the declarations a Kotlin region carries to one of
+  its empty lines are no longer lost (a data class on a line of its own, then a blank line, was missing from the view).
+  A `when` without `else` giving a lambda's or a function's value ends in `noBranch()`, as one given to a val does
+  (clang warned that the lambda could end without a value). The CLion plugin (0.2.1) lowers a file's highlighting at a
+  write-safe moment (CLion reported an IDE error from it as the file opened).
 - **Inner classes of generic data classes and inner classes deriving from a C++ class**: `parcel.Label(2)` of a
   `Parcel<Int>` (its type the outer value's own, as C++ finds it), `inner class Polite : Greeting()` (the class itself
   holding its outer object).

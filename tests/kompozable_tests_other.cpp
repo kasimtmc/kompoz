@@ -25,3 +25,7 @@ interface Emblem {
     val text: String
     fun shown() = "<$text>"
 }
+
+// Its C++ names kompozable_tests.cpp's Kotlin too (a data class): its translation declares it here, and so does the
+// language server's view of it (tests/kompozc_lsp_test.py: the file as it is has no diagnostics).
+[[maybe_unused]] static std::string padLabel() { return Pad{3, "p"}.label; }

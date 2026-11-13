@@ -80,7 +80,8 @@ class KompozHighlightingListener(private val project: Project) : FileHighlightin
 // with the file's highlighting widget, as None.
 object KompozableHighlighting {
     fun leaveToKompoz(project: Project, file: VirtualFile) {
-        // (any modality: the plugin may be installed from the settings dialog, with the file open)
+        // (non-modal: setting the level changes PSI, which needs a write-safe moment; one installed from the settings
+        // dialog with the file open does it as the dialog closes)
         ApplicationManager.getApplication().invokeLater({
             if (project.isDisposed) return@invokeLater
             val psi = runReadActionBlocking { PsiManager.getInstance(project).findFile(file) }
@@ -92,7 +93,7 @@ object KompozableHighlighting {
             val before = settings.getHighlightingSettingForRoot(psi)
             if (before != FileHighlightingSetting.SKIP_HIGHLIGHTING) HighlightLevelUtil.forceRootHighlighting(psi, FileHighlightingSetting.SKIP_HIGHLIGHTING)
             LOG.info("Kompoz: ${file.path}: highlighting $before -> ${settings.getHighlightingSettingForRoot(psi)} (${psi.language.id})")
-        }, ModalityState.any())
+        }, ModalityState.nonModal())
     }
 }
 

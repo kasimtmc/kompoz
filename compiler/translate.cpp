@@ -915,6 +915,83 @@ size_t includesEnd(std::string_view src) {
 
 }  // namespace
 
+// The identifiers in a file's C++ (outside its Kotlin, its comments and strings), each where it is first used
+// (`firstUse`).
+std::set<std::string, std::less<>> cppNames(std::string_view src, const std::vector<Found>& found, std::map<std::string, size_t, std::less<>>* firstUse) {
+    std::set<std::string, std::less<>> out;
+    auto scanText = [&](size_t from, size_t to) {
+        for (size_t i = from; i < to;) {
+            char c = src[i];
+            if (c == '/' && i + 1 < to && src[i + 1] == '/') {
+                while (i < to && src[i] != '\n') ++i;
+            } else if (c == '/' && i + 1 < to && src[i + 1] == '*') {
+                size_t e = src.find("*/", i + 2);
+                i = e == std::string::npos || e + 2 > to ? to : e + 2;
+            } else if (c == '"' || (c == '\'' && !(i > 0 && std::isxdigit(static_cast<unsigned char>(src[i - 1]))))) {
+                for (++i; i < to && src[i] != c; ++i)
+                    if (src[i] == '\\') ++i;
+                ++i;
+            } else if (!identChar(c)) {
+                ++i;
+            } else {
+                size_t b = i;
+                while (i < to && identChar(src[i])) ++i;
+                if (out.insert(std::string(src.substr(b, i - b))).second && firstUse) (*firstUse)[std::string(src.substr(b, i - b))] = b;
+            }
+        }
+    };
+    size_t at = 0;
+    for (const Found& f : found) {
+        scanText(at, f.begin);
+        at = f.end;
+    }
+    scanText(at, src.size());
+    return out;
+}
+
+// The other sources' declarations a file uses, from its Kotlin or its C++ (`cppIdentifiers`), and those they use in
+// turn (a data class in a parameter's type): declared in it too, as C++ needs (Kotlin's module needs nothing).
+std::vector<std::pair<const OtherSource*, const Found*>> importsOf(const std::vector<Found>& found, const Module& module,
+                                                                   const std::vector<OtherSource>& others,
+                                                                   const std::set<std::string, std::less<>>& cppIdentifiers) {
+    std::vector<std::pair<const OtherSource*, const Found*>> imported;
+    std::set<std::string, std::less<>> used;
+    for (const Found& f : found) names(f, used);
+    for (const OtherSource& o : others)
+        for (const Found& f : o.found)
+            if (cppIdentifiers.contains(f.name())) used.insert(f.name());
+    std::set<const Found*> taken;
+    for (bool more = true; more;) {
+        more = false;
+        for (const OtherSource& o : others)
+            for (const Found& f : o.found) {
+                const std::string& name = f.name();
+                // (a function of a name defined here too: an overload of it, unless it takes the same parameters)
+                auto here = module.functions.find(name);
+                bool defined = here != module.functions.end() &&
+                               (!f.function || std::any_of(here->second.begin(), here->second.end(),
+                                                           [&](const Function* g) { return sameParams(*g, *f.function); }));
+                if (taken.contains(&f) || !used.contains(name) || defined || module.classes.contains(name) ||
+                    module.properties.contains(name) || module.classDecls.contains(name) || module.interfaces.contains(name))
+                    continue;
+                // A private val or function only for what is taken from its own file (uses it there).
+                bool isPrivate = (f.property && f.property->isPrivate) || (f.function && f.function->isPrivate);
+                if (isPrivate && std::none_of(imported.begin(), imported.end(), [&](const auto& i) {
+                        if (i.first != &o) return false;
+                        std::set<std::string, std::less<>> its;
+                        names(*i.second, its);
+                        return its.contains(name);
+                    }))
+                    continue;
+                taken.insert(&f);
+                imported.emplace_back(&o, &f);
+                names(f, used);
+                more = true;
+            }
+    }
+    return imported;
+}
+
 std::string translate(const std::string& src, const fs::path& source, const std::string& lineFile, const Structs& structs,
                       const std::vector<OtherSource>& others) {
     std::vector<Boundary> boundaries;
@@ -924,78 +1001,10 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     for (const Found& f : found) declareIn(module, f, true);
     // The other sources' declarations this one uses, and those they use in turn (a data class in
     // a parameter's type): declared here too, as C++ needs (Kotlin's module needs nothing).
-    // The identifiers in this file's C++ (outside its Kotlin, its comments and strings), each where
-    // it is first used: the module's functions among them are declared before that (below), so
-    // they are imported too.
-    std::set<std::string, std::less<>> cppIdentifiers;
     std::map<std::string, size_t, std::less<>> cppFirstUse;
-    {
-        auto scanText = [&](size_t from, size_t to) {
-            for (size_t i = from; i < to;) {
-                char c = src[i];
-                if (c == '/' && i + 1 < to && src[i + 1] == '/') {
-                    while (i < to && src[i] != '\n') ++i;
-                } else if (c == '/' && i + 1 < to && src[i + 1] == '*') {
-                    size_t e = src.find("*/", i + 2);
-                    i = e == std::string::npos || e + 2 > to ? to : e + 2;
-                } else if (c == '"' || (c == '\'' && !(i > 0 && std::isxdigit(static_cast<unsigned char>(src[i - 1]))))) {
-                    for (++i; i < to && src[i] != c; ++i)
-                        if (src[i] == '\\') ++i;
-                    ++i;
-                } else if (!identChar(c)) {
-                    ++i;
-                } else {
-                    size_t b = i;
-                    while (i < to && identChar(src[i])) ++i;
-                    if (cppIdentifiers.insert(src.substr(b, i - b)).second) cppFirstUse[src.substr(b, i - b)] = b;
-                }
-            }
-        };
-        size_t at = 0;
-        for (const Found& f : found) {
-            scanText(at, f.begin);
-            at = f.end;
-        }
-        scanText(at, src.size());
-    }
-    std::vector<std::pair<const OtherSource*, const Found*>> imported;
-    {
-        std::set<std::string, std::less<>> used;
-        for (const Found& f : found) names(f, used);
-        for (const OtherSource& o : others)
-            for (const Found& f : o.found)
-                if (cppIdentifiers.contains(f.name())) used.insert(f.name());
-        std::set<const Found*> taken;
-        for (bool more = true; more;) {
-            more = false;
-            for (const OtherSource& o : others)
-                for (const Found& f : o.found) {
-                    const std::string& name = f.name();
-                    // (a function of a name defined here too: an overload of it, unless it takes the same parameters)
-                    auto here = module.functions.find(name);
-                    bool defined = here != module.functions.end() &&
-                                   (!f.function || std::any_of(here->second.begin(), here->second.end(),
-                                                               [&](const Function* g) { return sameParams(*g, *f.function); }));
-                    if (taken.contains(&f) || !used.contains(name) || defined || module.classes.contains(name) ||
-                        module.properties.contains(name) || module.classDecls.contains(name) || module.interfaces.contains(name))
-                        continue;
-                    // A private val or function only for what is taken from its own file (uses it there).
-                    bool isPrivate = (f.property && f.property->isPrivate) || (f.function && f.function->isPrivate);
-                    if (isPrivate && std::none_of(imported.begin(), imported.end(), [&](const auto& i) {
-                            if (i.first != &o) return false;
-                            std::set<std::string, std::less<>> its;
-                            names(*i.second, its);
-                            return its.contains(name);
-                        }))
-                        continue;
-                    taken.insert(&f);
-                    imported.emplace_back(&o, &f);
-                    names(f, used);
-                    more = true;
-                }
-        }
-        for (auto [o, f] : imported) declareIn(module, *f, false);
-    }
+    std::set<std::string, std::less<>> cppIdentifiers = cppNames(src, found, &cppFirstUse);
+    std::vector<std::pair<const OtherSource*, const Found*>> imported = importsOf(found, module, others, cppIdentifiers);
+    for (auto [o, f] : imported) declareIn(module, *f, false);
     Output out(lineFile);
     out.line(1);
     fs::path dir = source.parent_path();
@@ -1224,21 +1233,50 @@ std::vector<OtherSource> readOthers(const std::vector<std::string>& moduleSource
     return others;
 }
 
-std::string maskedView(std::string_view src, const std::vector<Found>& found, const Structs& structs) {
+std::string maskedView(std::string_view src, const std::vector<Found>& found, const Structs& structs, const std::vector<OtherSource>& others) {
     Module module;
     module.structs = &structs;
     for (const Found& f : found) declareIn(module, f, true);
+    std::vector<std::pair<const OtherSource*, const Found*>> imported = importsOf(found, module, others, cppNames(src, found, nullptr));
+    for (auto [o, f] : imported) declareIn(module, *f, false);
     std::string out;
     size_t done = 0;
     bool prelude = false;
+    auto oneLine = [](Output& o, std::string& into) {  // (its #line directives left out, its lines joined)
+        std::istringstream lines(std::move(o).str());
+        for (std::string line; std::getline(lines, line);) {
+            size_t b = line.find_first_not_of(" \t");
+            if (b == std::string::npos || line.compare(b, 5, "#line") != 0) into += ' ' + line;
+        }
+    };
     std::string interfaces;  // (declared with the #include: a data class implementing one may come first)
     for (const Found& f : found)
         if (f.interface) {
             Output o("");
             declareInterface(o, *f.interface);
-            std::istringstream lines(std::move(o).str());
-            for (std::string line; std::getline(lines, line);)
-                if (line.find("#line") == std::string::npos) interfaces += ' ' + line;
+            oneLine(o, interfaces);
+        }
+    // The other sources' declarations this one uses (its C++ too: a data class of theirs made here), with them:
+    // their types first, then what uses them.
+    for (int pass = 0; pass < 3; ++pass)
+        for (auto [o, g] : imported) {
+            Output w("");
+            if (pass == 0) {
+                if (g->interface) declareInterface(w, *g->interface);
+                if (g->enumClass) generateEnum(w, *g->enumClass, module);
+                if (g->dataClass) generateClass(w, *g->dataClass, module);
+                if (g->object && !g->object->hasMembers()) generateObject(w, *g->object, module);
+            } else if (pass == 1) {
+                if (g->sealed) generateSealed(w, *g->sealed, module);
+                if (g->interface) generateInterface(w, *g->interface, module);
+                if (g->classDecl) generateClassDecl(w, *g->classDecl, module);
+                if (g->object && g->object->hasMembers()) generateObject(w, *g->object, module);
+                if (g->property) generateProperty(w, *g->property, module);
+            } else if (g->function) {
+                if (g->function->composable) generatePrototype(w, *g->function, module);
+                else generateDefinition(w, *g->function, module);
+            }
+            oneLine(w, interfaces);
         }
     // A sealed class with the last of its subclasses that come after it in the file (its variant's are complete there).
     std::map<size_t, size_t> sealedAt;  // a sealed class's index -> where it goes
@@ -1295,15 +1333,19 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
             payloads.pop_back();
         }
         size_t line = 0;
+        bool written = false;  // (the line's payload: an empty line's goes before its end too)
         for (size_t k = 0; k < text.size(); ++k) {
             unsigned char c = static_cast<unsigned char>(text[k]);
             if (c == '\n') {
+                if (!written && line < payloads.size()) out += payloads[line];
                 ++line;
+                written = false;
                 out += char(c);
                 continue;
             }
             if (line < payloads.size()) {  // (the line given to it: its text, then on to its end)
                 out += payloads[line];
+                written = true;
                 size_t eol = text.find('\n', k);
                 k = (eol == std::string_view::npos ? text.size() : eol) - 1;
                 continue;

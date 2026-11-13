@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
         // The module's other sources (the target's): their @Kompozable functions and data classes
         // are called here as Kotlin calls them across files.
         std::vector<OtherSource> others = readOthers(moduleSources, fs::path(input));
-        result = masked ? maskedView(src, scan(src), structs) : translate(src, fs::path(input), lineFile, structs, others);
+        result = masked ? maskedView(src, scan(src), structs, others) : translate(src, fs::path(input), lineFile, structs, others);
     } catch (const CompileError& e) {
         std::cerr << lineFile << ":" << e.pos.line << ":" << e.pos.column << ": error: " << e.what() << "\n";
         return 1;

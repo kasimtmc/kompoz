@@ -80,7 +80,8 @@ std::vector<OtherSource> readOthers(const std::vector<std::string>& moduleSource
 // Kotlin declaration's text blanked, keeping its lines and the columns after it, and on its lines
 // what C++ needs to know of it (a @Kompozable's prototype, a data class's struct, ...), the first
 // one's after kotlin.hpp's #include (as the translation has it); the rest of the file as it is.
-std::string maskedView(std::string_view src, const std::vector<Found>& found, const Structs& structs);
+// (`others`: the module's other sources; what this file uses of their Kotlin, its C++ too, is declared with the #include)
+std::string maskedView(std::string_view src, const std::vector<Found>& found, const Structs& structs, const std::vector<OtherSource>& others = {});
 // A declaration made known to the module (a sealed class: its nested subclasses too, under its name).
 void declareIn(Module& module, const Found& f, bool qualified);
 

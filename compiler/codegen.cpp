@@ -3130,8 +3130,9 @@ private:
             out_->text(" }");
             first = false;
         }
-        // A when giving a value covers every case (Kotlin checks it: a sealed class's subclasses): no way out.
-        if (asValue && !otherwise && !first) out_->text(" else { ::kompoz::kt::noBranch(); }");
+        // A when giving a value (an expression, a body's last) covers every case (Kotlin checks it: a sealed class's
+        // subclasses): no way out.
+        if ((asValue || tail) && !otherwise && !first) out_->text(" else { ::kompoz::kt::noBranch(); }");
         scopes_.pop_back();
         out_->text(" }");
     }
