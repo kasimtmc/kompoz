@@ -256,7 +256,7 @@ fun TextToolbarSection() {
             Popup(popupPositionProvider = object : PopupPositionProvider {
                 override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
                     val y = r.y - popupContentSize.height - 12
-                    val x = (r.x + r.width / 2 - popupContentSize.width / 2).coerceIn(8f, max(8f, windowSize.width - popupContentSize.width - 8f))
+                    val x = (r.x + r.width / 2 - popupContentSize.width / 2f).coerceIn(8f, max(8f, windowSize.width - popupContentSize.width - 8f))
                     return IntOffset(x.roundToInt(), (if (y < 0) r.bottom + 36 else y).roundToInt())
                 }
             }, properties = PopupProperties(focusable = false)) {
