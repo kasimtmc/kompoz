@@ -1180,6 +1180,11 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Değer olarak istisnalar**: türü bir istisna olan bir alan, parametre, liste öğesi ya da nullable (`val error:
+  Exception`, `Exception?`, kendi istisna sınıfınız) istisnayı asıl türüyle tutar (`kt::Thrown`), Kotlin'in başvuruları
+  gibi: o türden bir C++ değeri, durağan türünün bir kopyası olurdu (bir `Refused`'ın `Exception` kopyası, iletisi
+  kaybolmuş). `e.message`, `"$e"`, `is`, `as` ve `throw e` asıl türe ulaşır; `Exception` olarak yakalanan bir C++
+  istisnası atıldığı gibi tutulur.
 - **Kurucusu ve üyeleri olan sealed sınıflar**: `sealed class Screen(val route: String, val depth: Int = 0) : Titled {
   object Home : Screen("home"); data class Detail(val id: Int) : Screen("detail/$id", depth = 1); val upper = …; open fun
   badge() = ""; fun label() = …; companion object { … } }`: her durum kurucusunun değerlerini verir (sırayla ya da adıyla,

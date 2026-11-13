@@ -326,6 +326,9 @@ public:
         }
         auto known = kTypes.find(t.name);
         s = known != kTypes.end() ? known->second : qualified(t.name);
+        // An exception as a value (a field, a parameter, an element): held as what it is, kt::Thrown (as a type a cast
+        // or a catch names, rawThrown_, itself).
+        if (!rawThrown_ && t.args.empty() && thrown(t)) s = "::kompoz::kt::Thrown<" + s + ">";
         // A ViewModel (a class deriving from it, here in Kotlin or in a header): its owner hands it out
         // as a shared pointer (viewModel<T>()), and a parameter or property of the type is one too.
         if (known == kTypes.end() && t.args.empty() && !plainTypes_ && (isViewModel(t.name) || kHandleTypes.contains(t.name))) {
@@ -342,6 +345,14 @@ public:
         return s;
     }
 
+    // The type an `is`, an `as`, a catch names: an exception's own, not the value holding one.
+    std::string rawType(const Type& t) {
+        bool was = std::exchange(rawThrown_, true);
+        std::string s = type(t);
+        rawThrown_ = was;
+        return s;
+    }
+    bool rawThrown_ = false;
     // The type as named: a base class, a call's type argument (viewModel<T>()), not what a value of it is.
     std::string plainType(const Type& t) {
         bool was = std::exchange(plainTypes_, true);
@@ -1409,7 +1420,11 @@ public:
 
     // A class's C++ base as written: Kotlin's Exception and Throwable kt's (C++'s takes no message; a catch's is C++'s).
     std::string baseClass(const Type& t) {
-        return t.name == "Exception" || t.name == "Throwable" ? "::kompoz::kt::" + t.name : plainType(t);
+        if (t.name == "Exception" || t.name == "Throwable") return "::kompoz::kt::" + t.name;
+        bool was = std::exchange(rawThrown_, true);
+        std::string s = plainType(t);
+        rawThrown_ = was;
+        return s;
     }
     // Whether a class derives from one of Kotlin's exceptions (or from a class that does): its objects are thrown.
     bool thrown(const Type& base, int depth = 0) const {
@@ -1528,8 +1543,10 @@ public:
         out_->at(k.pos);
         out_->text(templateHead(k.typeParams) + "class " + k.name + (k.base && !handle ? " : public " + baseClass(*k.base) + (bases.empty() ? std::string() : ", " + bases) : std::string()) +
                   " {");
-        if (k.base && !handle && thrown(*k.base))  // (an exception of its own: its name in its text, "MyError: …")
-            out_->text(" public: const char* kotlinName() const override { return \"" + k.name + "\"; }");
+        if (k.base && !handle && thrown(*k.base))  // (an exception of its own: its name in its text, "MyError: …"; held as what it is)
+            out_->text(" public: const char* kotlinName() const override { return \"" + k.name + "\"; }"
+                       " std::shared_ptr<const ::kompoz::kt::Throwable> kompozClone() const override { return std::make_shared<" + k.name + ">(*this); }"
+                       " [[noreturn]] void kompozRethrow() const override { throw *this; }");
         bool wasInClass = std::exchange(inClass_, true);
         auto own = fieldNames(k.properties);
         for (size_t i = 0; i < k.ctorParams.size(); ++i)
@@ -2757,9 +2774,9 @@ private:
                 if (e.kind == Node::When) return whenStatement(e, tail);
                 if (e.kind == Node::Unary && e.text == "throw") {  // (a branch giving a value may throw instead: no return)
                     if (caughtName(*e.kids[0])) return out_->text("throw;");
-                    out_->text("throw ");
+                    out_->text("::kompoz::kt::raise(");  // (an exception held, kt::Thrown: thrown as what it is)
                     expr(*e.kids[0]);
-                    out_->text(";");
+                    out_->text(");");
                     return;
                 }
                 if (e.kind == Node::Unary && (e.text == "++" || e.text == "--")) {
@@ -3033,7 +3050,7 @@ private:
         for (const Node* is : casts) {
             const std::string& n = is->kids[0]->text;
             std::string held = "kompoz_smart_" + std::to_string(++smart_);
-            out_->text(" const auto& " + held + " = ::kompoz::kt::as<" + type(*is->type) + ">(" + cppName(n) + "); [[maybe_unused]] const auto& " +
+            out_->text(" const auto& " + held + " = ::kompoz::kt::as<" + rawType(*is->type) + ">(" + cppName(n) + "); [[maybe_unused]] const auto& " +
                       cppName(n) + " = " + held + ";");
             declare(n, Local);
         }
@@ -3060,7 +3077,7 @@ private:
                     out_->text(", " + subject + ")");
                     break;
                 default:  // is T, !is T
-                    out_->text(std::string(kind == Node::WhenBranch::NotIs ? "!" : "") + "::kompoz::kt::is<" + type(b.types[i]) + ">(" + subject + ")");
+                    out_->text(std::string(kind == Node::WhenBranch::NotIs ? "!" : "") + "::kompoz::kt::is<" + rawType(b.types[i]) + ">(" + subject + ")");
                     break;
             }
             out_->text(")");
@@ -3100,7 +3117,7 @@ private:
                 whenCondition(b, subject);
                 out_->text(") {");
                 if (!smartName.empty() && b.conds.size() == 1 && b.conds[0].first == Node::WhenBranch::Is)
-                    cast = " [[maybe_unused]] const auto& " + cppName(smartName) + " = ::kompoz::kt::as<" + type(b.types[0]) + ">(" + subject + ");";
+                    cast = " [[maybe_unused]] const auto& " + cppName(smartName) + " = ::kompoz::kt::as<" + rawType(b.types[0]) + ">(" + subject + ");";
             }
             scopes_.emplace_back();
             smartCasts(casts);
@@ -3144,7 +3161,7 @@ private:
                 scopes_.emplace_back();
                 declare(t.names[i], Local);
                 caught_.insert(lookup(t.names[i]));
-                out_->text(" catch (const " + type(t.typeArgs[i]) + "& " + cppName(t.names[i]) + ")");
+                out_->text(" catch (const " + rawType(t.typeArgs[i]) + "& " + cppName(t.names[i]) + ")");
                 braced(*t.kids[1 + i], tail);
                 caught_.erase(lookup(t.names[i]));
                 scopes_.pop_back();
@@ -3264,12 +3281,12 @@ private:
             case Node::Unary: return unary(e);
             case Node::Binary: return binary(e);
             case Node::As:  // x as T (a sealed class's T inside it, else a cast); x as? T: none when it isn't one
-                out_->text(std::string(e.flag ? "::kompoz::kt::asOrNull<" : "::kompoz::kt::as<") + type(*e.type) + ">(");
+                out_->text(std::string(e.flag ? "::kompoz::kt::asOrNull<" : "::kompoz::kt::as<") + rawType(*e.type) + ">(");
                 expr(*e.kids[0]);
                 out_->text(")");
                 return;
             case Node::Is:
-                out_->text(std::string(e.flag ? "!" : "") + "::kompoz::kt::is<" + type(*e.type) + ">(");
+                out_->text(std::string(e.flag ? "!" : "") + "::kompoz::kt::is<" + rawType(*e.type) + ">(");
                 expr(*e.kids[0]);
                 out_->text(")");
                 return;

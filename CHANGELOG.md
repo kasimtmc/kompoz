@@ -1143,6 +1143,11 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Exceptions as values**: a field, a parameter, a list's element or a nullable of an exception's type (`val error:
+  Exception`, `Exception?`, your own exception class) holds the exception as what it is (`kt::Thrown`), as Kotlin's
+  references do: a C++ value of the type would have been a copy of its static type (an `Exception`'s of a `Refused`, its
+  message lost). `e.message`, `"$e"`, `is`, `as` and `throw e` reach what it is; one of C++'s caught as `Exception` is
+  kept as it was thrown.
 - **Sealed classes with a constructor and members**: `sealed class Screen(val route: String, val depth: Int = 0) : Titled {
   object Home : Screen("home"); data class Detail(val id: Int) : Screen("detail/$id", depth = 1); val upper = …; open fun
   badge() = ""; fun label() = …; companion object { … } }`: each case gives its constructor's values (by position or by name,

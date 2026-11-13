@@ -628,6 +628,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 400. `suspend fun`'ı olan bir `fun interface` (`Loader { key -> delay(…); "…" }`) ✅
 401. `*liste` verilen tür parametreli bir `vararg` ✅
 402. Üst düzey `var`'lar, `val x by lazy { … }`, `var n by mutableStateOf(0)` ✅
+403. Değer olarak istisnalar (`val error: Exception`, `Exception?`, bir liste öğesi): asıl türleriyle tutulur ✅
 
 ## Sıradakiler
 

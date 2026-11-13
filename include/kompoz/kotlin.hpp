@@ -178,6 +178,9 @@ public:
     const char* what() const noexcept override { return message_ ? message_->c_str() : ""; }
     const std::optional<std::string>& message() const { return message_; }
     virtual const char* kotlinName() const { return "Throwable"; }  // (its text: "IllegalStateException: …")
+    // A copy of what it is (a Refused held as an Exception: a Refused), and it thrown as what it is (kt::Thrown's).
+    virtual std::shared_ptr<const Throwable> kompozClone() const { return std::make_shared<Throwable>(*this); }
+    [[noreturn]] virtual void kompozRethrow() const { throw *this; }
 
 private:
     std::optional<std::string> message_;
@@ -188,6 +191,10 @@ private:
     public:                                                             \
         using Base::Base;                                               \
         const char* kotlinName() const override { return #Name; }      \
+        std::shared_ptr<const Throwable> kompozClone() const override { \
+            return std::make_shared<Name>(*this);                       \
+        }                                                               \
+        [[noreturn]] void kompozRethrow() const override { throw *this; } \
     };
 KOMPOZ_KT_EXCEPTION(Exception, Throwable)
 KOMPOZ_KT_EXCEPTION(Error, Throwable)
@@ -210,6 +217,94 @@ inline std::optional<std::string> message(const std::exception& e) {
     if (auto* t = dynamic_cast<const Throwable*>(&e)) return t->message();
     return std::string(e.what());
 }
+
+// An exception as a value (val error: Exception, a parameter, a list's element, Exception?): the exception itself,
+// shared, as Kotlin's references are (a copy of a C++ type would be of its static type: an Exception's of a
+// Refused). A Kotlin one is kept as what it is (kompozClone); one of C++'s (caught as Exception) as the exception
+// being handled where it is made, or a copy of it. Its object is reached as a Kotlin class's (kompoz_object) where E
+// is one of Kotlin's: e.message, e.code of one's own.
+template <class E>
+class Thrown {
+public:
+    Thrown() = default;  // (none yet: a data class's field before it is given one)
+    template <class X>
+        requires std::is_base_of_v<E, X>
+    Thrown(const X& x) {
+        if (auto* t = dynamic_cast<const Throwable*>(&x)) {
+            object_ = t->kompozClone();
+        } else {
+            std::exception_ptr current = std::current_exception();
+            exception_ = current ? current : std::make_exception_ptr(x);
+            text_ = x.what();
+        }
+    }
+    template <class X>
+        requires(std::is_base_of_v<E, X> && !std::is_same_v<E, X>)
+    Thrown(const Thrown<X>& o) : object_(o.kompoz_kotlin()), exception_(o.kompoz_exception()), text_(o.kompoz_text()) {}
+
+    const E& kompoz_object() const
+        requires(!std::is_same_v<E, std::exception>)
+    {
+        return dynamic_cast<const E&>(*object_);
+    }
+    std::optional<std::string> message() const {
+        if (object_) return object_->message();
+        return text_;
+    }
+    std::string toString() const {
+        if (!object_) return text_;
+        std::string text = object_->kotlinName();
+        if (object_->message()) text += ": " + *object_->message();
+        return text;
+    }
+    bool operator==(const Thrown& o) const { return object_ ? object_ == o.object_ : exception_ == o.exception_; }
+
+    // (kt::is, kt::as, kt::raise's)
+    template <class T>
+    T kompoz_copy() const {  // (e as T: a copy of it as that)
+        if (object_) {
+            if (auto* t = dynamic_cast<const T*>(object_.get())) return *t;
+        } else if (exception_) {
+            try {
+                std::rethrow_exception(exception_);
+            } catch (const T& t) {
+                return t;
+            } catch (...) {
+            }
+        }
+        throw ClassCastException();
+    }
+    template <class T>
+    bool kompoz_is() const {
+        if (object_) return dynamic_cast<const T*>(object_.get()) != nullptr;
+        if (!exception_) return false;
+        try {
+            std::rethrow_exception(exception_);
+        } catch (const T&) {
+            return true;
+        } catch (...) {
+        }
+        return false;
+    }
+    [[noreturn]] void kompoz_rethrow() const {
+        if (object_) object_->kompozRethrow();
+        std::rethrow_exception(exception_);
+    }
+    const std::shared_ptr<const Throwable>& kompoz_kotlin() const { return object_; }
+    const std::exception_ptr& kompoz_exception() const { return exception_; }
+    const std::string& kompoz_text() const { return text_; }
+
+private:
+    std::shared_ptr<const Throwable> object_;  // a Kotlin one
+    std::exception_ptr exception_;             // or one of C++'s
+    std::string text_;                         // (its what())
+};
+namespace detail {
+template <class T>
+inline constexpr bool isThrown = false;
+template <class E>
+inline constexpr bool isThrown<Thrown<E>> = true;
+}  // namespace detail
 
 // ---- Strings: "Count: $count" ----
 
@@ -960,7 +1055,8 @@ struct Nothing {
 // throw e as a value (x ?: throw IllegalStateException("…")): it goes for any type, as error()'s does.
 template <class E>
 [[noreturn]] Nothing raise(E&& e) {
-    throw std::forward<E>(e);
+    if constexpr (detail::isThrown<std::remove_cvref_t<E>>) e.kompoz_rethrow();  // (an exception held: thrown as what it is)
+    else throw std::forward<E>(e);
 }
 // throw e of the exception just caught: it again, as it was thrown (not a copy of what the catch names).
 [[noreturn]] inline Nothing rethrow() { throw; }
@@ -2003,7 +2099,9 @@ inline constexpr bool sharesObject = !std::is_same_v<decltype(sharedOf(std::decl
 // T or of T's class (behind an interface: its object's type asked), or a T itself.
 template <class T, class V>
 bool is(const V& value) {
-    if constexpr (detail::sharesObject<V> && detail::HasObject<T>) {
+    if constexpr (detail::isThrown<V>) {  // (an exception held: what it is)
+        return value.template kompoz_is<T>();
+    } else if constexpr (detail::sharesObject<V> && detail::HasObject<T>) {
         auto shared = detail::sharedOf(value);
         return shared && dynamic_cast<const typename T::Object*>(shared.get()) != nullptr;
     } else if constexpr (detail::sharesObject<V> && detail::sharedPointer<T>) {  // a ViewModel's type: its pointer
@@ -2032,6 +2130,8 @@ template <class T, class V>
 decltype(auto) as(const V& value) {
     if constexpr (std::is_same_v<T, V>) {
         return T(value);
+    } else if constexpr (detail::isThrown<V>) {
+        return value.template kompoz_copy<T>();
     } else if constexpr (detail::sharesObject<V> && detail::HasObject<T>) {
         auto object = std::dynamic_pointer_cast<typename T::Object>(detail::sharedOf(value));
         if (!object) throw ClassCastException();

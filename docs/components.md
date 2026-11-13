@@ -627,6 +627,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 400. A `fun interface` with a `suspend fun` (`Loader { key -> delay(…); "…" }`) ✅
 401. A generic `vararg` given `*list` ✅
 402. Top-level `var`s, `val x by lazy { … }`, `var n by mutableStateOf(0)` ✅
+403. Exceptions as values (`val error: Exception`, `Exception?`, a list's element): held as what they are ✅
 
 ## Next
 

@@ -1936,6 +1936,35 @@ TEST(sealed_classes_with_class_cases) {
     CHECK(line == "sonuç TAMAM/kod 200 %40/kod 102 hata bozuk 500 boş [200, 102, 500, 0]" || (std::printf("satır: %s\n", line.c_str()), false));
 }
 
+// An exception as a value (a class's field, a data class's nullable one, a list's element): held as what it is, as
+// Kotlin's references are: its message, its text, `is` and `as`, and thrown again as what it is.
+class Attempt(val error: Exception, val note: String = "")
+
+data class Report(val problem: Exception?)
+
+fun failureReport(): String {
+    val a = try { throw Refused(9) } catch (e: Exception) { Attempt(e) }
+    val r = Report(IllegalArgumentException("kötü"))
+    val list = listOf<Exception>(Refused(1), NumberFormatException("sayı"))
+    val again = try { throw a.error } catch (e: Refused) { "yine ${e.code}" }
+    val code = if (a.error is Refused) (a.error as Refused).code else 0
+    val none = Report(null)
+    return "tutulan ${a.error.message} ${a.error} ${r.problem?.message} ${list.joinToString { it.toString() }} $again $code ${none.problem == null}"
+}
+
+@Kompozable
+fun HeldExceptionForms() {
+    Text(failureReport())
+}
+
+TEST(exceptions_as_values) {
+    KompozTestRule rule([] { HeldExceptionForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("tutulan", true).text();
+    CHECK(line == "tutulan kod 9 Refused: kod 9 kötü Refused: kod 1, NumberFormatException: sayı yine 9 9 true" ||
+          (std::printf("satır: %s\n", line.c_str()), false));
+}
+
 TEST(coroutines_await_what_suspends) {
     KompozTestRule rule([] { Awaits(); });
     CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());
