@@ -233,6 +233,24 @@ fun Checkout() {
 }
 ```
 
+A sealed class may have a constructor and members, which its cases give values to and have; a top-level `var`, delegated too, reads as in Kotlin:
+
+```kotlin
+sealed class Screen(val route: String) {
+    object Home : Screen("home")
+    data class Detail(val id: Int) : Screen("detail/$id")
+    fun label() = route.uppercase()
+}
+
+var opened by mutableStateOf(0)
+
+@Kompozable
+fun Router(screen: Screen) {
+    Text("${screen.label()} $opened")
+    Button(onClick = { opened++ }) { Text("Open") }
+}
+```
+
 Coroutines: a `LaunchedEffect` or a `launch` block is a coroutine, and `delay`, `animateScrollToItem`, your `suspend fun`s and the other suspending calls in it are awaited:
 
 ```kotlin
@@ -285,7 +303,7 @@ Expressions are evaluated left to right, as Kotlin evaluates them: a call's argu
 
 ## Not yet
 
-kompozc reads the Kotlin a composable needs: composables, plain, extension, generic, `operator` and `suspend` functions with `vararg`s (overloads too), top-level `val`s and extension properties, `typealias`, data classes (with a body too), enum classes (with a constructor and a body too, their entries' own too), classes (open, abstract, generic; a ViewModel, a repository) with delegated, `lateinit` and accessor properties and a `companion object`, interfaces (generic too), `sealed` classes and interfaces, `@Serializable` routes, objects, with members too (`object AppIcons { val Add = … }`: an app's singletons), those declarations nested in classes and inner classes, `try` and `throw` as expressions with Kotlin's exceptions. What it doesn't read yet is written in C++ next to it: a sealed class with a constructor (its subclasses hold the fields), a sealed class or a generic class nested in another (declared at the top level, they are read), an inner class of anything but a class. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
+kompozc reads the Kotlin a composable needs: composables, plain, extension, generic, `operator` and `suspend` functions with `vararg`s (overloads too), top-level `val`s and `var`s (delegated ones too: `by lazy`, `by mutableStateOf`) and extension properties, `typealias`, data classes (with a body too), enum classes (with a constructor and a body too, their entries' own too), classes (open, abstract, generic; a ViewModel, a repository) with delegated, `lateinit` and accessor properties and a `companion object`, interfaces (generic too, `fun interface`s with a `suspend fun` too), `sealed` classes and interfaces (with a constructor and members, their cases data classes, objects or classes), `@Serializable` routes, objects, with members too (`object AppIcons { val Add = … }`: an app's singletons), those declarations nested in classes and inner classes, `try` and `throw` as expressions with Kotlin's exceptions. What it doesn't read yet is written in C++ next to it: an inner class of a generic data class, an inner class deriving from a C++ class. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
 
 Without kompozc, Kompoz's composables are written in C++: [Writing in C++](cpp.md) shows how each of Kotlin's constructs reads there.
 

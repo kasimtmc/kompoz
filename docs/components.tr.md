@@ -621,6 +621,13 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 393. `inner class` (`dış.İç(…)`, `this@Dış`) ✅
 394. Kendi gövdesi olan bir enum girdisi (soyut ya da açık bir fun'ı, açık bir val'i, `toString`'i ezen) ✅
 395. `joinToString(separator, prefix, postfix, limit) { dönüşüm }`, `substringBefore` / `After` / `BeforeLast` / `AfterLast` ✅
+396. Kurucusu, üyeleri ve arayüzleri olan bir `sealed` sınıf (`sealed class Screen(val route: String) : Titled { … }`), kurucusunun değerlerini veren durumları (`object Home : Screen("home")`); sınıf olan durumlar ✅
+397. Bir sınıfın içinde `sealed` sınıflar, tür parametreli sınıflar, data class'lar ve arayüzler ✅
+398. Bir data class'ın ya da enum class'ın `inner class`'ı; bir enum class'ın içindeki bildirimler ✅
+399. Bir arayüzü uygulayan `companion object` (`companion object : Factory<Foo>`; değer olarak `Foo` odur) ✅
+400. `suspend fun`'ı olan bir `fun interface` (`Loader { key -> delay(…); "…" }`) ✅
+401. `*liste` verilen tür parametreli bir `vararg` ✅
+402. Üst düzey `var`'lar, `val x by lazy { … }`, `var n by mutableStateOf(0)` ✅
 
 ## Sıradakiler
 

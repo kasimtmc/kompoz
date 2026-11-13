@@ -152,10 +152,17 @@ std::shared_ptr<T> selfOf(const T* self) {
 }
 // outer.Counter(…): what the inner object holds of `outer`, its object (shared); of a class with a C++ base (a
 // ViewModel's: its owner keeps it), the class itself.
+// A data class's or an enum's (a value): a copy of it, shared by the inner objects made with it.
+template <class T>
+struct OuterValue {
+    const T* value;
+    operator T*() const { return const_cast<T*>(value); }
+    operator std::shared_ptr<T>() const { return std::make_shared<T>(*value); }
+};
 template <class T>
 auto outerOf(const T& outer) {
     if constexpr (requires { outer.kompoz_shared(); }) return outer.kompoz_shared();
-    else return const_cast<std::remove_cvref_t<decltype(deref(outer))>*>(&deref(outer));
+    else return OuterValue<std::remove_cvref_t<decltype(deref(outer))>>{&deref(outer)};
 }
 
 // ---- Exceptions: throw IllegalStateException("…"), catch (e: IllegalArgumentException) ----
@@ -494,7 +501,9 @@ bool contains(const C& c, const X& x) {
 // count as an int; a size that is something else (a layout result's Size) as it is.
 template <class C>
 decltype(auto) size(const C& c) {
-    if constexpr (std::is_convertible_v<const C&, std::string_view>) {
+    if constexpr (requires { c.kompoz_object(); }) {  // (a Kotlin class's handle: its object's size)
+        return size(c.kompoz_object());
+    } else if constexpr (std::is_convertible_v<const C&, std::string_view>) {
         int n = 0;
         for (char ch : std::string_view(c)) n += (static_cast<unsigned char>(ch) & 0xC0) != 0x80;
         return n;
@@ -791,20 +800,33 @@ struct Spread {
 };
 template <class C>
 Spread(const C&) -> Spread<C>;
-template <class T, class... A>
-std::vector<T> varargOf(A&&... args) {
-    std::vector<T> out;
+namespace detail {
+template <class A>
+struct VarargElement {
+    using type = std::decay_t<A>;
+};
+template <class C>
+struct VarargElement<Spread<C>> {
+    using type = std::decay_t<decltype(*std::begin(std::declval<const C&>()))>;
+};
+}  // namespace detail
+// (T void: a generic vararg's, its elements' type: fun <T> bag(vararg xs: T) given bag(1, *more))
+template <class T = void, class... A>
+auto varargOf(A&&... args) {
+    using E = std::conditional_t<std::is_void_v<T>, std::common_type_t<typename detail::VarargElement<std::decay_t<A>>::type...>, T>;
+    std::vector<E> out;
     auto add = [&](auto&& a) {
         if constexpr (requires { a.items; }) out.insert(out.end(), std::begin(a.items), std::end(a.items));
-        else out.push_back(T(std::forward<decltype(a)>(a)));
+        else out.push_back(E(std::forward<decltype(a)>(a)));
     };
     (add(std::forward<A>(args)), ...);
     return out;
 }
 
-template <class T, class... R>
-std::vector<std::decay_t<T>> listOf(T&& first, R&&... rest) {
-    return {std::forward<T>(first), std::forward<R>(rest)...};
+template <class E = void, class T, class... R>  // (E: the element type written or wanted, listOf<Step>(Start, Finish(3)))
+auto listOf(T&& first, R&&... rest) {
+    using V = std::conditional_t<std::is_void_v<E>, std::decay_t<T>, E>;
+    return std::vector<V>{V(std::forward<T>(first)), V(std::forward<R>(rest))...};
 }
 // floatArrayOf(8f, 6f), intArrayOf(1, 2): a vector (what takes a span takes it).
 template <class... T>
@@ -1201,7 +1223,8 @@ std::string joinToString(const C& c, A&&... args) {
                 break;
             }
             if (count++) out += texts[0];
-            out += transform ? transform(v) : str(v);
+            if constexpr ((std::is_invocable_v<std::decay_t<A>&, const detail::Element<C>&> || ...)) out += transform(v);
+            else out += str(v);  // (only without one: an element may have no text form)
         }
         return out + texts[2];
     }

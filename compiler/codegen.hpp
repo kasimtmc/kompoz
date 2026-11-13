@@ -26,6 +26,7 @@ struct Module {
     std::map<std::string, const EnumClass*, std::less<>> enums;
     std::map<std::string, const TypeAlias*, std::less<>> aliases;
     std::map<std::string, const Function*, std::less<>> extensionProperties;  // val String.shout: by its name
+    std::map<std::string, const SealedDecl*, std::less<>> sealeds;  // sealed classes and interfaces (their cases have their members)
     // inner classes by their names, each with its outer class's (dotted) name: outer.Counter(…) makes one
     std::map<std::string, std::vector<std::pair<std::string, const ClassDecl*>>, std::less<>> innerClasses;
     // How a call names each of the file's (or another file's, defined here) functions and vals: its

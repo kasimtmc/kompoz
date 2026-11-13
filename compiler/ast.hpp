@@ -170,9 +170,17 @@ struct ClassDecl;
 struct DataClass;
 struct EnumClass;
 struct InterfaceDecl;
+struct SealedDecl;
 
 // The classes, data classes, enums, objects and interfaces declared in another's body (Kotlin's nested ones: not
 // inner, they hold no outer this): C++ types nested in it (Outer.Inner is Outer::Inner).
+// The arguments a sealed class's case gives its constructor: data class Detail(val id: Int) : Screen("detail/$id").
+struct SuperCall {
+    std::string name;  // the sealed class (as written: Screen, Outer.Screen)
+    std::vector<NodeP> args;
+    std::vector<std::string> names;  // "" by position
+};
+
 struct NestedDecls {
     std::vector<std::shared_ptr<ClassDecl>> classes;
     std::vector<std::shared_ptr<DataClass>> dataClasses;
@@ -181,7 +189,8 @@ struct NestedDecls {
     std::vector<std::shared_ptr<InterfaceDecl>> interfaces;
     // inner class: one holding its outer object (made as outer.Inner(…)); defined in the outer class, not with these
     std::vector<std::shared_ptr<ClassDecl>> innerClasses;
-    bool empty() const { return classes.empty() && dataClasses.empty() && enums.empty() && objects.empty() && interfaces.empty(); }
+    std::vector<std::shared_ptr<SealedDecl>> sealeds;  // (after the rest: its cases among them are complete before it)
+    bool empty() const { return classes.empty() && dataClasses.empty() && enums.empty() && objects.empty() && interfaces.empty() && sealeds.empty(); }
 };
 
 struct ClassProperty {
@@ -215,6 +224,7 @@ struct ClassDecl {
     std::vector<bool> ctorOverride;   // override val x (an interface's property)
     std::optional<Type> base;
     std::vector<NodeP> baseArgs;      // : Base(args)
+    std::vector<std::string> baseArgNames;  // and their names ("" by position: a sealed class's are named too)
     std::vector<Type> interfaces;     // : Base(), A, B (those without a constructor call)
     std::shared_ptr<ObjectDecl> companion;  // companion object { … }: its members the class's own, static
     NestedDecls nested;
@@ -231,6 +241,7 @@ struct DataClass {
     std::string name;
     std::vector<std::string> typeParams;  // data class Pair<A, B>
     std::vector<Type> supers;  // : Sealed(), A, B: a sealed class or interface it is a case of, interfaces
+    SuperCall superCall;       // : Screen("…"): its sealed class's constructor's arguments
     std::vector<Param> fields;
     std::vector<bool> mutableFields;  // var (else val)
     std::vector<bool> overridingFields;  // override val (an interface's property)
@@ -254,6 +265,7 @@ struct ObjectDecl {
     std::string name;
     bool isCompanion = false;  // a class's companion object: its members the class's static ones
     std::vector<Type> supers;  // : Sealed(), A, B (as a data class's)
+    SuperCall superCall;       // (as a data class's)
     std::vector<std::string> annotations;
     std::vector<ClassProperty> properties;
     std::vector<Function> methods;
@@ -287,8 +299,10 @@ struct EnumClass {
     std::vector<size_t> order;
     std::vector<NodeP> initBlocks;
     std::shared_ptr<ObjectDecl> companion;
+    NestedDecls nested;  // declarations in its body (a struct's nested ones, as a class's)
     bool rich() const {
-        return !ctorParams.empty() || !properties.empty() || !methods.empty() || !initBlocks.empty() || companion ||
+        return !ctorParams.empty() || !properties.empty() || !methods.empty() || !initBlocks.empty() || companion || !nested.empty() ||
+               !nested.innerClasses.empty() ||
                std::any_of(entryBodies.begin(), entryBodies.end(), [](const auto& b) { return b != nullptr; });
     }
     Pos pos;
@@ -300,8 +314,21 @@ struct EnumClass {
 struct SealedDecl {
     std::string name;
     bool isInterface = false;
+    // sealed class Screen(val route: String) : Named { val title = …; abstract val icon: …; fun f() = … }: what each case
+    // has (its constructor's parameters given by the case, the body's members), the interfaces it implements
+    std::vector<Param> ctorParams;
+    std::vector<char> ctorKinds;  // ' ' plain, 'v' val, 'm' var
+    std::vector<Type> supers;
+    std::vector<ClassProperty> properties;
+    std::vector<Function> methods;
+    std::vector<size_t> memberOrder;  // as a class's order
+    std::vector<NodeP> initBlocks;
+    std::shared_ptr<ObjectDecl> companion;
+    bool hasMembers() const { return !ctorParams.empty() || !properties.empty() || !methods.empty() || !initBlocks.empty(); }
     std::vector<DataClass> dataClasses;  // nested
     std::vector<ObjectDecl> objects;     // nested
+    std::vector<ClassDecl> classes;      // nested (class Failure(val e: Exception) : Result())
+    bool classCases = false;             // whether a case is a class (it is defined after them, as late as can be)
     std::vector<std::pair<char, size_t>> order;  // the nested ones in declaration order: 'd' or 'o', an index
     std::vector<std::string> topLevel;   // the same file's subclasses at the top level, in order (scan finds them)
     Pos pos;

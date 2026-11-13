@@ -1143,6 +1143,31 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Sealed classes with a constructor and members**: `sealed class Screen(val route: String, val depth: Int = 0) : Titled {
+  object Home : Screen("home"); data class Detail(val id: Int) : Screen("detail/$id", depth = 1); val upper = …; open fun
+  badge() = ""; fun label() = …; companion object { … } }`: each case gives its constructor's values (by position or by name,
+  defaults for the rest) and has its members (those it doesn't override; an abstract one it implements) and interfaces; the
+  sealed value reads and calls them through the case it holds (`screen.route`, `screen.label()`) and is each interface.
+  Cases may be classes too (`class Failed(val reason: String) : Outcome(code = 500)`), in it or at the top level; a sealed
+  class with such cases is defined after them.
+- **Nested sealed classes and generic declarations**: a sealed class nested in a class (its cases in it and beside it),
+  generic data classes, classes and interfaces nested in a class (`Wizard.Slot("k")`, `Wizard.Holder(4)`).
+- **Inner classes of data classes and enums** (a data class and an enum are values here: the inner object holds a copy of
+  the outer value), and declarations nested in an enum class.
+- **A companion object implementing an interface**: `companion object : Factory<Foo> { override fun make(…) = … }`; the
+  interface's members with a body are the class's too (`Foo.pair()`), and the class's name as a value is its companion
+  (`sizes(Foo)`).
+- **A fun interface's suspend fun**: `Loader { key -> delay(100); "…" }` is a coroutine giving the fun's value (a
+  coroutine lambda's parameters are now taken by value: they outlive the call).
+- **A generic vararg given `*list`** (`bag(0, *more, 6)`: its T the elements').
+- **Top-level vars and delegated properties**: `var visits = 0`, `val greeting by lazy { … }`, `var count by
+  mutableStateOf(1)` (state: what reads it recomposes).
+- Methods of one name in a class: a C++ default that would make a call match two of them (`put(x: String)` beside
+  `put(x: String, times: Int = 2)`) is left out, so C++ calls the one Kotlin does.
+- Fixed: a class's field read where a top-level val has its name (the top-level one was read); `listOf(…)` given the
+  type wanted (a function's result, `List<Step>`) took no lvalues; `return` now gives the function's type to what it
+  returns; `joinToString { … }` read its elements' text forms though given a transform; `size` as a Kotlin class's
+  property.
 - **try as an expression, throw, Kotlin's exceptions**: `val n = try { text.toInt() } catch (e: NumberFormatException) { 0 }
   finally { … }` (the body's or the catching block's last expression; a lambda's last one too), `throw
   IllegalStateException("…")` as a statement and as a value (`x ?: throw …`), `throw e` throwing the caught one again as it

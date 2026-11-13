@@ -1418,14 +1418,14 @@ fun <T> bag(vararg items: T): List<T> = items
 @Kompozable
 fun VarargForms() {
     val more = listOf(4, 5)
-    Text("çok " + sumAll() + " " + sumAll(1, 2, 3) + " " + sumAll(1, *more, 9) + " " + joinAll("-", "a", "b") + " " + bag("x", "y").size)
+    Text("çok " + sumAll() + " " + sumAll(1, 2, 3) + " " + sumAll(1, *more, 9) + " " + joinAll("-", "a", "b") + " " + bag("x", "y").size + " " + bag(0, *more, 6))
 }
 
 TEST(vararg_parameters) {
     KompozTestRule rule([] { VarargForms(); });
     rule.waitForIdle();
     std::string line = rule.onNodeWithText("çok", true).text();
-    CHECK(line == "çok 0 6 19 a-b 2" || (std::printf("satır: %s\n", line.c_str()), false));
+    CHECK(line == "çok 0 6 19 a-b 2 [0, 4, 5, 6]" || (std::printf("satır: %s\n", line.c_str()), false));
 }
 
 // lateinit var: set later (in init, in a function), of a type without a default (a class made with arguments); read
@@ -1542,7 +1542,8 @@ class Printer : Sink {
     override fun take(x: String) = "p'$x'"
     fun put(x: Int, times: Int = 1) = take(x * times)
     fun put(x: String) = take(x)
-    fun both() = put(2) + put("b") + put(2, times = 3)
+    fun put(x: String, times: Int = 2) = take(x.repeat(times))  // (put("b") is put(x: String): it needs no default)
+    fun both() = put(2) + put("b") + put(2, times = 3) + put("c", 2)
 }
 
 @Kompozable
@@ -1555,7 +1556,7 @@ fun OverloadForms() {
     }
     Text("aşırı " + describe(3) + "|" + describe("a") + "|" + describe(1, 2) + "|" + describe(label = "ab") + "|" + describe("c", 3) + "|" +
          describe(true) { "evet" } + "|" + describe(1.5) + "|" + describe(count) + "|" + describe(name) + "|" + 5.tagged() + name.tagged() + "|" +
-         Printer().both() + "|" + sink.take(1) + sink.take("z"))
+         Printer().both() + "|" + sink.take(1) + sink.take("z") + "|" + Printer().put("q") + Printer().put("r", 3))
     Chip(7)
     Chip("a")
     Chip("b", suffix = "?")
@@ -1565,7 +1566,7 @@ TEST(overloads_by_arguments_and_types) {
     KompozTestRule rule([] { OverloadForms(); });
     rule.waitForIdle();
     std::string line = rule.onNodeWithText("aşırı", true).text();
-    CHECK(line == "aşırı sayı 3|yazı a|çift 3|abab|ccc|evet|ondalık 1.5|sayı 4|yazı ali|i5sali|p2p'b'p6|o1o'z'" ||
+    CHECK(line == "aşırı sayı 3|yazı a|çift 3|abab|ccc|evet|ondalık 1.5|sayı 4|yazı ali|i5sali|p2p'b'p6p'cc'|o1o'z'|p'q'p'rrr'" ||
           (std::printf("satır: %s\n", line.c_str()), false));
     CHECK(rule.onNodeWithText("çip sayı 7").exists() && rule.onNodeWithText("çip a!").exists() && rule.onNodeWithText("çip b?").exists());
 }
@@ -1661,6 +1662,278 @@ TEST(enum_entries_with_bodies_of_their_own) {
     rule.waitForIdle();
     std::string line = rule.onNodeWithText("girdi", true).text();
     CHECK(line == "girdi PLUS=9! kez=18 MINUS=3 çarpı * işlem - true [1, 2, ...] c.txtayok -4" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// A sealed class with a constructor, members and an interface: each case gives its constructor's values
+// (Screen("home"), by name too, defaults for the rest) and has its members (a value made from them, a function, an
+// open one it overrides, the interface's property it implements); the sealed value reads and calls them through the
+// case it holds, and is the interface too.
+interface Headed {
+    val title: String
+}
+
+sealed class Screen(val route: String, val depth: Int = 0) : Headed {
+    object Home : Screen("home") {
+        override val title = "Ana"
+        override fun badge() = "!"
+    }
+    data class Detail(val id: Int) : Screen("detail/$id", depth = 1) {
+        override val title get() = "Ayrıntı $id"
+        override fun badge() = "#$id"
+    }
+    data object Options : Screen(route = "options") {
+        override val title = "Ayarlar"
+    }
+
+    val upper = route.uppercase()
+    open fun badge() = ""
+    fun label() = "$title@$route${badge()}"
+    fun isDeep() = depth > 0
+    companion object {
+        val start = "home"
+    }
+}
+
+data class Lost(val path: String) : Screen("lost/$path") {
+    override val title = "Kayıp"
+}
+
+fun screenReport(): String {
+    val all = listOf<Screen>(Screen.Home, Screen.Detail(7), Screen.Options, Lost("x"))
+    val named: Headed = Screen.Detail(2)
+    val first: Headed = all[0]
+    return all.joinToString(" ") { it.label() + ":" + it.depth + ":" + it.upper + ":" + it.isDeep() } + " " + named.title + " " +
+        first.title + " " + Screen.Detail(3).route + " " + Screen.start
+}
+
+@Kompozable
+fun ScreenForms() {
+    Text("ekran " + screenReport())
+}
+
+TEST(sealed_classes_with_constructors_and_members) {
+    KompozTestRule rule([] { ScreenForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("ekran", true).text();
+    CHECK(line == "ekran Ana@home!:0:HOME:false Ayrıntı 7@detail/7#7:1:DETAIL/7:true Ayarlar@options:0:OPTIONS:false "
+                  "Kayıp@lost/x:0:LOST/X:false Ayrıntı 2 Ana detail/3 home" ||
+          (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// Declarations nested in a class that are a sealed class (its cases in it and beside it) or generic (a data class,
+// a class, an interface).
+class Wizard {
+    sealed class Step(val index: Int) {
+        object Start : Step(0)
+        data class Middle(val note: String) : Step(1)
+    }
+    data class Finish(val total: Int) : Step(2)
+    data class Slot<T>(val value: T)
+    class Holder<T>(val item: T) {
+        fun twice(): List<T> = listOf(item, item)
+    }
+    interface Source<T> {
+        fun next(): T
+    }
+    fun steps(): List<Step> = listOf(Step.Start, Step.Middle("orta"), Finish(3))
+    fun slot() = Slot(2.5)
+}
+
+fun wizardReport(): String {
+    val kinds = Wizard().steps().joinToString(",") { s ->
+        when (s) {
+            is Wizard.Step.Start -> "baş${s.index}"
+            is Wizard.Step.Middle -> "${s.note}${s.index}"
+            is Wizard.Finish -> "son${s.total}${s.index}"
+        }
+    }
+    val slot = Wizard.Slot("k")
+    val holder = Wizard.Holder(4)
+    val source = object : Wizard.Source<Int> {
+        override fun next() = 9
+    }
+    return "sihirbaz $kinds ${slot.value} ${Wizard().slot().value} ${holder.twice()} ${source.next()}"
+}
+
+@Kompozable
+fun WizardForms() {
+    Text(wizardReport())
+}
+
+TEST(nested_sealed_and_generic_declarations) {
+    KompozTestRule rule([] { WizardForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("sihirbaz", true).text();
+    CHECK(line == "sihirbaz baş0,orta1,son32 k 2.5 [4, 4] 9" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// An inner class of a data class or an enum (values here: its object holds a copy of the outer value), and
+// declarations nested in an enum.
+data class Pad(val width: Int, val label: String) {
+    inner class Cell(val index: Int) {
+        fun text() = "$label[$index/$width]"
+    }
+    fun first() = Cell(0)
+}
+
+enum class Mood(val emoji: String) {
+    HAPPY(":)"), SAD(":(");
+
+    data class Note(val text: String)
+    inner class Line(val text: String) {
+        fun shown() = "$emoji $text ${this@Mood.name}"
+    }
+    fun line(text: String) = Line(text)
+}
+
+fun valueInners(): String {
+    val pad = Pad(3, "p")
+    return "değer " + pad.first().text() + " " + pad.Cell(2).text() + " " + Mood.SAD.line("eh").shown() + " " + Mood.HAPPY.Line("ya").shown() +
+        " " + Mood.Note("n").text
+}
+
+@Kompozable
+fun ValueInnerForms() {
+    Text(valueInners())
+}
+
+TEST(inner_classes_of_values) {
+    KompozTestRule rule([] { ValueInnerForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("değer", true).text();
+    CHECK(line == "değer p[0/3] p[2/3] :( eh SAD :) ya HAPPY n" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
+// A fun interface's suspend fun: made from a lambda that is a coroutine (Fetcher { key -> delay(…); "…" }), giving its
+// value or none.
+fun interface Fetcher {
+    suspend fun load(key: String): String
+}
+
+fun interface Pinger {
+    suspend fun ping()
+}
+
+@Kompozable
+fun SuspendLoaderForms() {
+    var text by remember { mutableStateOf("…") }
+    var pinged by remember { mutableStateOf(0) }
+    val loader = remember {
+        Fetcher { key ->
+            delay(100)
+            "yüklendi $key"
+        }
+    }
+    val pinger = remember { Pinger { delay(10); pinged++ } }
+    LaunchedEffect(Unit) {
+        text = loader.load("a")
+        pinger.ping()
+    }
+    Text("yükleyici $text $pinged")
+}
+
+TEST(fun_interfaces_with_suspend_funs) {
+    KompozTestRule rule([] { SuspendLoaderForms(); });
+    CHECK(rule.onNodeWithText("yükleyici … 0").exists());
+    rule.advanceTimeBy(300);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("yükleyici yüklendi a 1").exists() || (std::printf("satır: %s\n", rule.onNodeWithText("yükleyici", true).text().c_str()), false));
+}
+
+// Top-level vars and delegated properties: a var of the file (changed by a function), a val by lazy (made when
+// first read), a var by mutableStateOf (state: what reads it recomposes when it changes).
+var visits = 0
+private var calls = 0
+val greeting by lazy { "merhaba ${visits + 1}" }
+var sharedCount by mutableStateOf(1)
+
+fun visit(): Int {
+    visits++
+    calls += 2
+    return visits * 10 + calls
+}
+
+@Kompozable
+fun TopLevelForms() {
+    Text("üst ${visit()} $greeting $sharedCount")
+    Button(onClick = { sharedCount += 1 }) { Text("Artır") }
+}
+
+TEST(top_level_vars_and_delegated_properties) {
+    KompozTestRule rule([] { TopLevelForms(); });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("üst 12 merhaba 2 1").exists() || (std::printf("satır: %s\n", rule.onNodeWithText("üst", true).text().c_str()), false));
+    rule.onNodeWithText("Artır").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("üst 24 merhaba 2 2").exists() || (std::printf("satır: %s\n", rule.onNodeWithText("üst", true).text().c_str()), false));
+}
+
+// A companion object implementing an interface: its members the class's (Widget.make(3)), the interface's with a
+// body too (Widget.pair()), and the class's name as a value is the companion (sizes(Widget)).
+interface Maker<T> {
+    fun make(n: Int): T
+    fun pair(): List<T> = listOf(make(1), make(2))
+}
+
+class Widget(val size: Int) {
+    companion object : Maker<Widget> {
+        override fun make(n: Int) = Widget(n * 10)
+    }
+}
+
+fun sizes(maker: Maker<Widget>): List<Int> = maker.pair().map { it.size }
+
+@Kompozable
+fun CompanionInterfaceForms() {
+    Text("eş ${Widget.make(3).size} ${Widget.pair().size} ${sizes(Widget)}")
+}
+
+TEST(companion_objects_implementing_interfaces) {
+    KompozTestRule rule([] { CompanionInterfaceForms(); });
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("eş 30 2 [10, 20]").exists() || (std::printf("satır: %s\n", rule.onNodeWithText("eş", true).text().c_str()), false));
+}
+
+// A sealed class's cases that are classes (in it, and at the top level): handles made with its constructor's values
+// (by name too) and members, an open one overridden, reached through `is` and `when` as the others are.
+sealed class Outcome(val code: Int) {
+    class Done(val value: String) : Outcome(200) {
+        fun shout() = value.uppercase()
+    }
+    data class Waiting(val percent: Int) : Outcome(102)
+    open fun summary() = "kod $code"
+}
+
+class Failed(val reason: String) : Outcome(code = 500) {
+    override fun summary() = "hata $reason $code"
+}
+
+object Idle : Outcome(0) {
+    override fun summary() = "boş"
+}
+
+fun outcomeReport(): String {
+    val all = listOf<Outcome>(Outcome.Done("tamam"), Outcome.Waiting(40), Failed("bozuk"), Idle)
+    return "sonuç " + all.joinToString(" ") { o ->
+        when (o) {
+            is Outcome.Done -> o.shout() + "/" + o.summary()
+            is Outcome.Waiting -> "%${o.percent}/" + o.summary()
+            is Failed -> o.summary()
+            is Idle -> o.summary()
+        }
+    } + " " + all.map { it.code }
+}
+
+@Kompozable
+fun OutcomeForms() {
+    Text(outcomeReport())
+}
+
+TEST(sealed_classes_with_class_cases) {
+    KompozTestRule rule([] { OutcomeForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("sonuç", true).text();
+    CHECK(line == "sonuç TAMAM/kod 200 %40/kod 102 hata bozuk 500 boş [200, 102, 500, 0]" || (std::printf("satır: %s\n", line.c_str()), false));
 }
 
 TEST(coroutines_await_what_suspends) {

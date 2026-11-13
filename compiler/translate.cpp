@@ -612,8 +612,11 @@ std::vector<Found> scan(std::string_view src, std::vector<Boundary>* boundaries,
         if (s.sealed)
             for (const Found& f : found) {
                 static const std::vector<Type> none;
-                const std::vector<Type>& supers = f.dataClass ? f.dataClass->supers : f.object ? f.object->supers : none;
-                if (namesSuper(supers, s.sealed->name)) s.sealed->topLevel.push_back(f.name());
+                const std::vector<Type>& supers = f.dataClass ? f.dataClass->supers : f.object ? f.object->supers : f.classDecl ? f.classDecl->interfaces : none;
+                bool classCase = f.classDecl && ((f.classDecl->base && f.classDecl->base->name == s.sealed->name) || namesSuper(supers, s.sealed->name));
+                if (namesSuper(supers, s.sealed->name) || classCase) s.sealed->topLevel.push_back(f.name());
+                // (a class, or an object with members: defined where first used; the sealed class then after them)
+                if (classCase || (namesSuper(supers, s.sealed->name) && f.object && f.object->hasMembers())) s.sealed->classCases = true;
             }
     return found;
 }
@@ -630,7 +633,10 @@ void declareNested(Module& module, const std::string& outer, const NestedDecls& 
         both(module.classes, d->name, d.get());
         declareNested(module, outer + "." + d->name, d->nested);
     }
-    for (const auto& e : n.enums) both(module.enums, e->name, e.get());
+    for (const auto& e : n.enums) {
+        both(module.enums, e->name, e.get());
+        declareNested(module, outer + "." + e->name, e->nested);
+    }
     for (const auto& o : n.objects) {
         module.objects.insert(outer + "." + o->name);
         both(module.objectDecls, o->name, o.get());
@@ -639,6 +645,13 @@ void declareNested(Module& module, const std::string& outer, const NestedDecls& 
     for (const auto& i : n.interfaces) {
         both(module.interfaces, i->name, i.get());
         declareNested(module, outer + "." + i->name, i->nested);
+    }
+    for (const auto& s : n.sealeds) {  // (and its cases, by their full names)
+        module.sealeds[outer + "." + s->name] = s.get();
+        for (const DataClass& d : s->dataClasses) module.classes[outer + "." + s->name + "." + d.name] = &d;
+        for (const ClassDecl& c : s->classes) module.classDecls[outer + "." + s->name + "." + c.name] = &c;
+        for (const ObjectDecl& o : s->objects) module.objects.insert(outer + "." + s->name + "." + o.name);
+        if (s->companion) module.objectDecls[outer + "." + s->name] = s->companion.get();
     }
     for (const auto& c : n.innerClasses) {  // (made through an outer object: outer.Inner(…), by its name alone)
         auto& outers = module.innerClasses[c->name];
@@ -653,9 +666,10 @@ void declareIn(Module& module, const Found& f, bool qualified) {
     if (f.dataClass) declareNested(module, f.name(), f.dataClass->nested);
     if (f.object) declareNested(module, f.name(), f.object->nested);
     if (f.interface) declareNested(module, f.name(), f.interface->nested);
+    if (f.enumClass) declareNested(module, f.name(), f.enumClass->nested);
     // A companion object: Name.member is the class's own (read through a function where it is one of an object's).
     const ObjectDecl* companion = f.classDecl ? f.classDecl->companion.get() : f.dataClass ? f.dataClass->companion.get()
-                                  : f.interface ? f.interface->companion.get() : nullptr;
+                                  : f.interface ? f.interface->companion.get() : f.sealed ? f.sealed->companion.get() : nullptr;
     if (companion) module.objectDecls[f.name()] = companion;
     if (qualified && f.function && f.function->composable) module.qualifiers[f.function->name] = f.qualifier;
     // (a class template is named with its namespace where it is made: inside itself its name alone is the type it is)
@@ -679,7 +693,9 @@ void declareIn(Module& module, const Found& f, bool qualified) {
         module.objectDecls[f.object->name] = &*f.object;
     } else if (f.interface) module.interfaces[f.interface->name] = &*f.interface;
     else if (f.sealed) {  // its nested subclasses, by their full names (two sealed classes may each have a Loading)
+        module.sealeds[f.sealed->name] = &*f.sealed;
         for (const DataClass& d : f.sealed->dataClasses) module.classes[f.sealed->name + "." + d.name] = &d;
+        for (const ClassDecl& c : f.sealed->classes) module.classDecls[f.sealed->name + "." + c.name] = &c;
         for (const ObjectDecl& o : f.sealed->objects) module.objects.insert(f.sealed->name + "." + o.name);
     }
 }
@@ -763,6 +779,7 @@ void nestedNames(const NestedDecls& n, NameSet& out);
 void objectNames(const ObjectDecl* o, NameSet& out) {
     if (!o) return;
     for (const Type& t : o->supers) typeNames(t, out);
+    for (const NodeP& a : o->superCall.args) names(a.get(), out);
     for (const ClassProperty& p : o->properties) properties(p, out);
     for (const Function& m : o->methods) functionNames(m, out);
     for (const NodeP& b : o->initBlocks) names(b.get(), out);
@@ -786,6 +803,7 @@ void enumNames(const EnumClass& e, NameSet& out) {  // (its entries are its own;
     for (const Function& m : e.methods) functionNames(m, out);
     for (const NodeP& b : e.initBlocks) names(b.get(), out);
     objectNames(e.companion.get(), out);
+    nestedNames(e.nested, out);
     for (const auto& b : e.entryBodies)
         if (b) {
             for (const ClassProperty& p : b->properties) properties(p, out);
@@ -807,6 +825,7 @@ void classNames(const ClassDecl& c, NameSet& out) {
     nestedNames(c.nested, out);
 }
 void dataClassNames(const DataClass& d, NameSet& out) {
+    for (const NodeP& a : d.superCall.args) names(a.get(), out);
     for (const Type& t : d.supers) typeNames(t, out);
     for (const Param& p : d.fields) {
         typeNames(p.type, out);
@@ -818,6 +837,18 @@ void dataClassNames(const DataClass& d, NameSet& out) {
     objectNames(d.companion.get(), out);
     nestedNames(d.nested, out);
 }
+// A sealed class's own: its constructor's, its interfaces', its members'.
+void sealedNames(const SealedDecl& s, NameSet& out) {
+    for (const Param& p : s.ctorParams) {
+        typeNames(p.type, out);
+        names(p.defaultValue.get(), out);
+    }
+    for (const Type& t : s.supers) typeNames(t, out);
+    for (const ClassProperty& p : s.properties) properties(p, out);
+    for (const Function& m : s.methods) functionNames(m, out);
+    for (const NodeP& b : s.initBlocks) names(b.get(), out);
+    objectNames(s.companion.get(), out);
+}
 void nestedNames(const NestedDecls& n, NameSet& out) {
     for (const auto& c : n.classes) classNames(*c, out);
     for (const auto& d : n.dataClasses) dataClassNames(*d, out);
@@ -825,6 +856,12 @@ void nestedNames(const NestedDecls& n, NameSet& out) {
     for (const auto& o : n.objects) objectNames(o.get(), out);
     for (const auto& i : n.interfaces) interfaceNames(*i, out);
     for (const auto& c : n.innerClasses) classNames(*c, out);
+    for (const auto& s : n.sealeds) {
+        for (const ClassDecl& c : s->classes) classNames(c, out);
+        for (const DataClass& d : s->dataClasses) dataClassNames(d, out);
+        for (const ObjectDecl& o : s->objects) objectNames(&o, out);
+        sealedNames(*s, out);
+    }
 }
 void names(const Found& f, NameSet& out) {
     if (f.function) {
@@ -837,7 +874,9 @@ void names(const Found& f, NameSet& out) {
     } else if (f.sealed) {  // its subclasses: those in it, and those of its file (taken with it)
         for (const DataClass& d : f.sealed->dataClasses) dataClassNames(d, out);
         for (const ObjectDecl& o : f.sealed->objects) objectNames(&o, out);
+        for (const ClassDecl& c : f.sealed->classes) classNames(c, out);
         for (const std::string& t : f.sealed->topLevel) out.insert(t);
+        sealedNames(*f.sealed, out);
     } else if (f.interface) {
         interfaceNames(*f.interface, out);
     } else if (f.enumClass) {
@@ -981,7 +1020,8 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     // uses; one of another file, from its file.
     std::map<std::string, std::vector<std::pair<std::string, const Found*>>, std::less<>> early;  // (a name's overloads together)
     auto isEarly = [](const Found& g) {
-        return g.property || g.classDecl || g.interface || (g.function && !g.function->composable) || (g.object && g.object->hasMembers());
+        return g.property || g.classDecl || g.interface || (g.function && !g.function->composable) || (g.object && g.object->hasMembers()) ||
+               (g.sealed && g.sealed->classCases);
     };
     for (const Found& g : found)
         if (isEarly(g)) early[g.name()].emplace_back(lineFile, &g);
@@ -1004,6 +1044,7 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             else if (g.classDecl) generateClassDecl(out, *g.classDecl, module);
             else if (g.interface) generateInterface(out, *g.interface, module);
             else if (g.object) generateObject(out, *g.object, module);
+            else if (g.sealed) generateSealed(out, *g.sealed, module);
             else generateDefinition(out, *g.function, module);
         }
         out.setFile(lineFile);
@@ -1059,14 +1100,19 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             if (g.object && !g.object->hasMembers()) generateObject(out, *g.object, module);
         }
         // Sealed classes after their subclasses (the variant's alternatives are complete types).
+        // (one with a class case is defined after its cases, where first used: declared here)
         for (auto [o, g] : imported)
             if (g->sealed) {
                 out.setFile(o->lineFile);
-                generateSealed(out, *g->sealed, module);
+                if (g->sealed->classCases) declareType(out, g->sealed->name, {}, false);
+                else generateSealed(out, *g->sealed, module);
             }
         out.setFile(lineFile);
         for (const Found& g : found)
-            if (g.sealed) generateSealed(out, *g.sealed, module);
+            if (g.sealed) {
+                if (g.sealed->classCases) declareType(out, g.sealed->name, {}, false);
+                else generateSealed(out, *g.sealed, module);
+            }
     };
     // The module's functions, classes and vals that this file's C++ (not its Kotlin) names before
     // they are defined here (or defined in another file): declared where the statement using them

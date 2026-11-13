@@ -302,6 +302,11 @@ Module withNested(const Module& module, const std::string& outer, const NestedDe
         m.objectDecls[o->name] = o.get();
     }
     for (const auto& i : n.interfaces) m.interfaces[i->name] = i.get();
+    for (const auto& s : n.sealeds) {  // (and its cases: S.Ready, S.Loading)
+        m.sealeds[s->name] = s.get();
+        for (const DataClass& d : s->dataClasses) m.classes[s->name + "." + d.name] = &d;
+        for (const ObjectDecl& o : s->objects) m.objects.insert(s->name + "." + o.name);
+    }
     (void)outer;
     return m;
 }
@@ -687,7 +692,9 @@ public:
         switch (n->kind) {
             case Node::Name:
                 if (const VarKind* k = lookup(n->text); k && *k == Local) return varLocals_.contains(n->text);
-                return !module_.properties.contains(n->text) || lookup(n->text);
+                if (auto p = module_.properties.find(n->text); p != module_.properties.end() && !lookup(n->text) && !memberFields_.contains(n->text))
+                    return p->second->decl->flag || p->second->decl->delegated;  // (a top-level var may change)
+                return true;
             case Node::Number:
             case Node::Bool:
             case Node::Null:
@@ -756,7 +763,7 @@ public:
     // Whether a class is a handle to its object (Name::Object): one with no base, or deriving from such a class
     // (its object from that one's); one deriving from a C++ class (a ViewModel) is that class itself.
     bool isHandle(const ClassDecl& k, int depth = 0) const {
-        if (!k.base) return true;
+        if (!k.base || sealedNamed(k.base->name)) return true;  // (a sealed class's case: a handle, as one with no base)
         const ClassDecl* b = kotlinBase(k);
         return b && depth < 32 && isHandle(*b, depth + 1);
     }
@@ -833,7 +840,7 @@ public:
         for (size_t i = 0; i < m.params.size(); ++i) {
             const Param& p = m.params[i];
             out_->text((i ? ", " : "") + genericParamType(generic, i, p, m.isSuspend) + " " + cppName(p.name));
-            if (defaults && p.defaultValue) {
+            if (defaults && p.defaultValue && i >= defaultsFrom(m)) {
                 out_->text(" = ");
                 expr(*p.defaultValue, &p.type);
             }
@@ -1059,7 +1066,7 @@ public:
         Outermost outermost(*this);
         nestedDefinitions(i.nested, i.name);
         out_->text(templateHead(i.typeParams) + "class " + i.name + " {");
-        companionMembers(i.companion);
+        companionMembers(i.companion, i.name);
         nestedAliases(i.nested, i.name);
         out_->text(" public: struct Object : " + bases + " {");
         bool wasInClass = std::exchange(inClass_, true);
@@ -1147,10 +1154,9 @@ public:
             const Function* m = nullptr;
             for (const Function& f : i.methods)
                 if (f.isAbstract) m = &f;
-            if (m->isSuspend) throw CompileError(m->pos, "a fun interface's suspend fun isn't supported");
-            std::string params, args;
+            std::string params, args;  // (a suspend fun's: its parameters by value, its result the lambda's coroutine)
             for (size_t k = 0; k < m->params.size(); ++k) {
-                params += (k ? ", " : "") + paramType(m->params[k].type) + " " + cppName(m->params[k].name);
+                params += (k ? ", " : "") + paramTypeOf(m->params[k], m->isSuspend) + " " + cppName(m->params[k].name);
                 args += (k ? ", " : "") + cppName(m->params[k].name);
             }
             InterfaceMember im{&i, nullptr, m, false, "Object", i.name, {}};
@@ -1180,16 +1186,31 @@ public:
                 factoryParams += (i ? ", " : "") + type(k.fields[i].type) + " " + cppName(k.fields[i].name);
                 factoryFields += (i ? ", ." : ".") + cppName(k.fields[i].name) + " = std::move(" + cppName(k.fields[i].name) + ")";
             }
-            out_->text(templateHead(k.typeParams) + "struct " + k.name + "; " + templateHead(k.typeParams) + made + " kompoz_make_" + k.name + "(" +
-                      factoryParams + "); ");
+            // (nested: a static function of the struct it is in, its outer type forwarding to it)
+            out_->text(templateHead(k.typeParams) + "struct " + k.name + "; ");
+            if (outerQualifier_.empty()) out_->text(templateHead(k.typeParams) + made + " kompoz_make_" + k.name + "(" + factoryParams + "); ");
         }
         Outermost outermost(*this);
         nestedDefinitions(k.nested, k.name);
+        auto own = fieldNames(k.properties);
+        for (const Param& f : k.fields) own.insert(f.name);
+        if (const SealedDecl* s = sealedOf(k.supers)) {
+            for (const Param& p : s->ctorParams) own.insert(p.name);
+            for (const ClassProperty& p : s->properties) own.insert(p.name);
+        }
+        OwnFields ownFields(*this, std::move(own));
         out_->text(templateHead(k.typeParams) + "struct " + k.name + " {");
-        companionMembers(k.companion);
+        companionMembers(k.companion, k.name);
         nestedAliases(k.nested, k.name);
+        // Its inner classes: made with a copy of it (a data class is a value here), defined at its end.
+        if (!k.nested.innerClasses.empty() && !k.typeParams.empty())
+            throw CompileError(k.nested.innerClasses[0]->pos, "an inner class of a generic data class isn't supported: of a generic class it is");
+        for (const auto& c : k.nested.innerClasses) out_->text(" class " + c->name + ";");
+        auto wasInnerMade = innerMade_;
+        for (const auto& c : k.nested.innerClasses) innerMade_[c->name] = {c.get(), "std::make_shared<" + k.name + ">(*this)"};
         scopes_.emplace_back();
-        bool body = k.hasBody();
+        const SealedDecl* sealed = sealedOf(k.supers);
+        bool body = k.hasBody() || sealed;
         for (size_t i = 0; i < k.fields.size(); ++i) {
             const Param& f = k.fields[i];
             out_->at(f.pos);
@@ -1202,6 +1223,7 @@ public:
             }
             out_->text(";");
         }
+        if (sealed) sealedFields(*sealed, k.superCall, k.name, k.pos, &k);
         scopes_.pop_back();
         if (std::find(k.annotations.begin(), k.annotations.end(), "Serializable") != k.annotations.end()) {  // a route (nav_host.hpp)
             out_->text(" KOMPOZ_ROUTE(" + k.name);
@@ -1223,14 +1245,22 @@ public:
                 out_->text(", \"" + std::string(i ? ", " : "") + k.fields[i].name + "=\", " + cppName(k.fields[i].name));
             out_->text(", \")\"); }");
         }
-        interfaceAdapter(k.name, k.supers, false, [&](const std::string& n) {
+        if (!k.nested.innerClasses.empty()) {
+            Module module = withNested(module_, k.name, k.nested);
+            module.classes[k.name] = &k;
+            innerDefinitions(k.name, k.nested, module, "std::shared_ptr<" + k.name + ">", "");
+        }
+        innerMade_ = std::move(wasInnerMade);
+        interfaceAdapter(k.name, caseSupers(k.supers), false, [&](const std::string& n) {
             return std::any_of(k.fields.begin(), k.fields.end(), [&](const Param& f) { return f.name == n; }) ||
                    std::any_of(k.properties.begin(), k.properties.end(), [&](const ClassProperty& p) { return p.name == n; }) ||
-                   std::any_of(k.methods.begin(), k.methods.end(), [&](const Function& m) { return m.name == n; });
+                   std::any_of(k.methods.begin(), k.methods.end(), [&](const Function& m) { return m.name == n; }) ||
+                   (sealed && sealedHas(*sealed, n));
         }, k.pos);
         out_->text(" };");
         if (!made.empty())
-            out_->text(" " + templateHead(k.typeParams) + made + " kompoz_make_" + k.name + "(" + factoryParams + ") { return " + made + "{" + factoryFields +
+            out_->text(" " + templateHead(k.typeParams) + (outerQualifier_.empty() ? "" : "static ") + made + " kompoz_make_" + k.name + "(" + factoryParams +
+                       ") { return " + made + "{" + factoryFields +
                       "}; }");
         out_->text("\n");
         outermost.end();
@@ -1243,15 +1273,37 @@ public:
     void dataClassBody(const DataClass& k) {
         bool wasInClass = std::exchange(inClass_, true);
         scopes_.emplace_back();
-        declareMembers(k.properties, k.supers, false);
+        // A sealed class's case: its members first (those it doesn't override, not the abstract ones), as Kotlin
+        // makes the base first; then its own.
+        const SealedDecl* sealed = sealedOf(k.supers);
+        std::vector<Type> supers = caseSupers(k.supers);
+        if (sealed) declareMembers(sealed->properties, std::vector<Type>{}, false);
+        declareMembers(k.properties, supers, false);
         auto access = [](bool) {};  // (an aggregate's members are public)
-        InterfaceMembers inherited = interfaceMembers(k.supers);
+        InterfaceMembers inherited = interfaceMembers(supers);
         auto wasMethods = std::exchange(classMethods_, methodsOf(k.methods, inherited));
+        std::vector<std::pair<const ClassProperty*, const Function*>> members;
+        if (sealed)
+            for (size_t index : sealed->memberOrder) {
+                if (index % 2 == 0) {
+                    const ClassProperty& p = sealed->properties[index / 2];
+                    if (!p.isAbstract && std::none_of(k.properties.begin(), k.properties.end(), [&](const ClassProperty& q) { return q.name == p.name; }))
+                        members.emplace_back(&p, nullptr);
+                } else {
+                    const Function& m = sealed->methods[index / 2];
+                    if (!m.isAbstract && std::none_of(k.methods.begin(), k.methods.end(), [&](const Function& f) { return f.name == m.name && f.params.size() == m.params.size(); })) {
+                        members.emplace_back(nullptr, &m);
+                        classMethods_[m.name].push_back(&m);
+                    }
+                }
+            }
+        for (size_t index : k.order) members.emplace_back(index % 2 == 0 ? &k.properties[index / 2] : nullptr, index % 2 == 0 ? nullptr : &k.methods[index / 2]);
+        if (sealed) calleesFirst(members);
         knowCompanion(k.companion);
-        bool rebuilds = !k.initBlocks.empty();
-        for (size_t index : k.order) {
-            if (index % 2 == 0) {
-                const ClassProperty& p = k.properties[index / 2];
+        bool rebuilds = !k.initBlocks.empty() || sealed;
+        for (auto [property, method] : members) {
+            if (property) {
+                const ClassProperty& p = *property;
                 if (p.accessed() && !p.delegated && !stores(p)) {
                     accessorFunctions(p, memberNamed(inherited, p.name), false, access, false);
                     continue;
@@ -1281,7 +1333,7 @@ public:
                 out_->text(";");
                 if (p.accessed()) accessorFunctions(p, memberNamed(inherited, p.name), false, access, false);
             } else {
-                const Function& m = k.methods[index / 2];
+                const Function& m = *method;
                 if (m.isAbstract) throw CompileError(m.pos, m.name + " needs a body");
                 out_->at(m.pos);
                 scopes_.emplace_back();
@@ -1291,6 +1343,11 @@ public:
                 functionBody(m);
                 scopes_.pop_back();
             }
+        }
+        for (size_t i = 0; sealed && i < sealed->initBlocks.size(); ++i) {  // (its sealed class's first)
+            out_->text(" [[no_unique_address]] ::kompoz::kt::InitBlock kompoz_sealed_init_" + std::to_string(i) + " = " + capture("[=]") + "() {");
+            statements(*sealed->initBlocks[i], false);
+            out_->text(" };");
         }
         for (size_t i = 0; i < k.initBlocks.size(); ++i) {  // (run as it is made, after the values above)
             out_->text(" [[no_unique_address]] ::kompoz::kt::InitBlock kompoz_init_" + std::to_string(i) + " = " + capture("[=]") + "() {");
@@ -1365,21 +1422,25 @@ public:
     // A class's inner classes, in it (after its object, complete there): each by a generator of its own, whose body's
     // receivers are the outer objects (this one's and those it is inner to), their members reached by their names.
     void innerDefinitions(const ClassDecl& k, bool handle) {
-        for (const auto& c : k.nested.innerClasses) {
-            Module module = withNested(module_, k.name, k.nested);
-            module.classDecls[k.name] = &k;  // (its outer one's members: looked up by its name)
+        Module module = withNested(module_, k.name, k.nested);
+        module.classDecls[k.name] = &k;  // (its outer one's members: looked up by its name)
+        innerDefinitions(k.name, k.nested, module, handle ? "std::shared_ptr<" + k.name + "::Object>" : k.name + "*", handle ? k.name : std::string());
+    }
+    // (a data class's or an enum's: a value, the inner object holding a copy of it, shared: std::shared_ptr<Name>)
+    void innerDefinitions(const std::string& name, const NestedDecls& nested, const Module& module, const std::string& holder, const std::string& handle) {
+        for (const auto& c : nested.innerClasses) {
             Generator g(*out_, module);
             g.deferred_ = deferred_;
             g.innerClass_ = c.get();
             g.outers_ = outers_;
-            g.outers_.push_back({k.name, handle ? "std::shared_ptr<" + k.name + "::Object>" : k.name + "*", handle ? k.name : std::string()});
+            g.outers_.push_back({name, holder, handle});
             for (const OuterLink& o : g.outers_) {
                 g.receivers_.push_back(o.receiver);
                 g.receiverConst_.push_back(false);
                 g.receiverLabels_.push_back(o.receiver);
             }
             // (its sibling inner classes, made by their names: with the same outer object)
-            for (const auto& s : k.nested.innerClasses) g.innerMade_[s->name] = {s.get(), "kompoz_this_" + std::to_string(g.outers_.size())};
+            for (const auto& s : nested.innerClasses) g.innerMade_[s->name] = {s.get(), "kompoz_this_" + std::to_string(g.outers_.size())};
             g.classDeclDefinition(*c);
         }
     }
@@ -1398,14 +1459,22 @@ public:
     void classDeclDefinition(const ClassDecl& k) {
         Outermost outermost(*this);
         nestedDefinitions(k.nested, k.name);
-        // A Kotlin base class (open or abstract): a handle's object derives from its object, a class from it.
+        // A sealed class's case (class Failure(val e: Exception) : Result()): a handle, as a class without a base is,
+        // with its sealed class's interfaces, constructor's values (from its base's arguments) and members, first.
+        const SealedDecl* sealedBase = k.base ? sealedNamed(k.base->name) : nullptr;
+        std::vector<Type> interfaces;
+        for (const Type& t : k.interfaces) {
+            if (const SealedDecl* si = sealedNamed(t.name)) sealedBase = si;  // (a sealed interface's case)
+            else interfaces.push_back(t);
+        }
+        if (sealedBase) interfaces.insert(interfaces.end(), sealedBase->supers.begin(), sealedBase->supers.end());
         const ClassDecl* kbase = kotlinBase(k);
         if (kbase && !kbase->isOpen && !kbase->isAbstract)
             throw CompileError(k.base->pos, kbase->name + " is final: a class derives from an open class or an abstract one");
         bool handle = isHandle(k);
         std::string baseObject = kbase && handle ? plainType(*k.base) + "::Object" : std::string();
         std::string bases = baseObject.empty() ? std::string() : "public " + baseObject;  // its base's and interfaces' objects
-        for (const Type& t : k.interfaces) {
+        for (const Type& t : interfaces) {
             const InterfaceDecl* d = interfaceNamed(t.name);
             if (!d) throw CompileError(t.pos, t.name + " isn't an interface written in Kotlin here; a base class is constructed: " + t.name + "()");
             bases += std::string(bases.empty() ? "" : ", ") + "public virtual " + plainType(t) + "::Object";
@@ -1417,10 +1486,39 @@ public:
         const auto& inners = k.nested.innerClasses;
         if (handle && !inners.empty()) bases += std::string(bases.empty() ? "" : ", ") + "public virtual ::kompoz::kt::Shared";
         InterfaceMembers inherited = inheritedMembers(k);
-        bool interfaceRooted = std::any_of(inherited.begin(), inherited.end(), [](const auto& m) { return m.second.in != nullptr; }) || !k.interfaces.empty();
-        std::string wasSuper = std::exchange(superObject_, kbase ? (handle ? baseObject : qualified(kbase->name)) : k.base ? baseClass(*k.base) : std::string());
+        if (sealedBase)
+            for (auto& [n, m] : interfaceMembers(sealedBase->supers))
+                if (std::none_of(inherited.begin(), inherited.end(), [&](const auto& o) { return o.first == n; })) inherited.emplace_back(n, m);
+        bool interfaceRooted = std::any_of(inherited.begin(), inherited.end(), [](const auto& m) { return m.second.in != nullptr; }) || !interfaces.empty();
+        std::string wasSuper = std::exchange(superObject_, kbase ? (handle ? baseObject : qualified(kbase->name)) : k.base && !sealedBase ? baseClass(*k.base) : std::string());
         const InterfaceMembers* wasSuperMembers = std::exchange(superMembers_, &inherited);
         auto wasMethods = std::exchange(classMethods_, methodsOf(k.methods, inherited));
+        // Its properties and functions: its sealed class's first (those it doesn't override, not the abstract ones),
+        // the functions each after those it calls (C++ deduces their types in order).
+        std::vector<std::pair<const ClassProperty*, const Function*>> members;
+        if (sealedBase)
+            for (size_t index : sealedBase->memberOrder) {
+                if (index % 2 == 0) {
+                    const ClassProperty& p = sealedBase->properties[index / 2];
+                    if (!p.isAbstract && std::none_of(k.properties.begin(), k.properties.end(), [&](const ClassProperty& q) { return q.name == p.name; }))
+                        members.emplace_back(&p, nullptr);
+                } else {
+                    const Function& m = sealedBase->methods[index / 2];
+                    if (!m.isAbstract && std::none_of(k.methods.begin(), k.methods.end(), [&](const Function& f) { return f.name == m.name && f.params.size() == m.params.size(); })) {
+                        members.emplace_back(nullptr, &m);
+                        classMethods_[m.name].push_back(&m);
+                    }
+                }
+            }
+        for (const ClassProperty& p : k.properties) members.emplace_back(&p, nullptr);
+        for (const Function& m : k.methods) members.emplace_back(nullptr, &m);
+        if (sealedBase) calleesFirst(members);
+        std::vector<const ClassProperty*> props;
+        std::vector<const Function*> methods;
+        for (auto [p, m] : members) {
+            if (p) props.push_back(p);
+            if (m) methods.push_back(m);
+        }
         std::string wasSelf = std::exchange(interfaceSelf_, handle ? std::string("Object") : k.name);  // (its types' view of it)
         std::string wasThisClass = std::exchange(thisClass_, k.name);
         auto wasInnerMade = innerMade_;  // (its inner classes, made by their names in it: with it as their outer object)
@@ -1433,6 +1531,14 @@ public:
         if (k.base && !handle && thrown(*k.base))  // (an exception of its own: its name in its text, "MyError: …")
             out_->text(" public: const char* kotlinName() const override { return \"" + k.name + "\"; }");
         bool wasInClass = std::exchange(inClass_, true);
+        auto own = fieldNames(k.properties);
+        for (size_t i = 0; i < k.ctorParams.size(); ++i)
+            if (k.ctorKinds[i] != ' ') own.insert(k.ctorParams[i].name);
+        if (sealedBase) {
+            for (const Param& p : sealedBase->ctorParams) own.insert(p.name);
+            for (const ClassProperty& p : sealedBase->properties) own.insert(p.name);
+        }
+        OwnFields ownFields(*this, std::move(own));
         // Its members read through functions, by their names in all of it.
         scopes_.emplace_back();
         {
@@ -1443,6 +1549,7 @@ public:
                     if (k.ctorOverride[i]) accessedParams.push_back(k.ctorParams[i].name);
                     else fields.insert(k.ctorParams[i].name);
                 }
+            if (sealedBase) declareMembers(sealedBase->properties, std::vector<Type>{}, false);
             declareMembers(k.properties, inherited, false, accessedParams, fields);
             knowCompanion(k.companion);
             if (isInner) {  // (an inner class's own fields before its outer object's members of their names)
@@ -1462,7 +1569,7 @@ public:
             isPublic = wantPublic;
         };
         out_->text(" public:");
-        companionMembers(k.companion);  // (first: its functions' types are known where the rest's bodies use them)
+        companionMembers(k.companion, k.name);  // (first: its functions' types are known where the rest's bodies use them)
         nestedAliases(k.nested, k.name);
         out_->text(" public:");
         for (const auto& c : inners) out_->text(" class " + c->name + ";");  // (defined after its object: they reach its members)
@@ -1475,6 +1582,12 @@ public:
         // The members: the constructor's val/var parameters, then the properties (one read through functions
         // keeps its value or delegate aside, private: kompoz_value_<name>, kompoz_by_<name>).
         auto paramStorage = [&](size_t i) { return k.ctorOverride[i] ? "kompoz_value_" + k.ctorParams[i].name : cppName(k.ctorParams[i].name); };
+        for (size_t i = 0; sealedBase && i < sealedBase->ctorParams.size(); ++i) {  // (its sealed class's values first)
+            const Param& p = sealedBase->ctorParams[i];
+            access(true);
+            out_->at(p.pos);
+            out_->text(" mutable " + type(p.type) + " " + cppName(p.name) + ";");
+        }
         for (size_t i = 0; i < k.ctorParams.size(); ++i) {
             if (k.ctorKinds[i] == ' ') continue;
             access(!k.ctorPrivate[i] && !k.ctorOverride[i]);
@@ -1482,7 +1595,8 @@ public:
             out_->text(" mutable " + type(k.ctorParams[i].type) + " " + paramStorage(i) + ";");
         }
         auto propertyStorage = [&](const ClassProperty& p) { return p.accessed() ? storageOf(p) : cppName(p.name); };
-        for (const ClassProperty& p : k.properties) {
+        for (const ClassProperty* pp : props) {
+            const ClassProperty& p = *pp;
             if (p.accessed() && !p.delegated && !stores(p)) continue;  // (a getter's alone)
             access(!p.accessed() && !p.isPrivate);
             out_->at(p.pos);
@@ -1537,7 +1651,7 @@ public:
         for (size_t i = 0; i < k.ctorParams.size(); ++i)
             if (k.ctorKinds[i] == ' ') declare(k.ctorParams[i].name, Local);
         bool any = false;
-        if (k.base && !k.baseArgs.empty()) {
+        if (k.base && !k.baseArgs.empty() && !sealedBase) {
             // (made before the members: a val/var parameter is read as the parameter there, kompoz_<name>)
             out_->text(" : " + (baseObject.empty() ? baseClass(*k.base) : baseObject) + "(");
             scopes_.emplace_back();
@@ -1559,12 +1673,30 @@ public:
         for (size_t i = 0; isInner && i < outers_.size(); ++i, any = true)  // (its outer object's own outer ones: theirs)
             out_->text(std::string(any ? ", " : " : ") + "kompoz_this_" + std::to_string(i + 1) +
                        (i + 1 == outers_.size() ? "(std::move(kompoz_outer))" : "(kompoz_outer->kompoz_this_" + std::to_string(i + 1) + ")"));
+        if (sealedBase) {  // its sealed class's values, from its base's arguments (a val parameter read as the parameter)
+            std::vector<const Node*> given = sealedArguments(*sealedBase, k.baseArgNames, k.baseArgs, k.name, k.pos);
+            scopes_.emplace_back();
+            parameterScope_ = scopes_.size();
+            for (size_t i = 0; i < k.ctorParams.size(); ++i)
+                if (k.ctorKinds[i] != ' ') {
+                    declare(k.ctorParams[i].name, Local);
+                    parameterNames_[k.ctorParams[i].name] = "kompoz_" + k.ctorParams[i].name;
+                }
+            for (size_t i = 0; i < given.size(); ++i, any = true) {
+                out_->text(std::string(any ? ", " : " : ") + cppName(sealedBase->ctorParams[i].name) + "(");
+                expr(*given[i], &sealedBase->ctorParams[i].type);
+                out_->text(")");
+            }
+            parameterNames_.clear();
+            scopes_.pop_back();
+        }
         for (size_t i = 0; i < k.ctorParams.size(); ++i) {
             if (k.ctorKinds[i] == ' ') continue;
             out_->text(std::string(any ? ", " : " : ") + paramStorage(i) + "(std::move(kompoz_" + k.ctorParams[i].name + "))");
             any = true;
         }
-        for (const ClassProperty& p : k.properties) {
+        for (const ClassProperty* pp : props) {
+            const ClassProperty& p = *pp;
             if (!p.init) continue;
             out_->text(std::string(any ? ", " : " : ") + propertyStorage(p) + "(");
             expr(*p.init, p.type && !p.delegated ? &*p.type : nullptr);
@@ -1572,6 +1704,8 @@ public:
             any = true;
         }
         out_->text(" {");
+        if (sealedBase)  // (its sealed class's init blocks first)
+            for (const NodeP& b : sealedBase->initBlocks) statements(*b, false);
         for (const NodeP& b : k.initBlocks) statements(*b, false);
         out_->text(" }");
         scopes_.pop_back();
@@ -1588,11 +1722,12 @@ public:
                 out_->text(" void " + setterOf(p.name) + "(" + paramType(p.type) + " kompoz_v) const" + (base->property->isVar ? " override" : "") +
                           " { kompoz_value_" + p.name + " = kompoz_v; }");
         }
-        for (const ClassProperty& p : k.properties)
-            if (p.accessed()) accessorFunctions(p, memberNamed(inherited, p.name), false, access);
+        for (const ClassProperty* p : props)
+            if (p->accessed()) accessorFunctions(*p, memberNamed(inherited, p->name), false, access);
         // Its functions, each seeing its parameters and, by their names, the class's members.
         bool ownToString = false;
-        for (const Function& m : k.methods) {
+        for (const Function* mp : methods) {
+            const Function& m = *mp;
             if (m.isAbstract && !k.isAbstract) throw CompileError(m.pos, m.name + " is abstract: its class is too (abstract class " + k.name + ")");
             access(!m.isPrivate);
             out_->at(m.pos);
@@ -1605,6 +1740,8 @@ public:
                 suffix = " override", inheritedType = memberType(base->owner, *base);
             } else if (any) {
                 if (m.name == "toString" && interfaceRooted) suffix = " override", inheritedType = "std::string";
+            } else if (m.overrides && sealedBase && std::any_of(sealedBase->methods.begin(), sealedBase->methods.end(), [&](const Function& f) { return f.name == m.name; })) {
+                // (its sealed class's open or abstract fun: its own, in place of that)
             } else if (m.overrides) {  // a C++ base's (a ViewModel's onCleared)
                 isConst = false, suffix = " override";
             }
@@ -1645,7 +1782,8 @@ public:
             out_->text(" const std::shared_ptr<Object>& kompoz_shared() const { return kompoz_object_; }");
             out_->text(" bool operator==(const " + k.name + "& o) const { return kompoz_object_ == o.kompoz_object_; }");
             if (interfaceRooted || ownToString) out_->text(" std::string toString() const { return kompoz_object_->toString(); }");
-            for (const Function& m : k.methods) {
+            for (const Function* mp : methods) {
+                const Function& m = *mp;
                 if (m.isPrivate || m.name == "toString") continue;
                 out_->at(m.pos);
                 if (!m.typeParams.empty()) {  // (a generic one's: what it is given, passed on)
@@ -1661,7 +1799,7 @@ public:
                 for (size_t i = 0; i < m.params.size(); ++i) {
                     const Param& p = m.params[i];
                     out_->text((i ? ", " : "") + paramTypeOf(p, m.isSuspend) + " " + cppName(p.name));
-                    if (p.defaultValue) {  // (the defaults where the call arrives)
+                    if (p.defaultValue && i >= defaultsFrom(m)) {  // (the defaults where the call arrives)
                         out_->text(" = ");
                         expr(*p.defaultValue);
                     }
@@ -1687,20 +1825,122 @@ public:
         memberPrefix_ = std::move(wasMemberPrefix);
     }
 
+    // A body's functions put in the order C++ needs where their types are deduced: each after those it calls (a case's
+    // own after its sealed class's that call them: label() calling badge()), the rest of the order kept. (Kotlin
+    // wants a type written on functions calling each other in a circle: there is always such an order.)
+    void calleesFirst(std::vector<std::pair<const ClassProperty*, const Function*>>& members) const {
+        std::vector<size_t> slots;  // where the functions are
+        for (size_t i = 0; i < members.size(); ++i)
+            if (members[i].second) slots.push_back(i);
+        std::vector<const Function*> sorted;
+        std::set<const Function*> done, visiting;
+        auto visit = [&](auto&& self, const Function* f) -> void {
+            if (done.contains(f) || !visiting.insert(f).second) return;
+            std::set<std::string, std::less<>> used;
+            usedNames(f->body.get(), used);
+            for (size_t i : slots)
+                if (const Function* g = members[i].second; g != f && used.contains(g->name)) self(self, g);
+            done.insert(f);
+            sorted.push_back(f);
+        };
+        for (size_t i : slots) visit(visit, members[i].second);
+        for (size_t i = 0; i < slots.size(); ++i) members[slots[i]].second = sorted[i];
+    }
+
+    // A sealed class or interface of the name (with members or not), if it is one.
+    const SealedDecl* sealedNamed(const std::string& name) const {
+        auto s = module_.sealeds.find(name);
+        if (s == module_.sealeds.end()) s = module_.sealeds.find(std::string_view(name).substr(name.rfind('.') + 1));
+        return s == module_.sealeds.end() ? nullptr : s->second;
+    }
+    // The sealed class (or interface) with members or interfaces of its own a case's supertypes name, if any.
+    const SealedDecl* sealedOf(const std::vector<Type>& supers) const {
+        for (const Type& t : supers) {
+            auto s = module_.sealeds.find(t.name);
+            if (s == module_.sealeds.end()) s = module_.sealeds.find(std::string_view(t.name).substr(t.name.rfind('.') + 1));
+            if (s != module_.sealeds.end() && (s->second->hasMembers() || !s->second->supers.empty())) return s->second;
+        }
+        return nullptr;
+    }
+    // A case's interfaces: its own, and its sealed class's.
+    std::vector<Type> caseSupers(const std::vector<Type>& supers) const {
+        std::vector<Type> out = supers;
+        if (const SealedDecl* s = sealedOf(supers)) out.insert(out.end(), s->supers.begin(), s->supers.end());
+        return out;
+    }
+    static bool sealedHas(const SealedDecl& s, const std::string& n) {
+        return std::any_of(s.ctorParams.begin(), s.ctorParams.end(), [&](const Param& p) { return p.name == n; }) ||
+               std::any_of(s.properties.begin(), s.properties.end(), [&](const ClassProperty& p) { return p.name == n; }) ||
+               std::any_of(s.methods.begin(), s.methods.end(), [&](const Function& m) { return m.name == n; });
+    }
+    // A case's values of its sealed class's constructor parameters, from what it gives it (Screen("home"), by position
+    // or by name; a default for the rest): a data class's members (made after its fields, from them), an object's
+    // static ones (`dataClass`: none).
+    // Each of a sealed class's constructor parameters' value a case gives (by position or by name, else its default).
+    std::vector<const Node*> sealedArguments(const SealedDecl& s, const std::vector<std::string>& names, const std::vector<NodeP>& args,
+                                             const std::string& who, Pos pos) {
+        if (s.ctorParams.empty() && !args.empty()) throw CompileError(pos, who + ": " + s.name + " takes no arguments");
+        std::vector<const Node*> given(s.ctorParams.size(), nullptr);
+        size_t next = 0;
+        for (size_t i = 0; i < args.size(); ++i) {
+            size_t at = next;
+            if (i < names.size() && !names[i].empty()) {
+                at = s.ctorParams.size();
+                for (size_t p = 0; p < s.ctorParams.size(); ++p)
+                    if (s.ctorParams[p].name == names[i]) at = p;
+                if (at == s.ctorParams.size()) throw CompileError(args[i]->pos, s.name + " has no parameter named " + names[i]);
+            } else {
+                next = at + 1;
+            }
+            if (at >= s.ctorParams.size()) throw CompileError(args[i]->pos, "too many arguments for " + s.name);
+            given[at] = args[i].get();
+        }
+        for (size_t i = 0; i < s.ctorParams.size(); ++i) {
+            if (!given[i]) given[i] = s.ctorParams[i].defaultValue.get();
+            if (!given[i]) throw CompileError(pos, who + " gives " + s.name + " no " + s.ctorParams[i].name + ": " + who + " : " + s.name + "(…)");
+        }
+        return given;
+    }
+    void sealedFields(const SealedDecl& s, const SuperCall& call, const std::string& who, Pos pos, const DataClass* dataClass) {
+        std::vector<const Node*> given = sealedArguments(s, call.names, call.args, who, pos);
+        for (size_t i = 0; i < s.ctorParams.size(); ++i) {
+            const Param& p = s.ctorParams[i];
+            const Node* value = given[i];
+            out_->at(p.pos);
+            bool isVar = s.ctorKinds[i] == 'm';
+            if (dataClass) {
+                out_->text(std::string(isVar ? " mutable " : " ") + type(p.type) + " " + cppName(p.name) + " = ");
+                const DataClass* was = std::exchange(dataInit_, dataClass);
+                expr(*value, &p.type);
+                dataInit_ = was;
+            } else {
+                out_->text(std::string(" static inline ") + (isVar ? "" : "const ") + type(p.type) + " " + cppName(p.name) + " = ");
+                bool wasGlobal = std::exchange(global_, true);
+                expr(*value, &p.type);
+                global_ = wasGlobal;
+            }
+            out_->text(";");
+        }
+    }
+
     // sealed class Name { … }: a struct holding one of its subclasses (std::variant), made from any of them,
     // equal when they are, written as the one it holds; its nested subclasses inside it (Name.Success is
     // Name::Success), the file's top-level ones before it.
     void sealedDefinition(const SealedDecl& s) {
         out_->at(s.pos);
         out_->text("struct " + s.name + " {");
+        companionMembers(s.companion, s.name);
         std::vector<std::string> alternatives;
         for (auto [kind, i] : s.order) {
             if (kind == 'd') {
                 classDefinition(s.dataClasses[i]);
                 alternatives.push_back(s.name + "::" + s.dataClasses[i].name);
-            } else {
+            } else if (kind == 'o') {
                 generateObject(*out_, s.objects[i], module_);
                 alternatives.push_back(s.name + "::" + s.objects[i].name);
+            } else {
+                generateClassDecl(*out_, s.classes[i], module_);
+                alternatives.push_back(s.name + "::" + s.classes[i].name);
             }
         }
         for (const std::string& t : s.topLevel) alternatives.push_back(qualifierOf(t) + t);
@@ -1715,6 +1955,25 @@ public:
         out_->text(" bool operator==(const " + s.name + "&) const = default;");
         out_->text(" template <class = void> std::string toString() const { return std::visit([](const auto& v) { return ::kompoz::kt::str(v); }, "
                   "kompoz_value); }");
+        // Its members, read and called through the case it holds (screen.route, screen.title()): each a value of
+        // one type in every case.
+        auto read = [&](const std::string& n, const std::optional<Type>& t) {
+            std::string get = "KOMPOZ_KT_GET((v), " + cppName(n) + ")";
+            out_->text(" " + (t ? type(*t) : std::string("auto")) + " " + cppName(n) + "() const { return std::visit([](const auto& v) { return " +
+                       (t ? type(*t) + "(" + get + ")" : "std::remove_cvref_t<decltype(" + get + ")>(" + get + ")") + "; }, kompoz_value); }");
+        };
+        for (size_t i = 0; i < s.ctorParams.size(); ++i)
+            if (s.ctorKinds[i] != ' ') read(s.ctorParams[i].name, s.ctorParams[i].type);
+        for (const ClassProperty& p : s.properties)
+            if (!p.isPrivate) read(p.name, p.type);
+        std::set<std::string, std::less<>> forwarded;
+        for (const Function& m : s.methods)
+            if (!m.isPrivate && m.name != "toString" && forwarded.insert(m.name).second)
+                out_->text(" template <class... kompoz_A> decltype(auto) " + cppName(m.name) +
+                           "(kompoz_A&&... a) const { return std::visit([&](const auto& v) { return v." + cppName(m.name) +
+                           "(std::forward<kompoz_A>(a)...); }, kompoz_value); }");
+        for (const Type& t : s.supers)  // (its interfaces': the case it holds as one; a template, the interface defined later)
+            out_->text(" template <class kompoz_I> requires std::is_same_v<kompoz_I, " + plainType(t) + "> operator kompoz_I() const { return std::visit([](const auto& v) { return kompoz_I(v); }, kompoz_value); }");
         out_->text(" };\n");
     }
 
@@ -1733,34 +1992,28 @@ public:
         out_->text("struct " + holder + " {");
         // (each with what it names alone inside it: its own nested ones)
         std::vector<std::unique_ptr<Module>> modules;
+        Module siblings = withNested(module_, outer, n);  // (each sees the others by their names, as Kotlin's do)
         auto inner = [&](const std::string& name, const NestedDecls* own) {
-            modules.push_back(std::make_unique<Module>(own ? withNested(module_, name, *own) : module_));
+            modules.push_back(std::make_unique<Module>(own ? withNested(siblings, name, *own) : siblings));
             auto g = std::make_unique<Generator>(*out_, *modules.back());
             g->deferred_ = deferred_;
             g->outerQualifier_ = wasQualifier + holder + "::";
             return g;
         };
-        for (const auto& c : n.classes) out_->text(" class " + c->name + ";");  // (declared first: they name each other)
-        for (const auto& d : n.dataClasses) out_->text(" struct " + d->name + ";");
-        for (const auto& i : n.interfaces) out_->text(" class " + i->name + ";");
+        for (const auto& c : n.classes) out_->text(" " + templateHead(c->typeParams) + "class " + c->name + ";");  // (declared first: they name each other)
+        for (const auto& d : n.dataClasses) out_->text(" " + templateHead(d->typeParams) + "struct " + d->name + ";");
+        for (const auto& i : n.interfaces) out_->text(" " + templateHead(i->typeParams) + "class " + i->name + ";");
         for (const auto& o : n.objects) out_->text(" struct " + o->name + ";");
+        for (const auto& s : n.sealeds) out_->text(" struct " + s->name + ";");
         for (const auto& e : n.enums) {
             if (e->rich()) inner(e->name, nullptr)->enumDefinition(*e);
             else plainEnum(*out_, *e, true);
         }
-        for (const auto& d : n.dataClasses) {
-            if (!d->typeParams.empty()) throw CompileError(d->pos, "a nested generic data class isn't supported yet: declare it at the top level");
-            inner(d->name, &d->nested)->classDefinition(*d);
-        }
-        for (const auto& i : n.interfaces) {
-            if (!i->typeParams.empty()) throw CompileError(i->pos, "a nested generic interface isn't supported yet: declare it at the top level");
-            inner(i->name, &i->nested)->interfaceDefinition(*i);
-        }
+        for (const auto& d : n.dataClasses) inner(d->name, &d->nested)->classDefinition(*d);
+        for (const auto& i : n.interfaces) inner(i->name, &i->nested)->interfaceDefinition(*i);
         for (const auto& o : n.objects) inner(o->name, &o->nested)->objectDefinition(*o);
-        for (const auto& c : n.classes) {
-            if (!c->typeParams.empty()) throw CompileError(c->pos, "a nested generic class isn't supported yet: declare it at the top level");
-            inner(c->name, &c->nested)->classDeclDefinition(*c);
-        }
+        for (const auto& c : n.classes) inner(c->name, &c->nested)->classDeclDefinition(*c);
+        for (const auto& s : n.sealeds) inner(s->name, nullptr)->sealedDefinition(*s);
         out_->text(" };" + after + "\n");
         deferred_ = wasDeferred;
     }
@@ -1769,12 +2022,23 @@ public:
         if (n.empty()) return;
         std::string holder = nestedHolder(outer);
         out_->text(" public:");
-        auto alias = [&](const std::string& name) { out_->text(" using " + name + " = " + holder + "::" + name + ";"); };
-        for (const auto& c : n.classes) alias(c->name);
-        for (const auto& d : n.dataClasses) alias(d->name);
-        for (const auto& i : n.interfaces) alias(i->name);
+        auto alias = [&](const std::string& name, const std::vector<std::string>& typeParams = {}) {
+            if (typeParams.empty()) return out_->text(" using " + name + " = " + holder + "::" + name + ";");
+            std::string args;  // (a template's: an alias template)
+            for (size_t i = 0; i < typeParams.size(); ++i) args += (i ? ", " : "") + typeParams[i];
+            out_->text(" " + templateHead(typeParams) + "using " + name + " = " + holder + "::" + name + "<" + args + ">;");
+        };
+        for (const auto& c : n.classes) alias(c->name, c->typeParams);
+        for (const auto& d : n.dataClasses) {
+            alias(d->name, d->typeParams);
+            if (!d->typeParams.empty())  // (a generic one's factory: Outer::kompoz_make_Box(…))
+                out_->text(" template <class... kompoz_A> static auto kompoz_make_" + d->name + "(kompoz_A&&... a) { return " + holder + "::kompoz_make_" +
+                           d->name + "(std::forward<kompoz_A>(a)...); }");
+        }
+        for (const auto& i : n.interfaces) alias(i->name, i->typeParams);
         for (const auto& o : n.objects) alias(o->name);
         for (const auto& e : n.enums) alias(e->name);
+        for (const auto& s : n.sealeds) alias(s->name);
     }
     // Where an outermost type's definition starts: what its nested ones leave for after it is kept from here; `end`
     // writes it.
@@ -1831,9 +2095,17 @@ public:
         }
     }
     void enumDefinition(const EnumClass& e) {
+        nestedDefinitions(e.nested, e.name);
+        auto own = fieldNames(e.properties);
+        for (const Param& p : e.ctorParams) own.insert(p.name);
+        OwnFields ownFields(*this, std::move(own));
         out_->at(e.pos);
         out_->text("struct " + e.name + " {");
-        companionMembers(e.companion);
+        companionMembers(e.companion, e.name);
+        nestedAliases(e.nested, e.name);
+        for (const auto& c : e.nested.innerClasses) out_->text(" class " + c->name + ";");
+        auto wasInnerMade = innerMade_;  // (its inner classes: made with a copy of its entry, a value)
+        for (const auto& c : e.nested.innerClasses) innerMade_[c->name] = {c.get(), "std::make_shared<" + e.name + ">(*this)"};
         out_->text(" enum class kompoz_Entry {");
         for (size_t i = 0; i < e.entries.size(); ++i) out_->text(std::string(i ? ", " : " ") + e.entries[i]);
         out_->text(" }; kompoz_Entry kompoz_entry{};");
@@ -1964,6 +2236,12 @@ public:
         scopes_.pop_back();
         classMethods_ = std::move(wasMethods);
         inClass_ = wasInClass;
+        if (!e.nested.innerClasses.empty()) {
+            Module module = withNested(module_, e.name, e.nested);
+            module.enums[e.name] = &e;
+            innerDefinitions(e.name, e.nested, module, "std::shared_ptr<" + e.name + ">", "");
+        }
+        innerMade_ = std::move(wasInnerMade);
         for (const std::string& n : e.entries) out_->text(" static const " + e.name + " " + n + ";");
         out_->text(" bool operator==(const " + e.name + "& o) const { return kompoz_entry == o.kompoz_entry; }");
         out_->text(" std::string name() const { return kompoz_kt_property_name(*this); } int ordinal() const { return static_cast<int>(kompoz_entry); }");
@@ -2103,6 +2381,12 @@ public:
         out_->at(o.pos);
         Outermost outermost(*this);
         nestedDefinitions(o.nested, o.name);
+        auto fields = fieldNames(o.properties);
+        if (const SealedDecl* s = sealedOf(o.supers)) {
+            for (const Param& p : s->ctorParams) fields.insert(p.name);
+            for (const ClassProperty& p : s->properties) fields.insert(p.name);
+        }
+        OwnFields ownFields(*this, std::move(fields));
         out_->text("struct " + o.name + " {" + (route ? " KOMPOZ_ROUTE(" + o.name + ")" : std::string()) + " bool operator==(const " +
                   o.name + "&) const = default;");
         nestedAliases(o.nested, o.name);
@@ -2113,18 +2397,48 @@ public:
             if (wantPublic != isPublic) out_->text(wantPublic ? " public:" : " private:");
             isPublic = wantPublic;
         };
-        InterfaceMembers inherited = interfaceMembers(o.supers);
+        // A sealed class's case: its constructor's values and members (static, as the object's), then its own.
+        const SealedDecl* sealed = sealedOf(o.supers);
+        std::vector<Type> supers = caseSupers(o.supers);
+        InterfaceMembers inherited = interfaceMembers(supers);
         auto wasMethods = std::exchange(classMethods_, methodsOf(o.methods, inherited));
+        std::string wasSelf = std::exchange(staticSelf_, o.name + "{}");  // (`this` in its static functions: its value)
         scopes_.emplace_back();
-        declareMembers(o.properties, o.supers, true);
-        objectMembers(o, inherited, access);
+        if (sealed) {
+            // (its sealed class's members first, those it doesn't override nor the abstract ones; its functions each
+            // after those it calls, as a data class case's)
+            declareMembers(sealed->properties, std::vector<Type>{}, true);
+            sealedFields(*sealed, o.superCall, o.name, o.pos, nullptr);
+            declareMembers(o.properties, supers, true);
+            std::vector<std::pair<const ClassProperty*, const Function*>> members;
+            for (size_t index : sealed->memberOrder) {
+                if (index % 2 == 0) {
+                    const ClassProperty& p = sealed->properties[index / 2];
+                    if (!p.isAbstract && std::none_of(o.properties.begin(), o.properties.end(), [&](const ClassProperty& q) { return q.name == p.name; }))
+                        members.emplace_back(&p, nullptr);
+                } else {
+                    const Function& m = sealed->methods[index / 2];
+                    if (!m.isAbstract && std::none_of(o.methods.begin(), o.methods.end(), [&](const Function& f) { return f.name == m.name && f.params.size() == m.params.size(); })) {
+                        members.emplace_back(nullptr, &m);
+                        classMethods_[m.name].push_back(&m);
+                    }
+                }
+            }
+            for (size_t index : o.order) members.emplace_back(index % 2 == 0 ? &o.properties[index / 2] : nullptr, index % 2 == 0 ? nullptr : &o.methods[index / 2]);
+            calleesFirst(members);
+            objectMembers(members, {&sealed->initBlocks, &o.initBlocks}, false, inherited, access);
+        } else {
+            declareMembers(o.properties, supers, true);
+            objectMembers(o, inherited, access);
+        }
         scopes_.pop_back();
+        staticSelf_ = std::move(wasSelf);
         access(true);
         auto own = [&](const std::string& n) {
             return std::any_of(o.properties.begin(), o.properties.end(), [&](const ClassProperty& p) { return p.name == n; }) ||
-                   std::any_of(o.methods.begin(), o.methods.end(), [&](const Function& m) { return m.name == n; });
+                   std::any_of(o.methods.begin(), o.methods.end(), [&](const Function& m) { return m.name == n; }) || (sealed && sealedHas(*sealed, n));
         };
-        interfaceAdapter(o.name, o.supers, true, own, o.pos);
+        interfaceAdapter(o.name, supers, true, own, o.pos);
         classMethods_ = std::move(wasMethods);
         out_->text(" };\n");
         outermost.end();
@@ -2135,15 +2449,23 @@ public:
     // block run once as the program starts.
     template <class Access>
     void objectMembers(const ObjectDecl& o, const InterfaceMembers& inherited, Access& access) {
-        for (size_t index : o.order) {
-            if (index % 2 == 0) {  // val / var: a static member, its type the value's unless one is written
-                const ClassProperty& p = o.properties[index / 2];
+        std::vector<std::pair<const ClassProperty*, const Function*>> members;
+        for (size_t index : o.order) members.emplace_back(index % 2 == 0 ? &o.properties[index / 2] : nullptr, index % 2 == 0 ? nullptr : &o.methods[index / 2]);
+        objectMembers(members, {&o.initBlocks}, o.isCompanion, inherited, access);
+    }
+    // (`members`: in order, a property or a function each; `initBlocks`: each list's, named apart)
+    template <class Access>
+    void objectMembers(const std::vector<std::pair<const ClassProperty*, const Function*>>& members, const std::vector<const std::vector<NodeP>*>& initLists,
+                       bool isCompanion, const InterfaceMembers& inherited, Access& access) {
+        for (auto [property, method] : members) {
+            if (property) {  // val / var: a static member, its type the value's unless one is written
+                const ClassProperty& p = *property;
                 bool accessed = p.delegated || p.getter || p.setter || p.privateSetter;
                 if (accessed && !p.delegated && !stores(p)) {
                     accessorFunctions(p, memberNamed(inherited, p.name), true, access);
                     continue;
                 }
-                if (o.isCompanion && !accessed) {
+                if (isCompanion && !accessed) {
                     // A companion's: a static function holding the value, made the first time it is read (the
                     // class isn't complete where its members are declared: val Zero = Money(0)); var's setter too.
                     access(!p.isPrivate);
@@ -2174,7 +2496,7 @@ public:
                 out_->text(";");
                 if (accessed) accessorFunctions(p, memberNamed(inherited, p.name), true, access);
             } else {  // fun: a static function
-                const Function& m = o.methods[index / 2];
+                const Function& m = *method;
                 access(!m.isPrivate);
                 out_->at(m.pos);
                 scopes_.emplace_back();
@@ -2184,19 +2506,23 @@ public:
                 scopes_.pop_back();
             }
         }
-        for (size_t i = 0; i < o.initBlocks.size(); ++i) {
-            access(false);
-            out_->text(" static inline const bool kompoz_init_" + std::to_string(i) + " = [] {");
-            scopes_.emplace_back();
-            statements(*o.initBlocks[i], false);
-            scopes_.pop_back();
-            out_->text(" return true; }();");
-        }
+        for (size_t list = 0; list < initLists.size(); ++list)
+            for (size_t i = 0; i < initLists[list]->size(); ++i) {
+                access(false);
+                out_->text(" static inline const bool kompoz_init_" + (list ? std::to_string(list) + "_" : std::string()) + std::to_string(i) + " = [] {");
+                scopes_.emplace_back();
+                statements(*(*initLists[list])[i], false);
+                scopes_.pop_back();
+                out_->text(" return true; }();");
+            }
     }
 
     // A class's companion object: its members the class's own, static (Name.MAX is Name::MAX, Name.create() is
     // Name::create(); inside the class, MAX and create() alone).
-    void companionMembers(const std::shared_ptr<ObjectDecl>& c) {
+    // (`owner`: the class's name. A companion implementing interfaces, companion object : Factory<Foo>: an object of
+    // them, kompoz_Companion (Foo as a value is it), reaching its members, which forward to the class's static ones;
+    // the interfaces' members with bodies it doesn't declare are the class's static ones too, Foo.many(2).)
+    void companionMembers(const std::shared_ptr<ObjectDecl>& c, const std::string& owner) {
         if (!c) return;
         bool isPublic = false;
         auto access = [&](bool wantPublic) {
@@ -2211,6 +2537,25 @@ public:
         scopes_.pop_back();
         inClass_ = wasInClass;
         access(true);
+        if (c->supers.empty()) return;
+        auto has = [&](const std::string& n) {
+            return std::any_of(c->properties.begin(), c->properties.end(), [&](const ClassProperty& p) { return p.name == n; }) ||
+                   std::any_of(c->methods.begin(), c->methods.end(), [&](const Function& m) { return m.name == n; });
+        };
+        out_->text(" struct kompoz_Companion { std::string toString() const { return \"" + owner + ".Companion\"; }"
+                   " bool operator==(const kompoz_Companion&) const = default;");
+        for (const ClassProperty& p : c->properties)
+            if (!p.isPrivate) out_->text(" static decltype(auto) " + cppName(p.name) + "() { return " + owner + "::" + cppName(p.name) + "(); }");
+        for (const Function& m : c->methods)
+            if (!m.isPrivate)
+                out_->text(" template <class... kompoz_A> static decltype(auto) " + cppName(m.name) + "(kompoz_A&&... a) { return " + owner + "::" +
+                           cppName(m.name) + "(std::forward<kompoz_A>(a)...); }");
+        interfaceAdapter("kompoz_Companion", c->supers, true, has, c->pos);
+        out_->text(" };");
+        for (auto& [n, m] : interfaceMembers(c->supers))
+            if (m.hasBody && !has(n))
+                out_->text(" template <class... kompoz_A> static decltype(auto) " + cppName(n) + "(kompoz_A&&... a) { return kompoz_Companion::" + cppName(n) +
+                           "(std::forward<kompoz_A>(a)...); }");
     }
     // What a class's body knows of its companion: its functions (called by their names) and its properties read
     // through functions.
@@ -2239,14 +2584,16 @@ public:
 
     // val name = value at the top: a constant of the namespace (private: of the file), its type the
     // value's unless one is written.
+    // val name = value / var name = value at the top: a variable of the namespace (private: of the file), a val's
+    // const; val x by lazy { … } / var n by mutableStateOf(0): it holds the delegate, read and set through it.
     void property(const Property& p) {
         const Node& d = *p.decl;
         out_->at(p.pos);
-        out_->text(std::string(p.isPrivate ? "static" : "inline") + " const " + (d.type ? type(*d.type) : std::string("auto")) + " " +
-                  cppName(p.name) + " = ");
+        std::string t = d.type && !d.delegated ? type(*d.type) : std::string("auto");
+        out_->text(std::string(p.isPrivate ? "static" : "inline") + (d.flag || d.delegated ? " " : " const ") + t + " " + cppName(p.name) + " = ");
         global_ = true;
         scopes_.emplace_back();
-        expr(*d.kids[0], d.type ? &*d.type : nullptr);
+        expr(*d.kids[0], d.type && !d.delegated ? &*d.type : nullptr);
         scopes_.pop_back();
         global_ = false;
         out_->text(";\n");
@@ -2355,6 +2702,9 @@ private:
                 if (t.name != type && kotlinMember(t.name, name)) return true;
             return c->second->base && c->second->base->name != type && kotlinMember(c->second->base->name, name);
         }
+        if (auto e = module_.enums.find(type); e != module_.enums.end())
+            return std::any_of(e->second->ctorParams.begin(), e->second->ctorParams.end(), [&](const Param& p) { return p.name == name; }) ||
+                   prop(e->second->properties) || fun(e->second->methods) || name == "name" || name == "ordinal";
         if (auto i = module_.interfaces.find(type); i != module_.interfaces.end()) {
             if (prop(i->second->properties) || fun(i->second->methods)) return true;
             for (const Type& t : i->second->bases)
@@ -2437,7 +2787,7 @@ private:
                         return;
                     }
                 }
-                if (tail) out_->text("return ");
+                if (tail) out_->text(taskValue_ ? "co_return " : "return ");
                 expr(e);
                 out_->text(";");
                 return;
@@ -2450,9 +2800,9 @@ private:
                     throw CompileError(s.pos, "return@" + s.text + ": only from the lambda just around it" +
                                                   (lambdaLabels_.empty() || lambdaLabels_.back().empty() ? std::string() : " (" + lambdaLabels_.back() + "'s)"));
                 out_->text(suspend_ ? "co_return" : "return");
-                if (!s.kids.empty()) {
+                if (!s.kids.empty()) {  // (of the function's type, where it is written: fun steps(): List<Step> = listOf(…))
                     out_->text(" ");
-                    expr(*s.kids[0]);
+                    expr(*s.kids[0], currentResult_ && currentResult_->name != "Unit" && s.text.empty() ? currentResult_ : nullptr);
                 }
                 out_->text(";");
                 return;
@@ -2486,6 +2836,8 @@ private:
     bool delegatedName(const Node& n) const {
         if (n.kind != Node::Name) return false;
         const VarKind* k = lookup(n.text);
+        if (!k && !receiverOf(n.text) && !memberFields_.contains(n.text))  // (a top-level var n by mutableStateOf(0))
+            if (auto p = module_.properties.find(n.text); p != module_.properties.end()) return p->second->decl->delegated;
         return k && (*k == Delegated || *k == MemberDelegated);
     }
     bool accessorName(const Node& n) const {
@@ -2496,6 +2848,7 @@ private:
     // What holds a delegated name's delegate: the local, or a member's kompoz_by_<name>.
     std::string held(const std::string& name) const {
         const VarKind* k = lookup(name);
+        if (!k && module_.properties.contains(name) && !memberFields_.contains(name)) return qualifierOf(name) + cppName(name);  // (a top-level one's)
         return k && *k == MemberDelegated ? "kompoz_by_" + name : cppName(name);
     }
     static std::string setterOf(const std::string& name) {
@@ -2869,6 +3222,8 @@ private:
                 }
                 if (r > 0 && r <= outers_.size() && !outers_[r - 1].handle.empty())
                     out_->text(outers_[r - 1].handle + "::kompoz_from(kompoz_this_" + std::to_string(r) + ")");
+                else if (r == 0 && !staticSelf_.empty() && !inClass_)
+                    out_->text("(" + staticSelf_ + ")");
                 else
                     out_->text(r == 0 ? std::string("(*this)") : "(*kompoz_this_" + std::to_string(r) + ")");
                 return;
@@ -2962,8 +3317,18 @@ private:
             out_->text("KOMPOZ_KT_GET((*kompoz_this_" + std::to_string(r) + "), " + cppName(e.text) + ")");
             return;
         }
-        if (module_.properties.contains(e.text)) {  // a top-level val (after a receiver's members, as in Kotlin)
-            out_->text(qualifierOf(e.text) + cppName(e.text));
+        if (auto c = module_.objectDecls.find(e.text); c != module_.objectDecls.end() && c->second->isCompanion && !c->second->supers.empty() &&
+                                                         &e != calleeNode_) {  // Foo as a value: its companion, an object of its interfaces
+            out_->text(qualifierOf(e.text) + qualified(e.text) + "::kompoz_Companion{}");
+            return;
+        }
+        if (memberFields_.contains(e.text)) {  // the class's own field (before a top-level val of its name, as in Kotlin)
+            out_->text(cppName(e.text));
+            return;
+        }
+        if (auto p = module_.properties.find(e.text); p != module_.properties.end()) {  // a top-level val (after a receiver's members, as in Kotlin)
+            if (p->second->decl->delegated) out_->text("::kompoz::kt::delegated(" + qualifierOf(e.text) + cppName(e.text) + ")");
+            else out_->text(qualifierOf(e.text) + cppName(e.text));
             return;
         }
         if (module_.objects.contains(e.text)) {  // an object: its one value
@@ -3214,7 +3579,15 @@ private:
                 out_->text(qualified(i->name));
                 typeArguments(c);  // (Mapper<Int> { … })
                 out_->text("::kompoz_lambda(");
-                lambda(*c.lambda, m->result && m->result->name != "Unit");
+                if (m->isSuspend) {  // Loader { delay(10); "x" }: a coroutine giving the fun's result (TaskOf<T>)
+                    Bindings bind;
+                    for (size_t k = 0; k < i->typeParams.size() && k < c.typeArgs.size(); ++k) bind.emplace(i->typeParams[k], c.typeArgs[k]);
+                    std::string was = std::exchange(taskResult_, m->result && m->result->name != "Unit" ? type(substitute(*m->result, bind)) : std::string());
+                    lambda(*c.lambda, !taskResult_.empty(), true);
+                    taskResult_ = was;
+                } else {
+                    lambda(*c.lambda, m->result && m->result->name != "Unit");
+                }
                 out_->text(")");
                 return;
             }
@@ -3506,7 +3879,9 @@ private:
             given[at] = c.kids[i + 1].get();
         }
         if (!k.typeParams.empty() && c.typeArgs.empty()) {  // Pair(1, "a"): its type arguments the values' (kompoz_make_Pair)
-            out_->text(qualifierOf(k.name) + "kompoz_make_" + k.name + "(");
+            // (a nested one's through its outer type's: Outer::kompoz_make_Box)
+            size_t colons = spelled.rfind("::");
+            out_->text((colons == std::string::npos ? qualifierOf(k.name) : spelled.substr(0, colons + 2)) + "kompoz_make_" + k.name + "(");
             for (size_t f = 0; f < k.fields.size(); ++f) {
                 const Node* arg = given[f] ? given[f] : k.fields[f].defaultValue.get();
                 if (!arg) throw CompileError(c.pos, k.name + " needs " + k.fields[f].name);
@@ -3655,6 +4030,22 @@ private:
         for (auto& [n, outers] : module_.innerClasses)
             for (auto& [outer, k] : outers) if (has(k->methods)) return true;
         return false;
+    }
+    // Where a class's function's C++ defaults may start: none that would make a call taking its first k parameters
+    // match another function of the name taking exactly those (f(s: String) beside f(s: String, n: Int = 2): Kotlin
+    // calls the first for f("x"), and so C++ does then).
+    size_t defaultsFrom(const Function& m) const {
+        size_t from = 0;
+        auto m2 = classMethods_.find(m.name);
+        if (m2 == classMethods_.end()) return from;
+        for (const Function* g : m2->second) {
+            if (g == &m || g->params.size() >= m.params.size()) continue;
+            size_t k = g->params.size();
+            bool same = true;
+            for (size_t i = 0; same && i < k; ++i) same = sameType(g->params[i].type, m.params[i].type);
+            if (same) from = std::max(from, k + 1);
+        }
+        return from;
     }
     // Whether f has others of its name (a class's, or the module's at the top).
     bool overloadedName(const Function& f) const {
@@ -3836,8 +4227,10 @@ private:
     void varargList(const Param& p, const std::vector<std::pair<const Node*, bool>>& elements, bool generic) {
         bool spread = std::any_of(elements.begin(), elements.end(), [](const auto& e) { return e.second; });
         std::string element = type(p.type.args[0]);
-        if (generic && spread) throw CompileError(p.pos, p.name + ": a generic vararg given *list isn't supported yet");
-        out_->text(generic ? (elements.empty() ? "{" : "::kompoz::kt::listOf(") : spread ? "::kompoz::kt::varargOf<" + element + ">(" : "std::vector<" + element + ">{");
+        out_->text(generic && spread  ? "::kompoz::kt::varargOf("  // (its T the elements')
+                   : generic          ? (elements.empty() ? "{" : "::kompoz::kt::listOf(")
+                   : spread           ? "::kompoz::kt::varargOf<" + element + ">("
+                                      : "std::vector<" + element + ">{");
         for (size_t i = 0; i < elements.size(); ++i) {
             if (i) out_->text(", ");
             if (elements[i].second) out_->text("::kompoz::kt::Spread{");
@@ -3931,7 +4324,8 @@ private:
                     out_->text((i ? ", " : "") + std::string("auto&&"));
                     continue;
                 }
-                out_->text((i ? ", " : "") + std::string("auto&& ") + cppName(l.names[i]));
+                // (a coroutine's by value: its parameters outlive the call that gives them)
+                out_->text((i ? ", " : "") + std::string(suspend ? "auto " : "auto&& ") + cppName(l.names[i]));
                 declare(l.names[i], Local);
             }
         };
@@ -3950,7 +4344,7 @@ private:
             } else if (l.flag) {
                 named();
             } else if (!receiver && itUsed) {
-                out_->text("auto&& it");
+                out_->text("auto it");
                 declare("it", Local);
             } else if (!receiver) {
                 out_->text("auto&&...");  // (collect { } given the element it doesn't use; LaunchedEffect { } given nothing)
@@ -3965,12 +4359,16 @@ private:
         } else {
             out_->text("auto&&...");  // { ... } where the type has parameters it doesn't use
         }
-        out_->text(suspend ? ") -> ::kompoz::Task {" : ") {");
+        // (a coroutine giving a value: taskResult_, its last expression co_returned)
+        std::string taskResult = suspend ? std::exchange(taskResult_, std::string()) : std::string();
+        out_->text(suspend ? ") -> ::kompoz::" + (taskResult.empty() ? std::string("Task {") : "TaskOf<" + taskResult + "> {") : std::string(") {"));
+        bool wasTaskValue = std::exchange(taskValue_, !taskResult.empty());
         if (receiver) out_->text(" [[maybe_unused]] auto* kompoz_this_" + self + " = &kompoz_receiver_" + self + ";");
         lambdaLabels_.push_back(label);
         for (size_t i = 0; i < l.kids.size(); ++i) statement(*l.kids[i], value && i + 1 == l.kids.size());
         lambdaLabels_.pop_back();
-        if (suspend) out_->text(" co_return;");
+        if (suspend && taskResult.empty()) out_->text(" co_return;");
+        taskValue_ = wasTaskValue;
         scopes_.pop_back();
         if (receiver) {
             receivers_.pop_back();
@@ -4334,6 +4732,22 @@ private:
     };
     std::map<std::string, InnerMade, std::less<>> innerMade_;  // inner classes made by their names here (Counter(1))
     std::string thisClass_;  // the class being defined (this@Name is its object)
+    std::string staticSelf_;  // in an object's static functions: `this` as its value (Home{})
+    std::set<std::string, std::less<>> memberFields_;  // the fields of the type being defined (read by their names)
+    // While a type's body is written: its fields known as its own.
+    struct OwnFields {
+        Generator& g;
+        std::set<std::string, std::less<>> was;
+        OwnFields(Generator& gen, std::set<std::string, std::less<>> names) : g(gen), was(std::exchange(gen.memberFields_, std::move(names))) {}
+        ~OwnFields() { g.memberFields_ = std::move(was); }
+    };
+    static std::set<std::string, std::less<>> fieldNames(const std::vector<ClassProperty>& properties) {
+        std::set<std::string, std::less<>> out;
+        for (const ClassProperty& p : properties) out.insert(p.name);
+        return out;
+    }
+    std::string taskResult_;  // the next suspend lambda's value's type (a fun interface's suspend fun: TaskOf<T>)
+    bool taskValue_ = false;  // in such a lambda: its last expression is co_returned
     std::map<std::string, std::string, std::less<>> parameterNames_;  // a base's arguments: val parameters as the parameters
     size_t parameterScope_ = 0;                                       // (declared in this scope)
     std::vector<std::map<std::string, VarKind, std::less<>>> scopes_;
@@ -4353,7 +4767,12 @@ void generateEnum(Output& out, const EnumClass& e, const Module& module) {
 }
 
 void generateObject(Output& out, const ObjectDecl& o, const Module& module) {
-    if (o.hasMembers() || std::any_of(o.supers.begin(), o.supers.end(), [&](const Type& t) { return module.interfaces.contains(t.name); })) {
+    // (with members, an interface, or a sealed class's case of one with members: its own and those)
+    auto membered = [&](const Type& t) {
+        auto s = module.sealeds.find(t.name);
+        return module.interfaces.contains(t.name) || (s != module.sealeds.end() && (s->second->hasMembers() || !s->second->supers.empty()));
+    };
+    if (o.hasMembers() || std::any_of(o.supers.begin(), o.supers.end(), membered)) {
         Module local = withNested(module, o.name, o.nested);
         Generator g(out, local);
         g.objectDefinition(o);

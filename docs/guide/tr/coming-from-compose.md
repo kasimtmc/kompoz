@@ -233,6 +233,24 @@ fun Checkout() {
 }
 ```
 
+Bir sealed sınıfın kurucusu ve üyeleri olabilir; durumları kurucusuna değer verir ve üyelerine sahip olur. Üst düzey bir `var`, temsilcili olanı da, Kotlin'deki gibi okunur:
+
+```kotlin
+sealed class Screen(val route: String) {
+    object Home : Screen("home")
+    data class Detail(val id: Int) : Screen("detail/$id")
+    fun label() = route.uppercase()
+}
+
+var opened by mutableStateOf(0)
+
+@Kompozable
+fun Router(screen: Screen) {
+    Text("${screen.label()} $opened")
+    Button(onClick = { opened++ }) { Text("Aç") }
+}
+```
+
 Eşyordamlar: bir `LaunchedEffect` ya da `launch` bloğu bir eşyordamdır; içindeki `delay`, `animateScrollToItem`, sizin `suspend fun`'larınız ve öteki bekleyen çağrılar beklenir:
 
 ```kotlin
@@ -285,7 +303,7 @@ Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha so
 
 ## Henüz yok
 
-kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: `vararg`'lı düz, eklenti, tür parametreli, `operator` ve `suspend` işlevler (aynı adlı olanlar da), üst düzey `val`'ler ve eklenti özellikleri, `typealias`, data class'lar (gövdeleriyle de), enum class'lar (kurucu ve gövdeleriyle, girdilerinin kendi gövdeleriyle de), temsilcili (`by`), `lateinit` ve erişimcili özellikleri ve `companion object`'leriyle sınıflar (açık, soyut, tür parametreli; bir ViewModel, bir depo), arayüzler (tür parametreli de), `sealed` sınıflar ile arayüzler, `@Serializable` rotalar, üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri), sınıfların içinde bu bildirimler ve inner class'lar, Kotlin'in istisnalarıyla ifade olarak `try` ve `throw`. Henüz okumadıkları onun yanında C++ ile yazılır: kurucusu olan bir sealed sınıf (alanları alt sınıfları tutar), başka birinin içinde bir sealed sınıf ya da tür parametreli bir sınıf (üst düzeyde bildirilince okunurlar), bir sınıftan başka bir şeyin inner class'ı. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
+kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: `vararg`'lı düz, eklenti, tür parametreli, `operator` ve `suspend` işlevler (aynı adlı olanlar da), üst düzey `val`'ler ve `var`'lar (temsilcili olanlar da: `by lazy`, `by mutableStateOf`) ve eklenti özellikleri, `typealias`, data class'lar (gövdeleriyle de), enum class'lar (kurucu ve gövdeleriyle, girdilerinin kendi gövdeleriyle de), temsilcili (`by`), `lateinit` ve erişimcili özellikleri ve `companion object`'leriyle sınıflar (açık, soyut, tür parametreli; bir ViewModel, bir depo), arayüzler (tür parametreli de, `suspend fun`'lı `fun interface`'ler de), `sealed` sınıflar ile arayüzler (kurucu ve üyeleriyle; durumları data class, object ya da sınıf), `@Serializable` rotalar, üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri), sınıfların içinde bu bildirimler ve inner class'lar, Kotlin'in istisnalarıyla ifade olarak `try` ve `throw`. Henüz okumadıkları onun yanında C++ ile yazılır: tür parametreli bir data class'ın inner class'ı, bir C++ sınıfından türeyen bir inner class. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
 
 kompozc olmadan Kompoz'un composable'ları C++ ile yazılır: [C++ ile yazmak](cpp.md), Kotlin'in her yapısının orada nasıl okunduğunu gösterir.
 

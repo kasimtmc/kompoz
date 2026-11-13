@@ -267,6 +267,12 @@ ClassDecl Parser::classDecl() {
             NewlineMode mode(newlines_, false);
             take();
             while (!isOp(")")) {
+                std::string name;
+                if (cur().kind == Tok::Ident && peekRaw(1).kind == Tok::Op && peekRaw(1).text == "=") {
+                    name = take().text;
+                    take();
+                }
+                c.baseArgNames.push_back(name);
                 c.baseArgs.push_back(expression());
                 if (!acceptOp(",")) break;
             }
@@ -299,7 +305,7 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
             o->isCompanion = true;
             o->pos = at;
             o->name = cur().kind == Tok::Ident ? take().text : "Companion";
-            if (isOp(":")) fail("a companion object with a supertype isn't supported");
+            o->supers = supers();  // (its interfaces: companion object : Factory<Foo>)
             if (opAfterNewlines("{")) {
                 skipNewlines();
                 take();
@@ -330,12 +336,11 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
                 if (!nested_) fail(at, "a nested class isn't supported in " + std::string(kind == "object" || kind == "interface" || kind == "enum class" ? "an " : "a ") + kind);
                 if (words.contains("inner") && (keyword != "class" || words.contains("data") || words.contains("enum")))
                     fail(at, "inner is a class's (inner class Name)");
-                if (words.contains("inner") && kind != "class")
-                    fail(at, "an inner class of " + std::string(kind == "object" || kind == "interface" || kind == "enum class" ? "an " : "a ") + kind +
-                                 " isn't supported: of a class it is" + (kind == "data class" ? " (a data class is a value here, not an object)" : ""));
-                if (words.contains("sealed")) fail(at, "a nested sealed class isn't supported yet: declare it at the top level");
+                if (words.contains("inner") && kind != "class" && kind != "data class" && kind != "enum class")
+                    fail(at, "an " + kind + " has no inner class, as in Kotlin: a nested one (without inner)");
                 NestedDecls* into = nested_;
-                if (words.contains("data") && keyword == "class") into->dataClasses.push_back(std::make_shared<DataClass>(dataClass()));
+                if (words.contains("sealed")) into->sealeds.push_back(std::make_shared<SealedDecl>(sealedDecl()));
+                else if (words.contains("data") && keyword == "class") into->dataClasses.push_back(std::make_shared<DataClass>(dataClass()));
                 else if (words.contains("enum")) into->enums.push_back(std::make_shared<EnumClass>(enumClass()));
                 else if (keyword == "object") into->objects.push_back(std::make_shared<ObjectDecl>(objectDecl()));
                 else if (keyword == "interface") into->interfaces.push_back(std::make_shared<InterfaceDecl>(interfaceDecl()));
@@ -405,6 +410,19 @@ void Parser::members(std::vector<ClassProperty>& properties, std::vector<Functio
         }
     }
     expectOp("}");
+    // A nested sealed class's cases beside it in the body (data class Ready(…) : State()): its variant's too.
+    if (nested_)
+        for (auto& sealed : nested_->sealeds) {
+            for (auto& d : nested_->dataClasses)
+                if (namesSuper(d->supers, sealed->name)) sealed->topLevel.push_back(d->name);
+            for (auto& o : nested_->objects)
+                if (namesSuper(o->supers, sealed->name)) sealed->topLevel.push_back(o->name);
+            for (auto& c : nested_->classes)
+                if ((c->base && c->base->name == sealed->name) || namesSuper(c->interfaces, sealed->name)) {
+                    sealed->topLevel.push_back(c->name);
+                    sealed->classCases = true;
+                }
+        }
 }
 
 // After a property: get() = … / get() { … }, set(v) { … } / set(v) = …, [private] set, each on a line of its own
@@ -478,7 +496,7 @@ ObjectDecl Parser::objectDecl() {
     if (!isIdent("object")) fail("expected 'object' (a sealed class's body holds data classes and objects)");
     take();
     o.name = expectIdent();
-    o.supers = supers();
+    o.supers = supers(&o.superCall);
     if (opAfterNewlines("{")) {
         skipNewlines();
         take();
@@ -523,7 +541,7 @@ DataClass Parser::dataClass() {
         if (!acceptOp(",")) break;
     }
     expectOp(")");
-    c.supers = supers();
+    c.supers = supers(&c.superCall);
     }
     if (opAfterNewlines("{")) {  // its body: functions, properties, init blocks
         skipNewlines();
@@ -554,14 +572,26 @@ std::vector<std::string> Parser::typeParams() {
 
 // : Sealed(), A, B after a data class or an object: a sealed class it is a case of (constructed, with no
 // arguments), interfaces and sealed interfaces (named).
-std::vector<Type> Parser::supers() {
+std::vector<Type> Parser::supers(SuperCall* call) {
     std::vector<Type> out;
     if (!acceptOp(":")) return out;
     do {
         skipNewlines();
         out.push_back(type());
-        if (acceptOp("(")) {
-            if (!isOp(")")) fail("a sealed class with a constructor isn't supported yet: give its subclasses the fields");
+        if (acceptOp("(")) {  // Screen("home"): the sealed class's constructor's arguments
+            NewlineMode mode(newlines_, false);
+            if (!isOp(")") && !call) fail("this takes no constructor arguments here");
+            if (call) call->name = out.back().name;
+            while (!isOp(")")) {
+                std::string name;
+                if (cur().kind == Tok::Ident && peekRaw(1).kind == Tok::Op && peekRaw(1).text == "=") {
+                    name = take().text;
+                    take();
+                }
+                call->names.push_back(name);
+                call->args.push_back(expression());
+                if (!acceptOp(",")) break;
+            }
             expectOp(")");
         }
     } while (acceptOp(","));
@@ -579,29 +609,71 @@ SealedDecl Parser::sealedDecl() {
     else if (!isIdent("class")) fail("expected 'class' or 'interface' after 'sealed'");
     take();
     s.name = expectIdent();
-    if (isOp("(")) fail("a sealed class with a constructor isn't supported yet: give its subclasses the fields");
-    if (isOp(":")) fail("a sealed class with a base of its own isn't supported");
-    if (opAfterNewlines("{")) {
+    if (isOp("(")) {  // sealed class Screen(val route: String): what each case gives (Screen("home"))
+        if (s.isInterface) fail("an interface has no constructor");
+        NewlineMode mode(newlines_, false);
+        take();
+        while (!isOp(")")) {
+            annotations(nullptr);
+            while (isIdent("private") || isIdent("public") || isIdent("internal") || isIdent("protected")) take();
+            char kind = ' ';
+            if (isIdent("val") || isIdent("var")) kind = take().text == "val" ? 'v' : 'm';
+            Param p;
+            p.pos = cur().pos;
+            p.name = expectIdent();
+            expectOp(":");
+            p.type = type();
+            if (acceptOp("=")) p.defaultValue = expression();
+            s.ctorParams.push_back(std::move(p));
+            s.ctorKinds.push_back(kind);
+            if (!acceptOp(",")) break;
+        }
+        expectOp(")");
+    }
+    if (acceptOp(":")) {  // the interfaces it implements (each case does)
+        do {
+            skipNewlines();
+            s.supers.push_back(type());
+            if (isOp("(")) fail(s.supers.back().pos, "a sealed class's base is an interface here (without a constructor call)");
+        } while (acceptOp(","));
+    }
+    if (opAfterNewlines("{")) {  // its cases (data classes, objects) and its members
         skipNewlines();
         take();
-        for (skipNewlines(); !isOp("}"); skipNewlines()) {
-            size_t save = index_;
-            annotations(nullptr);
-            bool data = isIdent("data") && peekRaw(1).kind == Tok::Ident && peekRaw(1).text == "class";
-            index_ = save;
-            if (data) {
-                DataClass d = dataClass();
-                if (!namesSuper(d.supers, s.name)) fail(d.pos, d.name + ": a subclass of " + s.name + " is written `: " + s.name + (s.isInterface ? "`" : "()`"));
+        NestedDecls cases;
+        NestedDecls* was = std::exchange(nested_, &cases);
+        members(s.properties, s.methods, s.memberOrder, s.initBlocks, s.isInterface ? "interface" : "class", &s.companion);
+        nested_ = was;
+        if (!cases.enums.empty() || !cases.interfaces.empty() || !cases.innerClasses.empty())
+            fail(s.pos, "a sealed class's body holds its cases here: data classes, classes and objects (and its members)");
+        for (auto& c : cases.classes) {
+            if (!(c->base && c->base->name == s.name) && !namesSuper(c->interfaces, s.name))
+                fail(c->pos, c->name + ": a subclass of " + s.name + " is written `: " + s.name + (s.isInterface ? "`" : "()`"));
+            s.classCases = true;
+        }
+        for (auto& d : cases.dataClasses)
+            if (!namesSuper(d->supers, s.name)) fail(d->pos, d->name + ": a subclass of " + s.name + " is written `: " + s.name + (s.isInterface ? "`" : "()`"));
+        for (auto& o : cases.objects)
+            if (!namesSuper(o->supers, s.name)) fail(o->pos, o->name + ": a subclass of " + s.name + " is written `: " + s.name + (s.isInterface ? "`" : "()`"));
+        // (in the order they are written: the variant's alternatives')
+        std::vector<std::pair<size_t, char>> at;  // (each case's place: data classes, objects, classes)
+        for (size_t i = 0; i < cases.dataClasses.size(); ++i) at.emplace_back(cases.dataClasses[i]->pos.offset, 'd');
+        for (size_t i = 0; i < cases.objects.size(); ++i) at.emplace_back(cases.objects[i]->pos.offset, 'o');
+        for (size_t i = 0; i < cases.classes.size(); ++i) at.emplace_back(cases.classes[i]->pos.offset, 'c');
+        std::sort(at.begin(), at.end());
+        size_t d = 0, o = 0, c = 0;
+        for (auto [offset, kind] : at) {
+            if (kind == 'd') {
                 s.order.emplace_back('d', s.dataClasses.size());
-                s.dataClasses.push_back(std::move(d));
-            } else {
-                ObjectDecl o = objectDecl();
-                if (!namesSuper(o.supers, s.name)) fail(o.pos, o.name + ": a subclass of " + s.name + " is written `: " + s.name + (s.isInterface ? "`" : "()`"));
+                s.dataClasses.push_back(std::move(*cases.dataClasses[d++]));
+            } else if (kind == 'o') {
                 s.order.emplace_back('o', s.objects.size());
-                s.objects.push_back(std::move(o));
+                s.objects.push_back(std::move(*cases.objects[o++]));
+            } else {
+                s.order.emplace_back('c', s.classes.size());
+                s.classes.push_back(std::move(*cases.classes[c++]));
             }
         }
-        expectOp("}");
     }
     s.end = tokens_[index_ - 1].end;
     return s;
@@ -795,7 +867,7 @@ EnumClass Parser::enumClass() {
     if (acceptOp(";")) {  // (after the entries: Kotlin's members, if any)
         skipNewlines();
         if (!isOp("}")) {
-            NestedDecls* was = std::exchange(nested_, nullptr);
+            NestedDecls* was = std::exchange(nested_, &e.nested);
             members(e.properties, e.methods, e.order, e.initBlocks, "enum class", &e.companion);
             nested_ = was;
             e.end = tokens_[index_ - 1].end;
@@ -824,12 +896,10 @@ Property Parser::property() {
     p.pos = cur().pos;
     while (isIdent("private") || isIdent("internal") || isIdent("public") || isIdent("const"))
         if (take().text == "private") p.isPrivate = true;
-    if (isIdent("var")) fail("a top-level var isn't supported: keep state in a composable (remember) or a state holder");
-    if (!isIdent("val")) fail("expected 'val'");
-    p.decl = declaration();
-    if (p.decl->delegated) fail(p.decl->pos, "a top-level val by … isn't supported");
+    if (!isIdent("val") && !isIdent("var")) fail("expected 'val' or 'var'");
+    p.decl = declaration();  // (flag: var; delegated: by …)
     if (!p.decl->names.empty()) fail(p.decl->pos, "a top-level val can't be destructured");
-    if (p.decl->kids.empty()) fail(p.decl->pos, "a top-level val needs a value");
+    if (p.decl->kids.empty()) fail(p.decl->pos, "a top-level " + std::string(p.decl->flag ? "var" : "val") + " needs a value");
     p.name = p.decl->text;
     p.end = tokens_[index_ - 1].end;
     return p;

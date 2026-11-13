@@ -51,7 +51,7 @@ private:
 
     Type type();
     std::vector<Param> params();
-    std::vector<Type> supers();
+    std::vector<Type> supers(SuperCall* call = nullptr);
     std::vector<std::string> typeParams();  // <T, R : Bound> after a class's name (bounds and variance left to C++)
     void accessors(ClassProperty& p);
     void annotations(std::vector<std::string>* names, std::map<std::string, std::string>* args = nullptr);

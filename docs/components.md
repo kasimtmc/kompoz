@@ -620,6 +620,13 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 393. `inner class` (`outer.Inner(…)`, `this@Outer`) ✅
 394. An enum entry with a body of its own (overriding an abstract or open fun, an open val, `toString`) ✅
 395. `joinToString(separator, prefix, postfix, limit) { transform }`, `substringBefore` / `After` / `BeforeLast` / `AfterLast` ✅
+396. A `sealed` class with a constructor, members and interfaces (`sealed class Screen(val route: String) : Titled { … }`), its cases giving its constructor's values (`object Home : Screen("home")`); cases that are classes ✅
+397. `sealed` classes, generic classes, data classes and interfaces nested in a class ✅
+398. An `inner class` of a data class or an enum class; declarations nested in an enum class ✅
+399. A `companion object` implementing an interface (`companion object : Factory<Foo>`; `Foo` as a value is it) ✅
+400. A `fun interface` with a `suspend fun` (`Loader { key -> delay(…); "…" }`) ✅
+401. A generic `vararg` given `*list` ✅
+402. Top-level `var`s, `val x by lazy { … }`, `var n by mutableStateOf(0)` ✅
 
 ## Next
 

@@ -1180,6 +1180,29 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Kurucusu ve üyeleri olan sealed sınıflar**: `sealed class Screen(val route: String, val depth: Int = 0) : Titled {
+  object Home : Screen("home"); data class Detail(val id: Int) : Screen("detail/$id", depth = 1); val upper = …; open fun
+  badge() = ""; fun label() = …; companion object { … } }`: her durum kurucusunun değerlerini verir (sırayla ya da adıyla,
+  kalanlar için varsayılanlar) ve üyelerine (ezmedikleri; soyut olanı kendisi uygular) ve arayüzlerine sahip olur; sealed
+  değer bunları tuttuğu durum üzerinden okur ve çağırır (`screen.route`, `screen.label()`) ve her arayüzdür. Durumlar
+  sınıf da olabilir (`class Failed(val reason: String) : Outcome(code = 500)`), içinde ya da üst düzeyde; böyle durumları
+  olan bir sealed sınıf onlardan sonra tanımlanır.
+- **İç içe sealed sınıflar ve tür parametreli bildirimler**: bir sınıfın içinde bir sealed sınıf (durumları içinde ve
+  yanında), bir sınıfın içinde tür parametreli data class'lar, sınıflar ve arayüzler (`Wizard.Slot("k")`, `Wizard.Holder(4)`).
+- **Data class'ların ve enum'ların inner class'ları** (data class ve enum burada değerdir: iç nesne dış değerin bir
+  kopyasını tutar) ve bir enum class'ın içindeki bildirimler.
+- **Bir arayüzü uygulayan companion object**: `companion object : Factory<Foo> { override fun make(…) = … }`; arayüzün
+  gövdeli üyeleri sınıfın da üyeleridir (`Foo.pair()`), sınıfın adı değer olarak companion'ıdır (`sizes(Foo)`).
+- **Bir fun interface'in suspend fun'ı**: `Loader { key -> delay(100); "…" }`, fun'ın değerini veren bir eşyordamdır
+  (eşyordam lambdalarının parametreleri artık değer olarak alınır: çağrıdan uzun yaşarlar).
+- **`*liste` verilen tür parametreli bir vararg** (`bag(0, *more, 6)`: T'si öğelerinki).
+- **Üst düzey var'lar ve temsilcili özellikler**: `var visits = 0`, `val greeting by lazy { … }`, `var count by
+  mutableStateOf(1)` (durum: onu okuyan yeniden oluşturulur).
+- Bir sınıfta aynı adlı yöntemler: bir çağrıyı ikisine birden uyduracak C++ varsayılanı (`put(x: String)` yanında
+  `put(x: String, times: Int = 2)`) yazılmaz; böylece C++ Kotlin'in çağırdığını çağırır.
+- Düzeltildi: aynı adlı bir üst düzey val varken sınıfın alanı yerine o okunuyordu; istenen tür verilen `listOf(…)`
+  (bir işlevin sonucu, `List<Step>`) sol değer almıyordu; `return` artık döndürdüğüne işlevin türünü verir; dönüşüm
+  verilmiş `joinToString { … }` öğelerinin metin biçimine bakıyordu; bir Kotlin sınıfının `size` özelliği.
 - **İfade olarak try, throw, Kotlin'in istisnaları**: `val n = try { text.toInt() } catch (e: NumberFormatException) { 0 }
   finally { … }` (gövdenin ya da yakalayan bloğun son ifadesi; bir lambdanın sonuncusu da), deyim ve değer olarak `throw
   IllegalStateException("…")` (`x ?: throw …`), yakalananı atıldığı gibi yeniden atan `throw e`. Kotlin'in istisnaları
