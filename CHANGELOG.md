@@ -1143,6 +1143,9 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Inner classes of generic data classes and inner classes deriving from a C++ class**: `parcel.Label(2)` of a
+  `Parcel<Int>` (its type the outer value's own, as C++ finds it), `inner class Polite : Greeting()` (the class itself
+  holding its outer object).
 - **Exceptions as values**: a field, a parameter, a list's element or a nullable of an exception's type (`val error:
   Exception`, `Exception?`, your own exception class) holds the exception as what it is (`kt::Thrown`), as Kotlin's
   references do: a C++ value of the type would have been a copy of its static type (an `Exception`'s of a `Refused`, its

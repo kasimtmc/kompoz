@@ -1965,6 +1965,46 @@ TEST(exceptions_as_values) {
           (std::printf("satır: %s\n", line.c_str()), false));
 }
 
+// An inner class of a generic data class (made as box.Label(…): its type the box's own, Box<Int>'s), and an inner
+// class deriving from a C++ class (Greeting, written in C++ below: it holds its outer object itself).
+struct Greeting {
+    virtual ~Greeting() = default;
+    virtual std::string hello() { return "merhaba"; }
+};
+
+data class Parcel<T>(val content: T) {
+    inner class Label(val n: Int) {
+        fun text() = "$content#$n"
+    }
+    fun first() = Label(0)
+}
+
+class Host(val name: String) {
+    inner class Polite : Greeting() {
+        override fun hello(): String = "sayın $name"
+    }
+    fun polite() = Polite()
+}
+
+fun moreInners(): String {
+    val parcel = Parcel(5)
+    val host = Host("ada")
+    val polite = host.Polite()
+    return "iç " + parcel.first().text() + " " + parcel.Label(2).text() + " " + Parcel("k").Label(3).text() + " " + polite.hello() + " " + host.polite().hello()
+}
+
+@Kompozable
+fun MoreInnerForms() {
+    Text(moreInners())
+}
+
+TEST(inner_classes_of_generic_data_classes_and_with_cpp_bases) {
+    KompozTestRule rule([] { MoreInnerForms(); });
+    rule.waitForIdle();
+    std::string line = rule.onNodeWithText("iç ", true).text();
+    CHECK(line == "iç 5#0 5#2 k#3 sayın ada sayın ada" || (std::printf("satır: %s\n", line.c_str()), false));
+}
+
 TEST(coroutines_await_what_suspends) {
     KompozTestRule rule([] { Awaits(); });
     CHECK(rule.onNodeWithText("üretilen 0").exists() && rule.onNodeWithText("ikisi …").exists());

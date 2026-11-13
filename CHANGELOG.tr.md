@@ -1180,6 +1180,9 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Tür parametreli data class'ların inner class'ları ve bir C++ sınıfından türeyen inner class'lar**: bir
+  `Parcel<Int>`'in `parcel.Label(2)`'si (türü, C++'ın bulduğu gibi dış değerin kendi türünün), `inner class Polite :
+  Greeting()` (dış nesneyi sınıfın kendisi tutar).
 - **Değer olarak istisnalar**: türü bir istisna olan bir alan, parametre, liste öğesi ya da nullable (`val error:
   Exception`, `Exception?`, kendi istisna sınıfınız) istisnayı asıl türüyle tutar (`kt::Thrown`), Kotlin'in başvuruları
   gibi: o türden bir C++ değeri, durağan türünün bir kopyası olurdu (bir `Refused`'ın `Exception` kopyası, iletisi

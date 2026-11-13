@@ -152,6 +152,21 @@ std::shared_ptr<T> selfOf(const T* self) {
 }
 // outer.Counter(…): what the inner object holds of `outer`, its object (shared); of a class with a C++ base (a
 // ViewModel's: its owner keeps it), the class itself.
+// The type outer.Counter(…) is made in: outer's own (a handle, a value), the class a pointer or a nullable holds.
+template <class T>
+struct OuterTypeOf {
+    using type = T;
+};
+template <class T>
+struct OuterTypeOf<std::shared_ptr<T>> {
+    using type = T;
+};
+template <class T>
+struct OuterTypeOf<std::optional<T>> {
+    using type = T;
+};
+template <class T>
+using OuterType = typename OuterTypeOf<std::remove_cvref_t<T>>::type;
 // A data class's or an enum's (a value): a copy of it, shared by the inner objects made with it.
 template <class T>
 struct OuterValue {

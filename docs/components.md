@@ -628,6 +628,7 @@ Status: ✅ done · 🟡 partly / in another form · ⬜ missing
 401. A generic `vararg` given `*list` ✅
 402. Top-level `var`s, `val x by lazy { … }`, `var n by mutableStateOf(0)` ✅
 403. Exceptions as values (`val error: Exception`, `Exception?`, a list's element): held as what they are ✅
+404. An `inner class` of a generic data class; an `inner class` deriving from a C++ class ✅
 
 ## Next
 

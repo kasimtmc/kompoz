@@ -4,6 +4,7 @@
 #include <cctype>
 #include <deque>
 #include <functional>
+#include <sstream>
 #include <set>
 #include <utility>
 #include <vector>
@@ -1214,8 +1215,6 @@ public:
         companionMembers(k.companion, k.name);
         nestedAliases(k.nested, k.name);
         // Its inner classes: made with a copy of it (a data class is a value here), defined at its end.
-        if (!k.nested.innerClasses.empty() && !k.typeParams.empty())
-            throw CompileError(k.nested.innerClasses[0]->pos, "an inner class of a generic data class isn't supported: of a generic class it is");
         for (const auto& c : k.nested.innerClasses) out_->text(" class " + c->name + ";");
         auto wasInnerMade = innerMade_;
         for (const auto& c : k.nested.innerClasses) innerMade_[c->name] = {c.get(), "std::make_shared<" + k.name + ">(*this)"};
@@ -1497,7 +1496,6 @@ public:
         // An inner class (this generator's own, innerClass_): its object holds its outer ones' (kompoz_this_1…N, as the
         // receivers of its body: their members are reached by their names). One with inner classes: shared (kt::Shared).
         bool isInner = innerClass_ == &k;
-        if (isInner && !handle) throw CompileError(k.pos, "an inner class with a C++ base isn't supported: give it a Kotlin base, or no base");
         const auto& inners = k.nested.innerClasses;
         if (handle && !inners.empty()) bases += std::string(bases.empty() ? "" : ", ") + "public virtual ::kompoz::kt::Shared";
         InterfaceMembers inherited = inheritedMembers(k);
@@ -1661,8 +1659,10 @@ public:
                 }
             }
         };
-        if (handle) out_->text(" Object(" + (isInner ? outers_.back().holder + " kompoz_outer" + (k.ctorParams.empty() ? "" : ", ") : std::string()));
-        else out_->text(std::string(k.ctorParams.size() == 1 ? " explicit " : " ") + k.name + "(");
+        // (an inner one's: its outer object first; one with a C++ base holds it itself)
+        std::string outerParam = isInner ? outers_.back().holder + " kompoz_outer" + (k.ctorParams.empty() ? "" : ", ") : std::string();
+        if (handle) out_->text(" Object(" + outerParam);
+        else out_->text(std::string(k.ctorParams.size() + isInner == 1 ? " explicit " : " ") + k.name + "(" + outerParam);
         parameters(!handle, true);
         out_->text(")");
         for (size_t i = 0; i < k.ctorParams.size(); ++i)
@@ -3741,14 +3741,27 @@ private:
                 return arguments(c, calleeName, false);
             }
             if (auto in = module_.innerClasses.find(callee.text); in != module_.innerClasses.end() && !qualifier(obj)) {
-                // outer.Counter(…): an inner class's object, holding outer's (the one class with an inner class of the name)
+                // outer.Counter(…): an inner class's object, holding outer's (the one class with an inner class of the name;
+                // its type outer's own, as C++ finds it: Box<Int>'s of a generic one)
                 if (in->second.size() > 1) throw CompileError(c.pos, "several classes have an inner class " + callee.text + ": name them apart");
-                std::string outer = qualified(in->second[0].first);
+                std::string spelled;
+                {
+                    Output* was = out_;
+                    Output typed(out_->file());
+                    out_ = &typed;
+                    expr(obj);
+                    out_ = was;
+                    std::string written = std::move(typed).str(), one;  // (on one line: its #lines left out)
+                    std::istringstream lines(written);
+                    for (std::string line; std::getline(lines, line);)
+                        if (!line.starts_with("#line")) one += line + " ";
+                    spelled = "typename ::kompoz::kt::OuterType<decltype(" + one + ")>::" + callee.text;
+                }
                 return constructClass(c, *in->second[0].second, [&] {
                     out_->text("::kompoz::kt::outerOf(");
                     expr(obj);
                     out_->text(")");
-                }, qualifierOf(outer.substr(0, outer.find("::"))) + outer + "::" + callee.text);
+                }, spelled);
             }
             if (callee.text == "copy" && dataClassCopy(c, obj)) return;
             if (qualifier(obj))  // UiState.Ready(items): a sealed class's nested data class, made as one is

@@ -629,6 +629,7 @@ Durum: ✅ var · 🟡 kısmen / farklı biçimde · ⬜ yok
 401. `*liste` verilen tür parametreli bir `vararg` ✅
 402. Üst düzey `var`'lar, `val x by lazy { … }`, `var n by mutableStateOf(0)` ✅
 403. Değer olarak istisnalar (`val error: Exception`, `Exception?`, bir liste öğesi): asıl türleriyle tutulur ✅
+404. Tür parametreli bir data class'ın `inner class`'ı; bir C++ sınıfından türeyen bir `inner class` ✅
 
 ## Sıradakiler
 
