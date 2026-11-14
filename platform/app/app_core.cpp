@@ -481,7 +481,10 @@ void profileFrame(App& app, uint64_t start, uint64_t composed, uint64_t waited, 
     p.workMax = std::max(p.workMax, work);
     p.waitTotal += wait;
     p.intervalMax = std::max(p.intervalMax, interval);
-    if (area == 0) ++p.unchanged;
+    if (area == 0) {
+        ++p.unchanged;
+        p.dueSince = presented;  // (the refreshes until it had nothing new to show: none missed)
+    }
     p.drawnArea += area < 0 ? 1 : area;
     if (shown) {
         // Refreshes of the display that went by without a frame, between two shown back to back

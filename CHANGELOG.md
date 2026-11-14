@@ -1143,6 +1143,11 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **KOMPOZ_PROFILE counts no refresh missed where a frame had nothing new to show**: a frame that changed nothing on
+  the screen isn't shown, and the refreshes until the next one shown were counted as missed. An animation the screen
+  doesn't show (the showcase's Material tab, scrolled away from its moving dot, makes a frame for every refresh) made
+  2.3 s on the 14 Ultra come out as 279 refreshes missed, and a fling's last frames, which move by less than a pixel,
+  15–25 a second; now 0–10.
 - **Editors**: the language server's view of a file now has the other files' Kotlin that its C++ names (a data class
   of another file made in its C++ was unknown to clangd there), and the declarations a Kotlin region carries to one of
   its empty lines are no longer lost (a data class on a line of its own, then a blank line, was missing from the view).

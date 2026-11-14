@@ -1180,6 +1180,11 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **KOMPOZ_PROFILE, yeni gösterecek bir şeyi olmayan bir karenin ardından kaçan tazeleme saymaz**: ekranda hiçbir
+  şeyi değiştirmeyen bir kare gösterilmez, bir sonraki gösterilen kareye kadarki tazelemeler kaçmış sayılıyordu.
+  Ekranın göstermediği bir animasyon (showcase'in Material sekmesi, kayan noktasından uzağa kaydırılınca her tazeleme
+  için bir kare yapar) 14 Ultra'da 2,3 saniyeyi 279 kaçan tazeleme gösteriyordu, bir savuruşun bir pikselden az
+  kayan son kareleri de saniyede 15–25; şimdi 0–10.
 - **Editörler**: dil sunucusunun bir dosyaya bakışı artık dosyanın C++'ının adını andığı öteki dosyaların Kotlin'ini de
   içeriyor (C++'ında yapılan başka bir dosyanın data class'ını clangd orada tanımıyordu) ve bir Kotlin bölgesinin boş
   satırlarından birine düşen bildirimler artık kaybolmuyor (kendi satırında bir data class, ardından boş bir satır,
