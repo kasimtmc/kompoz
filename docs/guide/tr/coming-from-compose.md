@@ -23,7 +23,7 @@ target_link_libraries(app PRIVATE kompoz::app)
 kompozable(app)
 ```
 
-Her kaynakta bir `@Kompozable fun` (ve bir `data class`) Kotlin'dir; dosyadaki geri kalan her şey C++'tır ve olduğu gibi geçer. C++ derleyicisinin iletileri sizin kendi satırlarınızı gösterir. Bir hedefin kaynakları, Kotlin'deki gibi tek bir modüldür: bir dosyanın composable'ı başka bir dosyadan adlı argümanlarla çağrılır, başlık gerekmez.
+Her kaynakta bir `@Kompozable fun` (ve bir `data class`) Kotlin'dir; dosyadaki geri kalan her şey C++'tır ve olduğu gibi geçer. Kotlin kısmında noktalı virgül, Kotlin'deki gibi isteğe bağlıdır: bir deyim onunla bitebilir de bitmeyebilir de. C++ derleyicisinin iletileri sizin kendi satırlarınızı gösterir. Bir hedefin kaynakları, Kotlin'deki gibi tek bir modüldür: bir dosyanın composable'ı başka bir dosyadan adlı argümanlarla çağrılır, başlık gerekmez.
 
 Uygulamanın giriş noktası C++'tır; composable'larınızın çevresine yazdığınız her şey de öyle:
 

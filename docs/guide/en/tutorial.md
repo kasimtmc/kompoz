@@ -23,6 +23,8 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 There is no XML, no view objects and no `setText`: to change what is on the screen, you call composables with different data, and Kompoz updates the screen to match.
 
+Coming from C++, you may want a semicolon after each statement: in the composable it is optional, as in Kotlin. `Text("Hello, $name!");` is just as right; the examples here leave it off, as Compose's do.
+
 ## Step 2: layout
 
 Composables placed one after another are drawn on top of each other unless you say how to arrange them. `Column` puts its children in a column, `Row` in a row, `Box` on top of each other.

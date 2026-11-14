@@ -22,6 +22,8 @@ kompoz::Application kompoz::createApplication(int, char**) {
 }
 ```
 
+The composable is Kotlin, the entry point below it C++. In the Kotlin a semicolon at the end of a statement is optional, as in Kotlin: `Text("…");` and `Text("…")` read the same, so write it out of a C++ habit or leave it off.
+
 ## Get started
 
 - [Setup](setup.md): build Kompoz, add it to your CMake project with `kompozable`, and run on each platform.

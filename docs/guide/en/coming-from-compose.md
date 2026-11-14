@@ -23,7 +23,7 @@ target_link_libraries(app PRIVATE kompoz::app)
 kompozable(app)
 ```
 
-In each source, a `@Kompozable fun` (and a `data class`) is Kotlin; everything else in the file is C++ and passes through as it is. The C++ compiler's messages point at your own lines. The sources of a target are one module, as Kotlin's: a composable of one file is called from another with named arguments, no header needed.
+In each source, a `@Kompozable fun` (and a `data class`) is Kotlin; everything else in the file is C++ and passes through as it is. In the Kotlin, semicolons are optional, as they are in Kotlin: a statement may end with one or not. The C++ compiler's messages point at your own lines. The sources of a target are one module, as Kotlin's: a composable of one file is called from another with named arguments, no header needed.
 
 The app's entry point is C++, and so is anything else you write around your composables:
 

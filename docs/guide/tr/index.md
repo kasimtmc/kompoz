@@ -22,6 +22,8 @@ kompoz::Application kompoz::createApplication(int, char**) {
 }
 ```
 
+Composable Kotlin'dir, altındaki giriş noktası C++. Kotlin kısmında bir deyimin sonundaki noktalı virgül, Kotlin'deki gibi isteğe bağlıdır: `Text("…");` ile `Text("…")` aynı okunur; C++ alışkanlığıyla yazın ya da yazmayın.
+
 ## Başlarken
 
 - [Kurulum](setup.md): Kompoz'u derleyin, `kompozable` ile kendi CMake projenize ekleyin ve her platformda çalıştırın.

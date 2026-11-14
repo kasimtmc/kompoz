@@ -23,6 +23,8 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 XML yok, view nesneleri yok, `setText` yok: ekrandakini değiştirmek için composable'ları farklı verilerle çağırırsınız, Kompoz da ekranı buna uyacak şekilde günceller.
 
+C++'tan geliyorsanız her deyimin sonuna noktalı virgül koymak isteyebilirsiniz: composable'da bu, Kotlin'deki gibi isteğe bağlıdır. `Text("Merhaba, $name!");` de aynı derecede doğrudur; buradaki örnekler, Compose'unkiler gibi koymaz.
+
 ## Adım 2: yerleşim
 
 Art arda konan composable'lar, nasıl dizileceklerini söylemezseniz üst üste çizilir. `Column` çocuklarını bir sütuna, `Row` bir satıra, `Box` ise üst üste yerleştirir.
