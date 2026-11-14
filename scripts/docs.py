@@ -68,7 +68,8 @@ def code_blocks(text):
             indent, info, start, body = len(m.group(1)), m.group(2).strip(), i + 1, []
             i += 1
             while i < len(lines) and not re.match(r'^\s*```\s*$', lines[i]):
-                body.append(lines[i][indent:] if lines[i][:indent].isspace() else lines[i].lstrip())
+                # (the fence's indent taken off; one at the left edge takes none: its lines keep theirs)
+                body.append(lines[i][indent:] if not lines[i][:indent].strip() else lines[i].lstrip())
                 i += 1
             blocks.append((start, info, body))
         i += 1
@@ -383,7 +384,8 @@ class Page:
                 indent, info, body = len(m.group(1)), m.group(2).strip(), []
                 i += 1
                 while i < n and not re.match(r'^\s*```\s*$', lines[i]):
-                    body.append(lines[i][indent:] if lines[i][:indent].isspace() else lines[i].lstrip())
+                    # (the fence's indent taken off; one at the left edge takes none: its lines keep theirs)
+                    body.append(lines[i][indent:] if not lines[i][:indent].strip() else lines[i].lstrip())
                     i += 1
                 i += 1
                 out.append(self.code(info, body))
