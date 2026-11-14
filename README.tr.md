@@ -3,8 +3,11 @@
 [English](README.md) · **Türkçe**
 
 C++20 için Jetpack Compose tarzı, deklaratif ve çok platformlu bir arayüz kütüphanesi: aynı düşünme biçimi
-(composable fonksiyonlar, durum, recomposition, modifier'lar), C++'ın izin verdiği yerde aynı isimler ve Compose'unkiler
-gibi görünen ve davranan Material 3 bileşenleri. Tek kod tabanından Linux, Windows, Android ve web'de çalışır.
+(composable fonksiyonlar, durum, recomposition, modifier'lar), aynı isimler ve Compose'unkiler gibi görünen ve
+davranan Material 3 bileşenleri. Composable'lar Compose'un yazdığı gibi, `.cpp` dosyalarının içinde Kotlin söz
+dizimiyle `@Kompozable fun` olarak yazılır: Kompoz'un derleyicisi kompozc, Compose'un derleyici eklentisinin
+Kotlin'i yeniden yazdığı gibi, onları derleme sırasında C++'a çevirir; çevrelerindeki her şey C++'tır. C++'ın
+kendisiyle de yazılabilirler. Tek kod tabanından Linux, Windows, macOS, Android ve web'de çalışır.
 
 Sürüm 0.1.1. API Compose'u yakından izliyor ama henüz değişebilir.
 [Apache Lisansı 2.0](LICENSE) ile lisanslıdır.
@@ -17,6 +20,27 @@ Sürüm 0.1.1. API Compose'u yakından izliyor ama henüz değişebilir.
 <img src="docs/screenshots/dynamic-color-linux/d9.png" width="760" alt="Dynamic Color implementation example 1">
 <img src="docs/screenshots/dynamic-color-linux/d4.png" width="760" alt="Dynamic Color implementation example 2">
 <img src="docs/screenshots/dynamic-color-linux/d16.png" width="760" alt="Dynamic Color implementation example 3">
+
+```kotlin
+#include <kompoz/kompoz.hpp>
+using namespace kompoz;
+
+@Kompozable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }
+
+    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Sayaç: $count", style = MaterialTheme.typography.titleLarge)
+        Button(onClick = { count++ }) { Text("Arttır") }
+    }
+}
+
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "Demo", .content = [] { MaterialTheme(lightColorScheme(), [] { Counter(); }); }};
+}
+```
+
+Aynı composable, kompozc olmadan C++'ın kendisiyle:
 
 ```cpp
 #include <kompoz/kompoz.hpp>
@@ -38,6 +62,11 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 ## İçinde neler var
 
+- **Kotlin söz dizimi** (kompozc): composable'lar ve çevrelerindeki Kotlin, derleme sırasında çevrilerek Kotlin'deki
+  gibi okunur: data, enum, sealed ve inner sınıflar, arayüzler, object'ler, tür parametreleri, `suspend fun`'lar,
+  `try` ve `throw`, işleçler, eklenti işlevleri ve özellikleri, temsilcili özellikler (`by remember {
+  mutableStateOf(0) }`), aynı adlı işlevler; hatalar Kotlin'in satırlarını gösterir. Bkz. [Compose'dan
+  geliyorsanız](docs/guide/tr/coming-from-compose.md).
 - **Runtime**: akıllı recomposition'lı composable fonksiyonlar (yalnız değişen durumu okuyan yeniden çalışır,
   değişmeyen çocuklar atlanır), `remember`/`rememberSaveable`, efektler, `KompozitionLocal`, C++20 coroutine'leri
   (`LaunchedEffect`, `delay`, `Flow`/`StateFlow`), `ViewModel`, tür güvenli rotalar ve derin bağlantılarla gezinme,
@@ -64,30 +93,34 @@ kompoz::Application kompoz::createApplication(int, char**) {
   ve sağdan sola yerleşim); pano, titreşim, URI'ler, IME.
 - **Araçlar**: pencere açmadan UI testleri (`KompozTestRule`), önizlemeler (`KOMPOZ_PREVIEW`), kaydedince uygulamanın
   durumunu koruyarak yeniden derleyip başlatma (`scripts/dev.sh`), betikle ekran görüntüsü, kare profili, her platform
-  için paketleme (`scripts/package.sh`).
+  için paketleme (`scripts/package.sh`); editörler: CLion (Kompoz'un eklentisi), VS Code ve Kate için, tanılarını
+  Kotlin'in satırlarında veren bir dil sunucusu (`kompozc --lsp`, clangd'nin önünde).
 
 Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/components.tr.md)'de.
 
 ## Compose → Kompoz
 
+kompozc ile Compose'un kodu olduğu gibi yazılır (bkz. [Compose'dan geliyorsanız](docs/guide/tr/coming-from-compose.md)).
+Onsuz, C++'ta, Compose'un biçimleri şöyle okunur (bkz. [C++ ile yazmak](docs/guide/tr/cpp.md)):
+
 | Compose | Kompoz |
 |---|---|
-| `@Kompozable` + compiler plugin | Her composable'da `CallSite site = CallSite::current()` (`std::source_location`) varsayılan parametresi. Çağrı noktası + ebeveyn içindeki sıra = kimlik |
+| `@Composable` + compiler plugin | Her composable'da `CallSite site = CallSite::current()` (`std::source_location`) varsayılan parametresi. Çağrı noktası + ebeveyn içindeki sıra = kimlik |
 | Restartable / skippable composable | `kompozable(site, args..., [=]{ ... })`: okuduğu state değişince tek başına yeniden çalışır, argümanları aynıysa atlanır |
 | Inline composable (`Column`, `Row`) | `KompozableScope scope(site);`: kimlik verir ama ayrı scope değildir (içerik lambdası alan composable'lar için) |
 | `remember { }`, `remember(key) { }` | `remember([]{...})`, `remember(key, []{...})` |
 | `mutableStateOf` | `mutableStateOf(x)` → `MutableState<T>` (kopyalanabilir handle; callback'lerde değerle yakala) |
 | `key(id) { }` | `key(id, [&]{...})` |
 | `DisposableEffect`, `SideEffect` | Aynı isimler |
-| `KompozitionLocal` | `KompozitionLocal<T>`, `KompozitionLocalProvider({Local.provides(v)}, ...)` |
+| `CompositionLocal` | `KompozitionLocal<T>`, `KompozitionLocalProvider({Local.provides(v)}, ...)` |
 | `animate*AsState` | `animateFloatAsState`, `animateColorAsState` (sadece kendi scope'unu her frame yeniden çalıştırır) |
 | `LaunchedEffect`, `rememberCoroutineScope`, `delay` | C++20 coroutine'leri: `LaunchedEffect(key, [=]() -> Task { co_await delay(1s); ... })` |
 | `Animatable`, `tween`, `spring`, `infiniteRepeatable` | `co_await anim.animateTo(1.f, tween(300))`, aynı spec isimleri |
 | `AnimatedVisibility`, `AnimatedContent`, `Crossfade` | Aynı isimler; `fadeIn() + expandVertically()`, `scaleIn()`, `togetherWith` |
-| `NavHost(nav, "home") { kompozable("detail/{id}") { e -> } }`, `nav.navigate("detail/3")` | `NavHost(nav, "home", m, [&](NavGraphBuilder& g) { g.kompozable("detail/{id}", [&](const NavBackStackEntry& e) { e.arguments().getInt("id"); }); })`, `nav.navigate("detail/3", {.popUpTo = "home", .saveState = true, .restoreState = true})` |
-| `@Serializable data class Profile(val id: String, val tab: Int? = null)`, `kompozable<Profile> { e -> e.toRoute<Profile>() }`, `nav.navigate(Profile("42"))` | `struct Profile { std::string id; std::optional<int> tab; KOMPOZ_ROUTE(Profile, id, tab) };` (zorunlu alanlar yol, `std::optional`'lar sorgu parametresi), `g.kompozable<Profile>([&](const NavBackStackEntry& e) { e.toRoute<Profile>(); })`, `nav.navigate(Profile{.id = "42"})`, `navigation<Login>(Username{}, …)`, `hasRoute<T>()`, `getBackStackEntry<T>()`, `navDeepLink<T>("kompoz://profile")` |
-| `kompozable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { … }` | `g.kompozable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [&](const NavBackStackEntry& e) { … })`; `nav.navigate("kompoz://item/3")`, `nav.handleDeepLink(...)` |
-| `navigation(startDestination = "username", route = "login") { kompozable("username") { … } }` | `g.navigation("username", "login", [&](NavGraphBuilder& login) { login.kompozable("username", [&](const NavBackStackEntry& e) { auto vm = viewModel<LoginViewModel>(*e.parent()); }); })` |
+| `NavHost(nav, "home") { composable("detail/{id}") { e -> } }`, `nav.navigate("detail/3")` | `NavHost(nav, "home", m, [&](NavGraphBuilder& g) { g.kompozable("detail/{id}", [&](const NavBackStackEntry& e) { e.arguments().getInt("id"); }); })`, `nav.navigate("detail/3", {.popUpTo = "home", .saveState = true, .restoreState = true})` |
+| `@Serializable data class Profile(val id: String, val tab: Int? = null)`, `composable<Profile> { e -> e.toRoute<Profile>() }`, `nav.navigate(Profile("42"))` | `struct Profile { std::string id; std::optional<int> tab; KOMPOZ_ROUTE(Profile, id, tab) };` (zorunlu alanlar yol, `std::optional`'lar sorgu parametresi), `g.kompozable<Profile>([&](const NavBackStackEntry& e) { e.toRoute<Profile>(); })`, `nav.navigate(Profile{.id = "42"})`, `navigation<Login>(Username{}, …)`, `hasRoute<T>()`, `getBackStackEntry<T>()`, `navDeepLink<T>("kompoz://profile")` |
+| `composable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { … }` | `g.kompozable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [&](const NavBackStackEntry& e) { … })`; `nav.navigate("kompoz://item/3")`, `nav.handleDeepLink(...)` |
+| `navigation(startDestination = "username", route = "login") { composable("username") { … } }` | `g.navigation("username", "login", [&](NavGraphBuilder& login) { login.kompozable("username", [&](const NavBackStackEntry& e) { auto vm = viewModel<LoginViewModel>(*e.parent()); }); })` |
 | `class SearchViewModel(private val state: SavedStateHandle) : ViewModel()`, `state.getStateFlow("q", "")`, `state["q"] = q` | `explicit SearchViewModel(SavedStateHandle s) : state(s), query(s.getStateFlow<std::string>("q", "")) {}`, `state.set("q", q)` (`viewModel<SearchViewModel>()` handle'ı kendisi verir; süreç ölümünden sonra da kalır) |
 | `rememberSaveable { mutableStateOf(0) }` | `rememberSaveable([] { return mutableStateOf(0); })` (Android süreci bitirip geri getirince de) |
 | `Saver(save = { … }, restore = { … })` | `template <> struct kompoz::Saver<Point> { static SavedValue save(const Point&); static std::optional<Point> restore(const SavedValue&); };` |
@@ -109,9 +142,9 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `Brush.verticalGradient(...)`, `Path` | `Brush::verticalGradient({a, b})`, `background(brush, shape)`, `d.drawPath(path, brush, Stroke(3))` |
 | `Modifier.graphicsLayer { rotationZ = ... }` | `graphicsLayer({.rotationZ = 45})` veya çizimde okunan lambda: `graphicsLayer([=](GraphicsLayerScope& l) { ... })` |
 | `TriStateCheckbox(state = ToggleableState.Indeterminate, onClick)`, `Text(…, autoSize = TextAutoSize.StepBased(12.sp, 48.sp))` | `TriStateCheckbox(ToggleableState::Indeterminate, onClick)`, `Text("…", maxLines = 1, autoSize = TextAutoSize::StepBased(12, 48))` |
-| `SubkompozLayout { constraints -> val m = subkompoz("main") { … }.map { it.measure(constraints) }; layout(w, h) { … } }` | `SubkompozLayout(Modifier(), [](SubkompozMeasureScope& s, const Constraints& c) { auto m = s.subkompoz(std::string("main"), [] { … }); …; return Size{w, h}; })` |
+| `SubcomposeLayout { constraints -> val m = subcompose("main") { … }.map { it.measure(constraints) }; layout(w, h) { … } }` | `SubkompozLayout(Modifier(), [](SubkompozMeasureScope& s, const Constraints& c) { auto m = s.subkompoz(std::string("main"), [] { … }); …; return Size{w, h}; })` |
 | `Modifier.clickable(interactionSource = s, indication = null) { … }` + `Modifier.indication(s, ripple())` | `Modifier().clickable([] { … }, {.interactionSource = s, .indication = false})` + `Modifier().indication(s, ripple())` |
-| `Modifier.clickable(indication = ripple(bounded = false, radius = 24.dp)) { … }`, `KompozitionLocalProvider(LocalIndication provides …)` | `Modifier().clickable([] { … }, {.indication = ripple(false, 24)})`, `KompozitionLocalProvider({LocalIndication.provides(false)}, …)` (her tıklanabilirde varsayılan Material dalgası) |
+| `Modifier.clickable(indication = ripple(bounded = false, radius = 24.dp)) { … }`, `CompositionLocalProvider(LocalIndication provides …)` | `Modifier().clickable([] { … }, {.indication = ripple(false, 24)})`, `KompozitionLocalProvider({LocalIndication.provides(false)}, …)` (her tıklanabilirde varsayılan Material dalgası) |
 | `val source = remember { MutableInteractionSource() }`, `val pressed by source.collectIsPressedAsState()`, `Modifier.clickable(source, indication = null) { … }` | `auto source = remember([] { return MutableInteractionSource(); });`, `bool pressed = source.collectIsPressedAsState();`, `Modifier().clickable([] { … }, {.interactionSource = source, .indication = false})` (`Button(…, interactionSource = source) { … };`, `Slider(v, set, interactionSource = source)`, `source.interactions().collect(…)`, `pagerState.interactionSource().collectIsDraggedAsState()`) |
 | `val state = remember { AnchoredDraggableState(DragValue.Start) }`, `state.updateAnchors(DraggableAnchors { Start at 0f; End at w })`, `Modifier.offset { IntOffset(state.requireOffset().roundToInt(), 0) }.anchoredDraggable(state, Orientation.Horizontal)` | `auto state = rememberAnchoredDraggableState(DragValue::Start);`, `state.updateAnchors({{DragValue::Start, 0}, {DragValue::End, w}});`, `Modifier().offset([state] { return Offset{state.requireOffset(), 0}; }).anchoredDraggable(state, Orientation::Horizontal)` (`anchored_draggable.hpp`) |
 | `val measurer = rememberTextMeasurer()`, `drawText(measurer.measure("%42", style), topLeft = …)`, `Text(text, onTextLayout = { r -> cut = r.hasVisualOverflow })` | `auto measurer = rememberTextMeasurer();`, `d.drawText(measurer.measure("%42", {.fontSize = 12}), {x, y})`, `Text(text, Modifier(), {.maxLines = 2}, [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); })` (`text_measure.hpp`) |
@@ -126,7 +159,7 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | `Modifier.pointerHoverIcon(PointerIcon.Hand)` | `Modifier().pointerHoverIcon(PointerIcon::Hand)` (`Cursor::Move`, `ResizeHorizontal`…) |
 | `CenterAlignedTopAppBar(title = { … })`, `Card(onClick = { … }) { … }`, `Scaffold(floatingActionButtonPosition = FabPosition.Center)` | `CenterAlignedTopAppBar(title = [] { … })`, `Card([] { … }) { … };`, `Scaffold(floatingActionButton = …, floatingActionButtonPosition = FabPosition::Center) [=](PaddingValues padding) { … };` |
 | `LazyRow(state = s, flingBehavior = rememberSnapFlingBehavior(s)) { … }` | `LazyRow(Modifier(), state = s, flingBehavior = rememberSnapFlingBehavior(s)) { … };` |
-| `KompozitionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }`, `Modifier.absoluteOffset(x)` | `KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { … })`, `Modifier().absoluteOffset(x, 0)` |
+| `CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }`, `Modifier.absoluteOffset(x)` | `KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { … })`, `Modifier().absoluteOffset(x, 0)` |
 | `IconToggleButton(checked, onCheckedChange = { checked = it }) { Icon(…) }`, `OutlinedIconButton(onClick) { … }` | `IconToggleButton(checked.get(), [checked](bool on) { checked.set(on); }) { Icon(…); };` (`FilledIconToggleButton`, `FilledTonalIconToggleButton`, `OutlinedIconToggleButton`), `OutlinedIconButton([] { … }) { … };` |
 | `OutlinedTextField(value, onValueChange, label = { Text("Tutar") }, prefix = { Text("₺") }, suffix = { Text("kg") })` | `OutlinedTextField(value, set, label = "Tutar", prefix = "₺", suffix = "kg")` |
 | `Modifier.zIndex(1f)`, `placeable.place(x, y, zIndex)` | `Modifier().zIndex(1)`, `p.place(x, y, 1)` |
@@ -170,7 +203,7 @@ Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/component
 | İsimli parametreler | Adlı argümanlar: `Text("Başlık", fontSize = 24, color = ...)` (henüz çevrilmemiş bileşenler için seçenek yapıları) |
 | `@Preview` | `KOMPOZ_PREVIEW(Ad, .width = 360, .height = 200) { ... }`, `KOMPOZ_PREVIEW=Ad` ile gösterilir (bkz. [Geliştirme](#geliştirme)) |
 | `createComposeRule()`, `onNodeWithText(..).assertIsDisplayed()` | `kompoz::testing::KompozTestRule` (pencere açmadan UI testi): `rule.onNodeWithText("Tamam").assertIsDisplayed().performClick()`; başarısızlıkta `testing::AssertionError` |
-| `Modifier.rekompozHighlighter()` (snippets) | `Modifier().rekompozHighlighter()`: node'u üreten composable'ın kaç kez çalıştığını kenarlıkla gösterir |
+| `Modifier.recomposeHighlighter()` (snippets) | `Modifier().rekompozHighlighter()`: node'u üreten composable'ın kaç kez çalıştığını kenarlıkla gösterir |
 
 Hangi Compose API'lerinin önce geldiğine android/snippets deposundaki kullanım sıklığına göre karar verildi; bkz.
 [docs/components.tr.md](docs/components.tr.md).
@@ -219,7 +252,9 @@ yeniden ölçülür.
 ## Mimari
 
 ```
- uygulama kodu (composable fonksiyonlar)
+ .cpp dosyalarında Kotlin söz dizimiyle @Kompozable fun'lar
+        │ kompozc, derleme sırasında (compiler/: çeviri ve editörler için dil sunucusu)
+ uygulama kodu (C++'ta composable fonksiyonlar)
         │
  ┌──────▼─────────────────────────────── kompoz_core (platformdan bağımsız, bağımlılık yok)
  │ runtime     slot table (Group ağacı), scope'lar ve okuma takibi, remember, durum, efektler, KompozitionLocal
@@ -242,8 +277,9 @@ yeniden ölçülür.
  │             gezinme (çekmece, ray, suite), uyarlanabilir yerleşimler
  └──────┬─────────────────────────────── GraphicsContext / TextMeasurer arayüzleri
  ┌──────▼─────────────────────────────── platform arka ucu
- │ sdl3      pencere, girdi, IME/yazılım klavyesi, HarfBuzz + FreeType glif atlası, resimler, masaüstünün vurgu
- │           rengi (Linux)
+ │ app       her platformun paylaştığı uygulama çekirdeği (kare döngüsü, olaylar, kendi başlık çubuğu) ve
+ │           platformlar: Wayland ve X11 (Linux), Win32, AppKit (macOS), Android, web
+ │ common    HarfBuzz + FreeType glif atlası, sistemin fontları, resimler, masaüstünün vurgu rengi
  │ android   Java tarafı: klavye (InputConnection), erişilebilirlik, kenar boşlukları, dinamik renk, geri hareketi
  │ gpu       Kompoz'un kendi GPU renderer'ı, her şey onunla çizilir: Vulkan, Metal, WebGPU ve OpenGL ES 3 (web'de
  │           WebGL 2) için ince katmanların üstünde tek çekirdek; KOMPOZ_GPU birini seçer, varsayılan platformun en iyisi
@@ -290,8 +326,12 @@ add_subdirectory(kompoz)        # bir klon ya da git submodule
 
 add_executable(myapp main.cpp)  # en baştaki örnek
 target_link_libraries(myapp PRIVATE kompoz::app)
+kompozable(myapp)               # kaynakları kompozc'den geçer: Kotlin söz dizimiyle @Kompozable işlevler
 kompoz_copy_assets(myapp)       # fontlar ve lisanslar ikilinin yanına
 ```
+
+`kompozable`, hedefin kaynaklarını C++ derleyicisinden önce kompozc'den geçirir: hedefin bütün kaynakları
+eklendikten sonra çağırın.
 
 Ya da Kompoz'u bir kez kurup paket olarak bulun; Linux'ta, macOS'ta ya da Windows'ta. Sistemin FreeType,
 HarfBuzz ve libpng'siyle derlendiyse onları yine orada bulur; kendi derlediğiyle derlendiyse
@@ -307,6 +347,7 @@ cmake --install kompoz/build --prefix ~/.local
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, orası zaten aranmıyorsa
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
+kompozable(myapp)
 kompoz_copy_assets(myapp)
 ```
 
@@ -386,6 +427,8 @@ planı verir; yazı ölçeği pencerenin (`KOMPOZ_FONT_SCALE`). Resim olarak:
 yerleştirir ve çizer; düğümleri metne, etikete ya da semantiğe göre bulun, tıklayın, yazın, kaydırın; sınırları,
 semantiği ve çizileni denetleyin. `./build/kompoz_tests` hepsini çalıştırır (`./build/kompoz_tests lazy` yalnız adında
 "lazy" geçenleri). Testler çalışırken her artımlı yerleşim baştan yapılan bir yerleşimle karşılaştırılır.
+`./build/kompozable_tests` Kotlin söz dizimiyle (kompozc'den geçerek) yazılmış olanları çalıştırır;
+`tests/kompozc_lsp_test.py` dil sunucusunu bir editörün sürdüğü gibi sürer.
 
 ## Paketleme
 
@@ -552,8 +595,7 @@ bir de baştan çizip pikselleri karşılaştırır (fark varsa loglar), `KOMPOZ
 4. Recomposition vurgulayıcısının sayaçları snippet'lerdeki gibi 3 saniye sonra sıfırlanmıyor, birikiyor.
 5. Lazy listeler öğelerin kompozisyonunu `contentType`'a göre yeniden kullanmıyor (Compose'un SubcomposeLayout havuzu);
    ölçüldü, şimdilik gerek görülmedi.
-6. Kotlin'in `by` delegasyonunun karşılığı yok: durum `.get()` ve `.set()` ile okunup yazılır.
-7. Kütüphanenin kendi metinleri (`LocalStrings`) yalnız İngilizce ve Türkçe; başka dildeki bir uygulama kendi
+6. Kütüphanenin kendi metinleri (`LocalStrings`) yalnız İngilizce ve Türkçe; başka dildeki bir uygulama kendi
    `Strings`'ini verir.
 
 ## Katkı

@@ -4,7 +4,7 @@ Editörler, önizlemeler, kaydedince yeniden derleme, betikle ekran görüntüle
 
 ## Editörler
 
-Compose söz dizimiyle `@Kompozable` işlevler içeren bir `.cpp` dosyası hem C++ hem Kotlin'dir; yalnız C++ bilen bir editör onu bozuk C++ diye okur. `kompozc --lsp` böyle dosyalar için bir dil sunucusudur: editörler onu clangd'yi başlatacakları yerde başlatır, o da clangd'yi kendi arkasında başlatır.
+Kotlin söz dizimiyle `@Kompozable` işlevler içeren bir `.cpp` dosyası hem C++ hem Kotlin'dir; yalnız C++ bilen bir editör onu bozuk C++ diye okur. `kompozc --lsp` böyle dosyalar için bir dil sunucusudur: editörler onu clangd'yi başlatacakları yerde başlatır, o da clangd'yi kendi arkasında başlatır.
 
 - Kotlin'in çevresindeki C++'ta her şey clangd'nindir: tamamlama, üzerine gelince bilgi, tanıma gitme, tanılar.
 - Kotlin'de tanılar kompozc'nin (bir söz dizimi hatası, yerini bulamadığı bir ad) ve çeviri üzerinde C++ derleyicisinindir; her biri geldiği Kotlin satırında görünür. clangd'nin tamamlaması ve bilgi kutusu orada verilmez, biçimlendirme de böyle bir dosyaya dokunmaz.

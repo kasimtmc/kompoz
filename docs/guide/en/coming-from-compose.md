@@ -301,7 +301,7 @@ Lambdas capture by value, as Kotlin's capture: a block can run again later on it
 
 Expressions are evaluated left to right, as Kotlin evaluates them: a call's arguments in the order they are written (named ones too), a string template's parts, an operator's operands. C++ leaves those unordered; kompozc orders them where it can matter, `listOf(next(), next())` giving the first `next()` first.
 
-## Not yet
+## What kompozc reads
 
 kompozc reads the Kotlin a composable needs: composables, plain, extension, generic, `operator` and `suspend` functions with `vararg`s (overloads too), top-level `val`s and `var`s (delegated ones too: `by lazy`, `by mutableStateOf`) and extension properties, `typealias`, data classes (with a body too), enum classes (with a constructor and a body too, their entries' own too), classes (open, abstract, generic; a ViewModel, a repository) with delegated, `lateinit` and accessor properties and a `companion object`, interfaces (generic too, `fun interface`s with a `suspend fun` too), `sealed` classes and interfaces (with a constructor and members, their cases data classes, objects or classes), `@Serializable` routes, objects, with members too (`object AppIcons { val Add = … }`: an app's singletons), those declarations nested in classes and inner classes, `try` and `throw` as expressions with Kotlin's exceptions. What it doesn't read (it says so, at the Kotlin's line) is written in C++ next to it. Editors read such files through kompozc's language server (see [Tools](tools.md#editors)); the build's messages point at the Kotlin's lines too.
 

@@ -1,6 +1,6 @@
 # Kurulum
 
-Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Windows, Android ve web'de çalıştırın.
+Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Windows, macOS, Android ve web'de çalıştırın.
 
 ## Gereksinimler
 

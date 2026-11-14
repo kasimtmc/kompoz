@@ -1,6 +1,6 @@
 # Kompoz belgeleri
 
-Kompoz, C++20 için Jetpack Compose tarzında deklaratif bir arayüz kütüphanesidir; Material 3 bileşenleriyle gelir ve tek kod tabanından Linux, Windows, Android ve web'de çalışır.
+Kompoz, C++20 için Jetpack Compose tarzında deklaratif bir arayüz kütüphanesidir; Material 3 bileşenleriyle gelir ve tek kod tabanından Linux, Windows, macOS, Android ve web'de çalışır.
 
 Compose'u biliyorsanız Kompoz'u da biliyorsunuz: aynı düşünme biçimi (composable fonksiyonlar, durum, recomposition, modifier'lar), aynı isimler ve aynı yazım. Bir composable, Kotlin yazımıyla bir `.cpp` dosyasına yazılan bir `@Kompozable fun`'dır; Kompoz'un derleyicisi kompozc onu derleme sırasında C++'a çevirir, Compose'un derleyici eklentisinin Kotlin'i yeniden yazdığı gibi; çevresindeki her şey C++'tır. Sürüm 0.1.1, Apache Lisansı 2.0 ile lisanslıdır.
 

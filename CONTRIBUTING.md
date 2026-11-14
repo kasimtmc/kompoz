@@ -22,7 +22,9 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/kompoz_tests                 # the headless tests (all platforms)
 ./build/kompoz_platform_tests        # Linux and Windows: the platform code that needs no window
-python3 scripts/docs.py --check      # when you change the guide: its C++ examples compile
+./build/kompozable_tests             # composables in Kotlin's syntax, through kompozc
+python3 tests/kompozc_lsp_test.py --kompozc build/compiler/kompozc   # when you change kompozc: its language server
+python3 scripts/docs.py --check      # when you change the guide: its examples compile
 ```
 
 CI builds every platform (Linux with GCC and Clang and sanitizers, Windows, macOS, Android, the web) on each pull

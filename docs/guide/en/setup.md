@@ -1,6 +1,6 @@
 # Setup
 
-Build Kompoz, add it to your own CMake project, and run your app on Linux, Windows, Android and the web.
+Build Kompoz, add it to your own CMake project, and run your app on Linux, Windows, macOS, Android and the web.
 
 ## Requirements
 

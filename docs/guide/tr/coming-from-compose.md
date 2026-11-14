@@ -301,7 +301,7 @@ Lambdalar, Kotlin'inkiler gibi değerleri kopyalayarak yakalar: bir blok daha so
 
 İfadeler Kotlin'deki gibi soldan sağa değerlendirilir: bir çağrının argümanları yazıldıkları sırayla (adlı olanlar da), bir metin şablonunun parçaları, bir işlecin işlenenleri. C++ bunların sırasını belirlemez; kompozc sıranın önemli olabileceği yerde onları sıralar, `listOf(next(), next())`'te ilk `next()` önce çalışır.
 
-## Henüz yok
+## kompozc'nin okudukları
 
 kompozc, bir composable'ın gerek duyduğu Kotlin'i okur: `vararg`'lı düz, eklenti, tür parametreli, `operator` ve `suspend` işlevler (aynı adlı olanlar da), üst düzey `val`'ler ve `var`'lar (temsilcili olanlar da: `by lazy`, `by mutableStateOf`) ve eklenti özellikleri, `typealias`, data class'lar (gövdeleriyle de), enum class'lar (kurucu ve gövdeleriyle, girdilerinin kendi gövdeleriyle de), temsilcili (`by`), `lateinit` ve erişimcili özellikleri ve `companion object`'leriyle sınıflar (açık, soyut, tür parametreli; bir ViewModel, bir depo), arayüzler (tür parametreli de, `suspend fun`'lı `fun interface`'ler de), `sealed` sınıflar ile arayüzler (kurucu ve üyeleriyle; durumları data class, object ya da sınıf), `@Serializable` rotalar, üyeli olanlar da dahil object'ler (`object AppIcons { val Add = … }`: bir uygulamanın tekil nesneleri), sınıfların içinde bu bildirimler ve inner class'lar, Kotlin'in istisnalarıyla ifade olarak `try` ve `throw`. Okumadığı (bunu Kotlin'in satırında söyler) onun yanında C++ ile yazılır. Editörler böyle dosyaları kompozc'nin dil sunucusuyla okur (bkz. [Araçlar](tools.md#editörler)); derlemenin iletileri de Kotlin'in satırlarını gösterir.
 

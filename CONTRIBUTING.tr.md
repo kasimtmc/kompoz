@@ -23,7 +23,9 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/kompoz_tests                 # pencere gerektirmeyen testler (her platform)
 ./build/kompoz_platform_tests        # Linux ve Windows: pencere gerektirmeyen platform kodu
-python3 scripts/docs.py --check      # rehberi değiştirdiyseniz: içindeki C++ örnekleri derleniyor mu
+./build/kompozable_tests             # Kotlin söz dizimiyle composable'lar, kompozc'den geçerek
+python3 tests/kompozc_lsp_test.py --kompozc build/compiler/kompozc   # kompozc'yi değiştirdiyseniz: dil sunucusu
+python3 scripts/docs.py --check      # rehberi değiştirdiyseniz: içindeki örnekler derleniyor mu
 ```
 
 CI her pull request'te bütün platformları derler (Linux'ta GCC, Clang ve sanitizer'larla, Windows, macOS, Android,

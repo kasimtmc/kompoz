@@ -1,6 +1,6 @@
 # Kompoz documentation
 
-Kompoz is a declarative UI library for C++20 in the style of Jetpack Compose, with Material 3 components, running on Linux, Windows, Android and the web from one codebase.
+Kompoz is a declarative UI library for C++20 in the style of Jetpack Compose, with Material 3 components, running on Linux, Windows, macOS, Android and the web from one codebase.
 
 If you know Compose, you know Kompoz: the same way of thinking (composable functions, state, recomposition, modifiers), the same names, and the same way of writing it. A composable is a `@Kompozable fun` in Kotlin's syntax, written in a `.cpp` file; Kompoz's compiler, kompozc, turns it into C++ as the build goes, the way Compose's compiler plugin rewrites Kotlin, and everything around it is C++. Kompoz 0.1.1 is licensed under the Apache License 2.0.
 

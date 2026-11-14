@@ -3,9 +3,11 @@
 **English** · [Türkçe](README.tr.md)
 
 A declarative, cross-platform UI library for C++20 in the style of Jetpack Compose: the same mental
-model (composable functions, state, recomposition, modifiers), the same names where C++ allows, and
-Material 3 components that look and behave like Compose's. It runs on Linux, Windows, Android and the
-web from one code base.
+model (composable functions, state, recomposition, modifiers), the same names, and Material 3 components
+that look and behave like Compose's. Composables are written as Compose writes them, `@Kompozable fun`s
+in Kotlin's syntax, inside `.cpp` files: Kompoz's compiler, kompozc, turns them into C++ as the build
+goes (the way Compose's compiler plugin rewrites Kotlin), and everything around them is C++. They can be
+written in C++ itself too. It runs on Linux, Windows, macOS, Android and the web from one code base.
 
 Version 0.1.1. The API follows Compose closely, but it may still change.
 Licensed under the [Apache License 2.0](LICENSE).
@@ -18,6 +20,27 @@ Licensed under the [Apache License 2.0](LICENSE).
 <img src="docs/screenshots/dynamic-color-linux/d9.png" width="760" alt="Dynamic Color implementation example 1">
 <img src="docs/screenshots/dynamic-color-linux/d4.png" width="760" alt="Dynamic Color implementation example 2">
 <img src="docs/screenshots/dynamic-color-linux/d16.png" width="760" alt="Dynamic Color implementation example 3">
+
+```kotlin
+#include <kompoz/kompoz.hpp>
+using namespace kompoz;
+
+@Kompozable
+fun Counter() {
+    var count by remember { mutableStateOf(0) }
+
+    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Count: $count", style = MaterialTheme.typography.titleLarge)
+        Button(onClick = { count++ }) { Text("Increment") }
+    }
+}
+
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "Demo", .content = [] { MaterialTheme(lightColorScheme(), [] { Counter(); }); }};
+}
+```
+
+The same composable in C++ itself, without kompozc:
 
 ```cpp
 #include <kompoz/kompoz.hpp>
@@ -39,6 +62,10 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 ## What's in it
 
+- **Kotlin's syntax** (kompozc): composables and the Kotlin around them read as in Kotlin, translated as the
+  build goes: data, enum, sealed and inner classes, interfaces, objects, generics, `suspend fun`s, `try` and
+  `throw`, operators, extension functions and properties, delegated properties (`by remember { mutableStateOf(0) }`),
+  overloads; errors point at the Kotlin's lines. See [Coming from Compose](docs/guide/en/coming-from-compose.md).
 - **Runtime**: composable functions with smart recomposition (only what read a changed state runs again;
   unchanged children are skipped), `remember`/`rememberSaveable`, effects, `KompozitionLocal`, C++20
   coroutines (`LaunchedEffect`, `delay`, `Flow`/`StateFlow`), `ViewModel`, navigation with type-safe routes and
@@ -65,30 +92,34 @@ kompoz::Application kompoz::createApplication(int, char**) {
   Turkish, `LocalStrings`, and right-to-left layouts); clipboard, haptics, URIs, the IME.
 - **Tools**: headless UI tests (`KompozTestRule`), previews (`KOMPOZ_PREVIEW`), rebuild-and-restart on save
   that keeps the app's state (`scripts/dev.sh`), scripted screenshots, frame profiling, packaging for every
-  platform (`scripts/package.sh`).
+  platform (`scripts/package.sh`); editors: a language server (`kompozc --lsp`, in front of clangd) for CLion
+  (Kompoz's plugin), VS Code and Kate, its diagnostics on the Kotlin's lines.
 
 The full list, with the status of each Compose API, is in [docs/components.md](docs/components.md).
 
 ## Compose → Kompoz
 
+With kompozc, Compose's code is written as it is (see [Coming from Compose](docs/guide/en/coming-from-compose.md)).
+In C++, without it, Compose's forms read as follows (see [Writing in C++](docs/guide/en/cpp.md)):
+
 | Compose | Kompoz |
 |---|---|
-| `@Kompozable` + compiler plugin | Every composable takes a default `CallSite site = CallSite::current()` parameter (`std::source_location`). The call site plus the order within the parent is the identity |
+| `@Composable` + compiler plugin | Every composable takes a default `CallSite site = CallSite::current()` parameter (`std::source_location`). The call site plus the order within the parent is the identity |
 | Restartable / skippable composable | `kompozable(site, args..., [=]{ ... })`: runs again on its own when a state it read changes; skipped when its arguments are equal |
 | Inline composable (`Column`, `Row`) | `KompozableScope scope(site);`: gives an identity without a scope of its own (for composables that take a content lambda) |
 | `remember { }`, `remember(key) { }` | `remember([]{...})`, `remember(key, []{...})` |
 | `mutableStateOf` | `mutableStateOf(x)` → `MutableState<T>` (a copyable handle; capture it by value in callbacks) |
 | `key(id) { }` | `key(id, [&]{...})` |
 | `DisposableEffect`, `SideEffect` | The same names |
-| `KompozitionLocal` | `KompozitionLocal<T>`, `KompozitionLocalProvider({Local.provides(v)}, ...)` |
+| `CompositionLocal` | `KompozitionLocal<T>`, `KompozitionLocalProvider({Local.provides(v)}, ...)` |
 | `animate*AsState` | `animateFloatAsState`, `animateColorAsState` (only their own scope runs each frame) |
 | `LaunchedEffect`, `rememberCoroutineScope`, `delay` | C++20 coroutines: `LaunchedEffect(key, [=]() -> Task { co_await delay(1s); ... })` |
 | `Animatable`, `tween`, `spring`, `infiniteRepeatable` | `co_await anim.animateTo(1.f, tween(300))`, the same spec names |
 | `AnimatedVisibility`, `AnimatedContent`, `Crossfade` | The same names; `fadeIn() + expandVertically()`, `scaleIn()`, `togetherWith` |
-| `NavHost(nav, "home") { kompozable("detail/{id}") { e -> } }`, `nav.navigate("detail/3")` | `NavHost(nav, "home", m, [&](NavGraphBuilder& g) { g.kompozable("detail/{id}", [&](const NavBackStackEntry& e) { e.arguments().getInt("id"); }); })`, `nav.navigate("detail/3", {.popUpTo = "home", .saveState = true, .restoreState = true})` |
-| `@Serializable data class Profile(val id: String, val tab: Int? = null)`, `kompozable<Profile> { e -> e.toRoute<Profile>() }`, `nav.navigate(Profile("42"))` | `struct Profile { std::string id; std::optional<int> tab; KOMPOZ_ROUTE(Profile, id, tab) };` (required fields are the path, `std::optional`s query parameters), `g.kompozable<Profile>([&](const NavBackStackEntry& e) { e.toRoute<Profile>(); })`, `nav.navigate(Profile{.id = "42"})`, `navigation<Login>(Username{}, …)`, `hasRoute<T>()`, `getBackStackEntry<T>()`, `navDeepLink<T>("kompoz://profile")` |
-| `kompozable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { … }` | `g.kompozable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [&](const NavBackStackEntry& e) { … })`; `nav.navigate("kompoz://item/3")`, `nav.handleDeepLink(...)` |
-| `navigation(startDestination = "username", route = "login") { kompozable("username") { … } }` | `g.navigation("username", "login", [&](NavGraphBuilder& login) { login.kompozable("username", [&](const NavBackStackEntry& e) { auto vm = viewModel<LoginViewModel>(*e.parent()); }); })` |
+| `NavHost(nav, "home") { composable("detail/{id}") { e -> } }`, `nav.navigate("detail/3")` | `NavHost(nav, "home", m, [&](NavGraphBuilder& g) { g.kompozable("detail/{id}", [&](const NavBackStackEntry& e) { e.arguments().getInt("id"); }); })`, `nav.navigate("detail/3", {.popUpTo = "home", .saveState = true, .restoreState = true})` |
+| `@Serializable data class Profile(val id: String, val tab: Int? = null)`, `composable<Profile> { e -> e.toRoute<Profile>() }`, `nav.navigate(Profile("42"))` | `struct Profile { std::string id; std::optional<int> tab; KOMPOZ_ROUTE(Profile, id, tab) };` (required fields are the path, `std::optional`s query parameters), `g.kompozable<Profile>([&](const NavBackStackEntry& e) { e.toRoute<Profile>(); })`, `nav.navigate(Profile{.id = "42"})`, `navigation<Login>(Username{}, …)`, `hasRoute<T>()`, `getBackStackEntry<T>()`, `navDeepLink<T>("kompoz://profile")` |
+| `composable("item/{n}", deepLinks = listOf(navDeepLink { uriPattern = "kompoz://item/{n}" })) { … }` | `g.kompozable("item/{n}", {navDeepLink("kompoz://item/{n}")}, [&](const NavBackStackEntry& e) { … })`; `nav.navigate("kompoz://item/3")`, `nav.handleDeepLink(...)` |
+| `navigation(startDestination = "username", route = "login") { composable("username") { … } }` | `g.navigation("username", "login", [&](NavGraphBuilder& login) { login.kompozable("username", [&](const NavBackStackEntry& e) { auto vm = viewModel<LoginViewModel>(*e.parent()); }); })` |
 | `class SearchViewModel(private val state: SavedStateHandle) : ViewModel()`, `state.getStateFlow("q", "")`, `state["q"] = q` | `explicit SearchViewModel(SavedStateHandle s) : state(s), query(s.getStateFlow<std::string>("q", "")) {}`, `state.set("q", q)` (`viewModel<SearchViewModel>()` passes the handle; it survives the process being ended) |
 | `rememberSaveable { mutableStateOf(0) }` | `rememberSaveable([] { return mutableStateOf(0); })` (also when Android ends the process and brings it back) |
 | `Saver(save = { … }, restore = { … })` | `template <> struct kompoz::Saver<Point> { static SavedValue save(const Point&); static std::optional<Point> restore(const SavedValue&); };` |
@@ -110,9 +141,9 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | `Brush.verticalGradient(...)`, `Path` | `Brush::verticalGradient({a, b})`, `background(brush, shape)`, `d.drawPath(path, brush, Stroke(3))` |
 | `Modifier.graphicsLayer { rotationZ = ... }` | `graphicsLayer({.rotationZ = 45})`, or a lambda read while drawing: `graphicsLayer([=](GraphicsLayerScope& l) { ... })` |
 | `TriStateCheckbox(state = ToggleableState.Indeterminate, onClick)`, `Text(…, autoSize = TextAutoSize.StepBased(12.sp, 48.sp))` | `TriStateCheckbox(ToggleableState::Indeterminate, onClick)`, `Text("…", maxLines = 1, autoSize = TextAutoSize::StepBased(12, 48))` |
-| `SubkompozLayout { constraints -> val m = subkompoz("main") { … }.map { it.measure(constraints) }; layout(w, h) { … } }` | `SubkompozLayout(Modifier(), [](SubkompozMeasureScope& s, const Constraints& c) { auto m = s.subkompoz(std::string("main"), [] { … }); …; return Size{w, h}; })` |
+| `SubcomposeLayout { constraints -> val m = subcompose("main") { … }.map { it.measure(constraints) }; layout(w, h) { … } }` | `SubkompozLayout(Modifier(), [](SubkompozMeasureScope& s, const Constraints& c) { auto m = s.subkompoz(std::string("main"), [] { … }); …; return Size{w, h}; })` |
 | `Modifier.clickable(interactionSource = s, indication = null) { … }` + `Modifier.indication(s, ripple())` | `Modifier().clickable([] { … }, {.interactionSource = s, .indication = false})` + `Modifier().indication(s, ripple())` |
-| `Modifier.clickable(indication = ripple(bounded = false, radius = 24.dp)) { … }`, `KompozitionLocalProvider(LocalIndication provides …)` | `Modifier().clickable([] { … }, {.indication = ripple(false, 24)})`, `KompozitionLocalProvider({LocalIndication.provides(false)}, …)` (every clickable has Material's ripple by default) |
+| `Modifier.clickable(indication = ripple(bounded = false, radius = 24.dp)) { … }`, `CompositionLocalProvider(LocalIndication provides …)` | `Modifier().clickable([] { … }, {.indication = ripple(false, 24)})`, `KompozitionLocalProvider({LocalIndication.provides(false)}, …)` (every clickable has Material's ripple by default) |
 | `val source = remember { MutableInteractionSource() }`, `val pressed by source.collectIsPressedAsState()`, `Modifier.clickable(source, indication = null) { … }` | `auto source = remember([] { return MutableInteractionSource(); });`, `bool pressed = source.collectIsPressedAsState();`, `Modifier().clickable([] { … }, {.interactionSource = source, .indication = false})` (`Button(…, interactionSource = source) { … };`, `Slider(v, set, interactionSource = source)`, `source.interactions().collect(…)`, `pagerState.interactionSource().collectIsDraggedAsState()`) |
 | `val state = remember { AnchoredDraggableState(DragValue.Start) }`, `state.updateAnchors(DraggableAnchors { Start at 0f; End at w })`, `Modifier.offset { IntOffset(state.requireOffset().roundToInt(), 0) }.anchoredDraggable(state, Orientation.Horizontal)` | `auto state = rememberAnchoredDraggableState(DragValue::Start);`, `state.updateAnchors({{DragValue::Start, 0}, {DragValue::End, w}});`, `Modifier().offset([state] { return Offset{state.requireOffset(), 0}; }).anchoredDraggable(state, Orientation::Horizontal)` (`anchored_draggable.hpp`) |
 | `val measurer = rememberTextMeasurer()`, `drawText(measurer.measure("%42", style), topLeft = …)`, `Text(text, onTextLayout = { r -> cut = r.hasVisualOverflow })` | `auto measurer = rememberTextMeasurer();`, `d.drawText(measurer.measure("%42", {.fontSize = 12}), {x, y})`, `Text(text, Modifier(), {.maxLines = 2}, [cut](const TextLayoutResult& r) { cut.set(r.hasVisualOverflow()); })` (`text_measure.hpp`) |
@@ -127,7 +158,7 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | `Modifier.pointerHoverIcon(PointerIcon.Hand)` | `Modifier().pointerHoverIcon(PointerIcon::Hand)` (`Cursor::Move`, `ResizeHorizontal`…) |
 | `CenterAlignedTopAppBar(title = { … })`, `Card(onClick = { … }) { … }`, `Scaffold(floatingActionButtonPosition = FabPosition.Center)` | `CenterAlignedTopAppBar(title = [] { … })`, `Card([] { … }) { … };`, `Scaffold(floatingActionButton = …, floatingActionButtonPosition = FabPosition::Center) [=](PaddingValues padding) { … };` |
 | `LazyRow(state = s, flingBehavior = rememberSnapFlingBehavior(s)) { … }` | `LazyRow(Modifier(), state = s, flingBehavior = rememberSnapFlingBehavior(s)) { … };` |
-| `KompozitionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }`, `Modifier.absoluteOffset(x)` | `KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { … })`, `Modifier().absoluteOffset(x, 0)` |
+| `CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { … }`, `Modifier.absoluteOffset(x)` | `KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] { … })`, `Modifier().absoluteOffset(x, 0)` |
 | `IconToggleButton(checked, onCheckedChange = { checked = it }) { Icon(…) }`, `OutlinedIconButton(onClick) { … }` | `IconToggleButton(checked.get(), [checked](bool on) { checked.set(on); }) { Icon(…); };` (`FilledIconToggleButton`, `FilledTonalIconToggleButton`, `OutlinedIconToggleButton`), `OutlinedIconButton([] { … }) { … };` |
 | `OutlinedTextField(value, onValueChange, label = { Text("Amount") }, prefix = { Text("$") }, suffix = { Text("kg") })` | `OutlinedTextField(value, set, label = "Amount", prefix = "$", suffix = "kg")` |
 | `Modifier.zIndex(1f)`, `placeable.place(x, y, zIndex)` | `Modifier().zIndex(1)`, `p.place(x, y, 1)` |
@@ -171,7 +202,7 @@ The full list, with the status of each Compose API, is in [docs/components.md](d
 | Named arguments | Named arguments: `Text("Title", fontSize = 24, color = ...)` (options structs for the components not yet converted) |
 | `@Preview` | `KOMPOZ_PREVIEW(Name, .width = 360, .height = 200) { ... }`, shown with `KOMPOZ_PREVIEW=Name` (see [Development](#development)) |
 | `createComposeRule()`, `onNodeWithText(..).assertIsDisplayed()` | `kompoz::testing::KompozTestRule` (UI tests without a window): `rule.onNodeWithText("OK").assertIsDisplayed().performClick()`; a failure throws `testing::AssertionError` |
-| `Modifier.rekompozHighlighter()` (snippets) | `Modifier().rekompozHighlighter()`: a border showing how many times the composable that made the node ran |
+| `Modifier.recomposeHighlighter()` (snippets) | `Modifier().rekompozHighlighter()`: a border showing how many times the composable that made the node ran |
 
 Which Compose APIs came first was decided by how often the android/snippets repository uses them; see
 [docs/components.md](docs/components.md).
@@ -220,7 +251,9 @@ changed while it was measured, is measured again.
 ## Architecture
 
 ```
- app code (composable functions)
+ @Kompozable funs in Kotlin's syntax, in .cpp files
+        │ kompozc, as the build goes (compiler/: the translation, its language server for editors)
+ app code (composable functions in C++)
         │
  ┌──────▼─────────────────────────────── kompoz_core (platform independent, no dependencies)
  │ runtime     slot table (a tree of groups), scopes and read tracking, remember, state, effects, KompozitionLocal
@@ -243,8 +276,9 @@ changed while it was measured, is measured again.
  │             sheets), navigation (drawers, rails, suites), adaptive layouts
  └──────┬─────────────────────────────── GraphicsContext / TextMeasurer interfaces
  ┌──────▼─────────────────────────────── platform backend
- │ sdl3      window, input, IME/soft keyboard, HarfBuzz + FreeType glyph atlas, images, the desktop's accent
- │           color (Linux)
+ │ app       the app core every platform shares (the frame loop, events, a title bar of its own) and the
+ │           platforms: Wayland and X11 (Linux), Win32, AppKit (macOS), Android, the web
+ │ common    HarfBuzz + FreeType glyph atlas, the system's fonts, images, the desktop's accent color
  │ android   the Java side: keyboard (InputConnection), accessibility, insets, dynamic color, back gesture
  │ gpu       Kompoz's own GPU renderer, what everything is drawn with: one core over thin layers for Vulkan,
  │           Metal, WebGPU and OpenGL ES 3 (WebGL 2 on the web); KOMPOZ_GPU picks one, the platform's best by default
@@ -290,8 +324,12 @@ add_subdirectory(kompoz)        # a clone or a git submodule
 
 add_executable(myapp main.cpp)  # the example at the top
 target_link_libraries(myapp PRIVATE kompoz::app)
+kompozable(myapp)               # its sources through kompozc: @Kompozable functions in Kotlin's syntax
 kompoz_copy_assets(myapp)       # the fonts and the licenses next to the binary
 ```
+
+`kompozable` runs kompozc on the target's sources before the C++ compiler: call it after the target's sources are
+all added.
 
 Or install Kompoz once and find it as a package, on Linux, macOS or Windows. Built with the system's FreeType,
 HarfBuzz and libpng, it finds them there again; built with its own (`scripts/fetch-deps.sh`: Windows, or
@@ -307,6 +345,7 @@ cmake --install kompoz/build --prefix ~/.local
 find_package(kompoz 0.1 REQUIRED)  # -DCMAKE_PREFIX_PATH=~/.local, if that isn't searched already
 add_executable(myapp main.cpp)
 target_link_libraries(myapp PRIVATE kompoz::app)
+kompozable(myapp)
 kompoz_copy_assets(myapp)
 ```
 
@@ -386,7 +425,9 @@ inside it, `.background` a background; the text scale is the window's (`KOMPOZ_F
 `kompoz::testing::KompozTestRule` composes, lays out and draws without a window, with a virtual clock and a text
 measurer of fixed sizes; find nodes by text, tag or semantics, click, type, swipe, and check bounds, semantics and
 what was drawn. `./build/kompoz_tests` runs them all (`./build/kompoz_tests lazy` only those whose name contains
-"lazy"). Every incremental layout is checked against a full one while the tests run.
+"lazy"). Every incremental layout is checked against a full one while the tests run. `./build/kompozable_tests`
+runs those written in Kotlin's syntax (through kompozc), and `tests/kompozc_lsp_test.py` drives the language
+server as an editor does.
 
 ## Packaging
 
@@ -556,8 +597,7 @@ that looks the same) is neither drawn nor shown. `KOMPOZ_DAMAGE_SHOW=1` outlines
 4. The recompose highlighter's counts don't reset after 3 seconds as the snippets' do; they add up.
 5. Lazy lists don't reuse items' compositions by `contentType` (Compose's SubcomposeLayout pool); measured, it
    wasn't needed yet.
-6. Kotlin's `by` delegation has no counterpart: state is read and written with `.get()` and `.set()`.
-7. The library's own texts (`LocalStrings`) come in English and Turkish only; an app in another language provides
+6. The library's own texts (`LocalStrings`) come in English and Turkish only; an app in another language provides
    its own `Strings`.
 
 ## Contributing
