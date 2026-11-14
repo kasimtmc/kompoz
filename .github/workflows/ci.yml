@@ -70,7 +70,12 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_VENDORED_DEPS=ON \
             -DKOMPOZ_WITH_JPEG=ON -DKOMPOZ_WITH_WEBP=ON -DKOMPOZ_WITH_CURL=ON -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
       - name: Build
-        run: cmake --build build -j ${{ matrix.jobs }}
+        # (tests/kompoz_tests.cpp alone, after the library: GCC's sanitized compile of it peaks near 14 GB, and the
+        # runner has 16; beside another heavy object it ran the runner out of memory, "lost communication")
+        run: |
+          cmake --build build -j ${{ matrix.jobs }} --target kompoz_core
+          cmake --build build -j 1 --target kompoz_tests
+          cmake --build build -j ${{ matrix.jobs }}
       - name: Tests
         run: build/kompoz_tests
       - name: Kompozable tests (kompozc)
