@@ -7,6 +7,7 @@
 //   UriHandler links = uriHandler();
 //   TextButton([links] { links.openUri("https://kotlinlang.org"); }, [] { Text("Kotlin"); });
 
+#include "content.hpp"
 #include <coroutine>
 #include <optional>
 #include <string>
@@ -84,19 +85,13 @@ private:
 };
 ClipboardManager clipboardManager();
 
-// What is on the clipboard (Compose's ClipEntry): plain text.
-struct ClipEntry {
-    std::string text;
-    static ClipEntry withPlainText(std::string text) { return {std::move(text)}; }
-    const std::string& getPlainText() const { return text; }
-    friend bool operator==(const ClipEntry&, const ClipEntry&) = default;
-};
-// The system clipboard as Compose 1.8 has it (Compose's Clipboard, LocalClipboard.current):
-// written and read in a coroutine (done at once here):
+// The system clipboard as Compose 1.8 has it (Compose's Clipboard, LocalClipboard.current), with
+// all it holds (a ClipEntry, content.hpp: text, HTML, images, files); written and read in a
+// coroutine (done at once here):
 //   Clipboard clip = clipboard();
 //   scope.launch([clip, link]() -> Task { co_await clip.setClipEntry(ClipEntry::withPlainText(link)); });
 //   scope.launch([clip, field]() -> Task {
-//       if (std::optional<ClipEntry> e = co_await clip.getClipEntry()) field.setTextAndPlaceCursorAtEnd(e->text);
+//       if (std::optional<ClipEntry> e = co_await clip.getClipEntry()) field.setTextAndPlaceCursorAtEnd(e->getPlainText());
 //   });
 class Clipboard {
 public:

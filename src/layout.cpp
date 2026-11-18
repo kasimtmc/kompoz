@@ -1453,6 +1453,39 @@ Modifier Modifier::dragAndDropTarget(std::function<bool(const DragAndDropEvent&)
         e.target = std::move(target);
     });
 }
+Modifier Modifier::contentReceiver(std::shared_ptr<ReceiveContentListener> receiveContentListener) const {
+    return with<ContentReceiverElement>(*this, [&](auto& e) { e.listener = std::move(receiveContentListener); });
+}
+Modifier Modifier::contentReceiver(std::function<std::optional<TransferableContent>(const TransferableContent&)> onReceive) const {
+    struct Listener final : ReceiveContentListener {
+        std::function<std::optional<TransferableContent>(const TransferableContent&)> receive;
+        std::optional<TransferableContent> onReceive(const TransferableContent& content) override { return receive(content); }
+    };
+    auto listener = std::make_shared<Listener>();
+    listener->receive = std::move(onReceive);
+    return contentReceiver(std::shared_ptr<ReceiveContentListener>(std::move(listener)));
+}
+
+ClipEntry DragAndDropTransferData::toClipEntry() const {
+    if (clipEntry) return *clipEntry;
+    ClipEntry entry;
+    entry.clipMetadata.mimeTypes = mimeTypes;
+    bool uris = std::ranges::find(mimeTypes, "text/uri-list") != mimeTypes.end();
+    if (!uris) {
+        entry.items.push_back({.text = text});
+        return entry;
+    }
+    for (size_t at = 0; at < text.size();) {  // a URI a line ("\r\n" between), "#" lines are comments
+        size_t end = text.find('\n', at);
+        if (end == std::string::npos) end = text.size();
+        std::string line = text.substr(at, end - at);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty() && line[0] != '#') entry.items.push_back({.uri = std::move(line)});
+        at = end + 1;
+    }
+    return entry;
+}
+
 Modifier Modifier::zIndex(float zIndex) const {
     return with<ZIndexElement>(*this, [&](auto& e) { e.zIndex = zIndex; });
 }

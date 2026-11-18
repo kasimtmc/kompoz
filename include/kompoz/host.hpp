@@ -25,6 +25,16 @@ namespace kompoz {
 
 namespace detail {
 class Dispatcher;
+// A node taking part in a drag (KompozHost's): a dragAndDropTarget, or a contentReceiver (the
+// `ordinal`th on it).
+struct DropTarget {
+    LayoutNode* node;
+    bool receiver = false;
+    int ordinal = 0;
+    // A contentReceiver's: the enters less the exits, its own and those of the ones inside it
+    // (over one of those, it is over this one too).
+    int entered = 0;
+};
 }
 
 class ViewModelStore;
@@ -62,6 +72,12 @@ public:
         std::function<void(const std::string& model, ImageRequestSize size, std::function<void(ImageBitmap)> done)> loadImageAsync;
         std::function<std::string()> getClipboard;
         std::function<void(const std::string&)> setClipboard;
+        // The clipboard with all it holds (text, HTML, images, files), where the platform has
+        // more than text: read (none: empty), written (none: emptied), and what it holds told
+        // without reading it. Unset, it is its text (getClipboard / setClipboard).
+        std::function<std::optional<ClipEntry>()> getClipEntry;
+        std::function<void(const std::optional<ClipEntry>&)> setClipEntry;
+        std::function<std::optional<ClipMetadata>()> clipMetadata;
         // Dark icons over light system bars (true) or light icons over dark ones.
         std::function<void(bool lightStatusBars, bool lightNavigationBars)> systemBarsAppearance;
         // The screen shown changed: a NavHost's top entry, as its path ("item/42"). The web puts
@@ -206,6 +222,11 @@ public:
         if (callbacks_.setClipboard) callbacks_.setClipboard(text);
     }
     std::string clipboardText() const { return callbacks_.getClipboard ? callbacks_.getClipboard() : std::string(); }
+    // The clipboard with all it holds (Clipboard::getClipEntry): none if it is empty.
+    std::optional<ClipEntry> clipEntry() const;
+    void setClipEntry(const std::optional<ClipEntry>& entry);
+    // What it holds, unread (none: empty).
+    std::optional<ClipMetadata> clipMetadata() const;
     // The platform services (platform.hpp).
     void openUri(const std::string& uri);  // the app's own links in it, others by the platform
     void performHapticFeedback(HapticFeedbackType type) {
@@ -671,6 +692,12 @@ private:
     void beginDragAndDrop(std::shared_ptr<const DragAndDropTransferData> data, LayoutNode* source, Offset grab, std::optional<Offset> pointer);
     void moveDragAndDrop(Offset p);
     void endDragAndDrop(bool drop);
+    DragAndDropEvent dropEventFor(const detail::DropTarget& target, bool accepted = false) const;
+    // contentReceivers: the one around another (`ordinal` -1: around anything on `node`); one's
+    // onReceive and those around it in turn (what none took); a drag over one or leaving it.
+    static std::optional<std::pair<LayoutNode*, int>> receiverAround(LayoutNode* node, int ordinal);
+    std::optional<TransferableContent> receiveContent(std::pair<LayoutNode*, int> receiver, TransferableContent content);
+    void receiverDragHover(std::pair<LayoutNode*, int> receiver, bool entered);
     LayoutNode* longPressTrigger_ = nullptr;  // the TooltipBox anchor under the press
     int64_t triggerLongPressAt_ = -1;
     LayoutNode* hoveredTrigger_ = nullptr;

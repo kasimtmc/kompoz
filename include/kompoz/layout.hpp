@@ -4,6 +4,7 @@
 // Measuring works like Compose: constraints go down, sizes come up, parents place children.
 
 #include "animation.hpp"
+#include "content.hpp"
 #include "coroutines.hpp"
 #include "graphics.hpp"
 #include "interaction.hpp"
@@ -13,6 +14,7 @@
 #include <any>
 #include <array>
 #include <chrono>
+#include <concepts>
 #include <functional>
 #include <memory>
 #include <limits>
@@ -941,6 +943,11 @@ struct DragAndDropTransferData {
     std::vector<std::string> mimeTypes{"text/plain"};
     std::any localState;
     std::vector<std::string> files;  // dropped from outside the app ("text/uri-list"): their paths
+    // All it carries, where the platform told more than text and files (HTML, an image).
+    std::optional<ClipEntry> clipEntry;
+    // As a clip, as a contentReceiver takes it: `clipEntry`, or else `text` (a "text/uri-list"
+    // one: an item for each URI on it).
+    ClipEntry toClipEntry() const;
 };
 struct DragAndDropEvent {
     std::shared_ptr<const DragAndDropTransferData> data;
@@ -969,6 +976,10 @@ struct DragAndDropSourceElement final : ModifierElement {
 struct DragAndDropTargetElement final : ModifierElement {
     std::function<bool(const DragAndDropEvent&)> shouldStart;
     DragAndDropTarget target;
+};
+// Modifier::contentReceiver: takes what is pasted, dropped or sent by a keyboard on it or inside it.
+struct ContentReceiverElement final : ModifierElement {
+    std::shared_ptr<ReceiveContentListener> listener;
 };
 
 struct FocusRequesterElement final : ModifierElement {
@@ -2464,6 +2475,19 @@ public:
     // Takes drops (Compose's dragAndDropTarget): shouldStartDragAndDrop says, as a drag starts,
     // whether this one takes part (by its MIME types, say); then `target` hears of it.
     Modifier dragAndDropTarget(std::function<bool(const DragAndDropEvent&)> shouldStartDragAndDrop, DragAndDropTarget target) const;
+    // Takes content that arrives on it or inside it (Compose's contentReceiver): pasted (into a
+    // TextFieldState field inside it), dropped (anywhere on it: a drag over a field or another
+    // contentReceiver inside it is over this one too), or sent by the soft keyboard (an image or
+    // GIF, into a field inside it). The listener (content.hpp) gives back what it didn't take,
+    // which goes to the contentReceiver around this one, then where it was going (a field
+    // inserts its text). It hears of drags too: one began, ended, came over it, left it.
+    Modifier contentReceiver(std::shared_ptr<ReceiveContentListener> receiveContentListener) const;
+    template <std::derived_from<ReceiveContentListener> L>
+    Modifier contentReceiver(L receiveContentListener) const {
+        return contentReceiver(std::shared_ptr<ReceiveContentListener>(std::make_shared<L>(std::move(receiveContentListener))));
+    }
+    // Only onReceive (Compose's contentReceiver { content -> … }).
+    Modifier contentReceiver(std::function<std::optional<TransferableContent>(const TransferableContent&)> onReceive) const;
     // Compose's dragAndDropTarget(shouldStartDragAndDrop = { }, target = …) by name (named_members.hpp).
     template <class... A>
         requires(detail::anyNamedArgument<A...>)

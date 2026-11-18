@@ -13547,6 +13547,97 @@ TEST(drops_from_outside_the_app_reach_the_targets) {
     CHECK((log == std::vector<std::string>{"should false"}));
 }
 
+TEST(clips_tell_what_they_hold_and_give_up_what_is_taken) {
+    CHECK(mimeTypeMatches("text/plain;charset=utf-8", "text/plain") && mimeTypeMatches("TEXT/HTML", "text/*"));
+    CHECK(mimeTypeMatches("image/png", "*/*") && mimeTypeMatches("image/png", "image/*") && !mimeTypeMatches("image/png", "text/*"));
+    CHECK(!mimeTypeMatches("text/plain", "text/html") && !mimeTypeMatches("textual/plain", "text/*"));
+    ClipEntry plain = ClipEntry::withPlainText("merhaba");
+    CHECK(plain.getPlainText() == "merhaba" && plain.clipMetadata.hasMimeType("text/*") && !plain.clipMetadata.hasMimeType("image/*"));
+    ClipEntry html = ClipEntry::withHtmlText("kalın", "<b>kalın</b>");
+    CHECK(html.clipMetadata.hasMimeType(MediaType::HtmlText.representation) && html.items[0].htmlText == "<b>kalın</b>");
+    ClipEntry mixed;
+    mixed.items = {{.text = "bir"}, {.uri = "content://resim/1"}, {.text = "iki"}};
+    mixed.clipMetadata.mimeTypes = {"text/plain", "image/png"};
+    CHECK(mixed.readPlainText() == "bir\niki");
+    CHECK(!ClipEntry{.items = {{.uri = "content://resim/1"}}}.readPlainText());
+    TransferableContent content{.clipEntry = mixed, .clipMetadata = mixed.clipMetadata, .source = TransferableContent::Source::Clipboard};
+    CHECK(content.hasMediaType(MediaType::Image) && content.hasMediaType(MediaType::Text) && !content.hasMediaType(MediaType::HtmlText));
+    // What a receiver leaves: the rest (told as it was), this one if it took nothing, none if all.
+    std::optional<TransferableContent> rest = content.consume([](const ClipEntry::Item& item) { return item.uri.has_value(); });
+    CHECK(rest && rest->clipEntry.items.size() == 2 && rest->clipEntry.readPlainText() == "bir\niki" && rest->clipMetadata == content.clipMetadata);
+    CHECK(content.consume([](const ClipEntry::Item&) { return false; }) == std::optional(content));
+    CHECK(!content.consume([](const ClipEntry::Item&) { return true; }));
+    // A drag's data as a clip: its text, or a URI list's URIs.
+    CHECK((DragAndDropTransferData{.text = "selam"}.toClipEntry().readPlainText() == "selam"));
+    ClipEntry files = DragAndDropTransferData{.text = "# yorum\r\nfile:///tmp/a.png\r\nfile:///tmp/b.txt\r\n", .mimeTypes = {"text/uri-list"}}.toClipEntry();
+    CHECK(files.items.size() == 2 && files.items[1].uri == "file:///tmp/b.txt" && files.clipMetadata.hasMimeType("text/uri-list"));
+}
+
+TEST(the_clipboard_holds_more_than_text_where_the_platform_does) {
+    std::optional<ClipEntry> board;
+    std::string text = "eski";
+    Clipboard clip(nullptr);
+    KompozTestRule rule([&] { clip = clipboard(); });
+    rule.host().setCallbacks({.getClipboard = [&] { return text; }, .setClipboard = [&](const std::string& t) { text = t; }});
+    // A platform with text alone: an entry of its text, and an entry's text written to it.
+    CHECK(rule.host().clipEntry() == std::optional(ClipEntry::withPlainText("eski")));
+    CHECK((rule.host().clipMetadata() == std::optional(ClipMetadata{{"text/plain"}})));
+    rule.host().setClipEntry(ClipEntry::withHtmlText("yeni", "<i>yeni</i>"));
+    CHECK(text == "yeni");
+    text.clear();
+    CHECK(!rule.host().clipEntry() && !rule.host().clipMetadata());
+    // One with more: the entry as it is, both ways.
+    rule.host().setCallbacks({.getClipEntry = [&] { return board; }, .setClipEntry = [&](const std::optional<ClipEntry>& e) { board = e; }});
+    ClipEntry image{.items = {{.mimeType = "image/png", .data = {0x89, 'P', 'N', 'G'}}}, .clipMetadata = {{"image/png"}}};
+    rule.host().setClipEntry(image);
+    CHECK(board == std::optional(image) && rule.host().clipMetadata()->hasMimeType("image/*"));
+    CHECK(clip.getClipEntry().await_resume() == std::optional(image));
+}
+
+TEST(content_receivers_take_drops_in_a_chain_from_the_innermost) {
+    std::vector<std::string> log;
+    struct Receiver final : ReceiveContentListener {
+        std::string name;
+        std::vector<std::string>* log;
+        std::function<bool(const ClipEntry::Item&)> takes;
+        Receiver(std::string name, std::vector<std::string>* log, std::function<bool(const ClipEntry::Item&)> takes)
+            : name(std::move(name)), log(log), takes(std::move(takes)) {}
+        void onDragStart() override { log->push_back(name + " start"); }
+        void onDragEnd() override { log->push_back(name + " end"); }
+        void onDragEnter() override { log->push_back(name + " enter"); }
+        void onDragExit() override { log->push_back(name + " exit"); }
+        std::optional<TransferableContent> onReceive(const TransferableContent& content) override {
+            log->push_back(std::format("{} receives {}", name, content.clipEntry.items.size()));
+            CHECK(content.source == TransferableContent::Source::DragAndDrop && content.hasMediaType({"text/uri-list"}));
+            return content.consume(takes);
+        }
+    };
+    auto png = [](const ClipEntry::Item& item) { return item.uri && item.uri->ends_with(".png"); };
+    KompozTestRule rule([&] {
+        Box(Modifier().size(400).contentReceiver(Receiver("dış", &log, [](const ClipEntry::Item&) { return true; })),
+            [&] { Box(Modifier().size(200).contentReceiver(Receiver("iç", &log, png))); });
+    }, {400, 800});
+    KompozHost& host = rule.host();
+    host.externalDragEntered({"text/uri-list"});
+    CHECK((log == std::vector<std::string>{"dış start", "iç start"}));
+    log.clear();
+    host.externalDragMoved({300, 300});  // over the outer one only
+    host.externalDragMoved({50, 50});    // into the inner one: the outer one is still over it
+    host.externalDragMoved({300, 300});
+    host.externalDragMoved({50, 50});
+    CHECK((log == std::vector<std::string>{"dış enter", "iç enter", "iç exit", "iç enter"}));
+    log.clear();
+    // The inner one takes the image, the outer one the rest.
+    host.externalDrop({.text = "file:///tmp/a.png\r\nfile:///tmp/b.txt\r\n", .mimeTypes = {"text/uri-list"}, .files = {"/tmp/a.png", "/tmp/b.txt"}}, {50, 50});
+    CHECK((log == std::vector<std::string>{"iç receives 2", "dış receives 1", "dış end", "iç end"}));
+    log.clear();
+    // Brought over the inner one and taken away: both left, outer last.
+    host.externalDragEntered({"text/uri-list"});
+    host.externalDragMoved({50, 50});
+    host.externalDragLeft();
+    CHECK((log == std::vector<std::string>{"dış start", "iç start", "iç enter", "dış enter", "iç exit", "dış exit", "dış end", "iç end"}));
+}
+
 TEST(window_size_classes_and_the_navigation_they_suit) {
     using W = WindowWidthSizeClass;
     using H = WindowHeightSizeClass;

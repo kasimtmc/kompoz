@@ -21,12 +21,9 @@ void ClipboardManager::setText(const std::string& text) const { host_->setClipbo
 std::string ClipboardManager::getText() const { return host_->clipboardText(); }
 ClipboardManager clipboardManager() { return ClipboardManager(currentHost()); }
 
-Clipboard::Ready<std::optional<ClipEntry>> Clipboard::getClipEntry() const {
-    std::string text = host_->clipboardText();
-    return {text.empty() ? std::nullopt : std::optional(ClipEntry::withPlainText(std::move(text)))};
-}
+Clipboard::Ready<std::optional<ClipEntry>> Clipboard::getClipEntry() const { return {host_->clipEntry()}; }
 Clipboard::Done Clipboard::setClipEntry(std::optional<ClipEntry> entry) const {
-    host_->setClipboardText(entry ? entry->text : std::string());
+    host_->setClipEntry(entry);
     return {};
 }
 Clipboard clipboard() { return Clipboard(currentHost()); }

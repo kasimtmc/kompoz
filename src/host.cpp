@@ -1215,22 +1215,87 @@ LayoutNode* KompozHost::inputOverlay() const {
 }
 
 struct KompozHost::DragSession {
+    using Target = detail::DropTarget;
     std::shared_ptr<const DragAndDropTransferData> data;
     LayoutNode* source = nullptr;  // null once it left the composition
     Offset grab;                   // where it was grabbed, from its top left
     Offset pointer;
-    std::vector<LayoutNode*> targets;  // the ones taking part, bottom to top
-    LayoutNode* hovered = nullptr;
+    std::vector<Target> targets;  // the ones taking part, bottom to top
+    int hovered = -1;             // of them, the one under the pointer
 };
 
 namespace {
 const DragAndDropTargetElement* dropTargetOf(const LayoutNode& node) { return node.modifier.find<DragAndDropTargetElement>(); }
-void collectDropTargets(LayoutNode& node, std::vector<LayoutNode*>& out) {  // bottom to top, as drawn
-    if (dropTargetOf(node)) out.push_back(&node);
+
+// The node's contentReceivers, outermost first.
+std::vector<const ContentReceiverElement*> receiversOf(const LayoutNode& node) {
+    std::vector<const ContentReceiverElement*> out;
+    for (const auto& e : node.modifier.elements())
+        if (const auto* r = dynamic_cast<const ContentReceiverElement*>(e.get())) out.push_back(r);
+    return out;
+}
+const ContentReceiverElement* receiverOf(const LayoutNode& node, int ordinal) {
+    auto all = receiversOf(node);
+    return size_t(ordinal) < all.size() ? all[size_t(ordinal)] : nullptr;
+}
+const ModifierElement* elementOf(const detail::DropTarget& t) {
+    return t.receiver ? static_cast<const ModifierElement*>(receiverOf(*t.node, t.ordinal)) : dropTargetOf(*t.node);
+}
+
+void collectDropTargets(LayoutNode& node, std::vector<detail::DropTarget>& out) {  // bottom to top, as drawn
+    int receivers = int(receiversOf(node).size());
+    for (int i = 0; i < receivers; ++i) out.push_back({&node, true, i});
+    if (dropTargetOf(node)) out.push_back({&node});
     for (auto* child : node.childrenInDrawOrder())
         if (child->isPlaced()) collectDropTargets(*child, out);
 }
 } // namespace
+
+// The contentReceiver that the `ordinal`th one on `node` (or, with ordinal -1, anything on
+// `node`) is inside: before it on the node, or on a node around it (not past a popup's root, as
+// Compose's modifier locals don't cross windows).
+std::optional<std::pair<LayoutNode*, int>> KompozHost::receiverAround(LayoutNode* node, int ordinal) {
+    for (int i = ordinal < 0 ? int(receiversOf(*node).size()) : ordinal; node;) {
+        if (i > 0) return std::pair{node, i - 1};
+        if (node->overlay) return std::nullopt;
+        node = node->parent;
+        if (node) i = int(receiversOf(*node).size());
+    }
+    return std::nullopt;
+}
+
+// A contentReceiver's onReceive and those of the ones around it in turn, each with what the one
+// before it left (Compose's DynamicReceiveContentConfiguration): what none of them took.
+std::optional<TransferableContent> KompozHost::receiveContent(std::pair<LayoutNode*, int> receiver, TransferableContent content) {
+    for (std::optional<std::pair<LayoutNode*, int>> at = receiver; at; at = receiverAround(at->first, at->second)) {
+        const ContentReceiverElement* e = receiverOf(*at->first, at->second);
+        if (!e || !e->listener) continue;
+        std::shared_ptr<ReceiveContentListener> listener = e->listener;  // (kept while user code runs)
+        std::optional<TransferableContent> left = listener->onReceive(content);
+        if (!left) return std::nullopt;
+        content = std::move(*left);
+    }
+    return content;
+}
+
+// A drag came over a contentReceiver or left it: told to it (as its enters less exits go from 0 to
+// 1 or back), then to the one around it, which it is inside of.
+void KompozHost::receiverDragHover(std::pair<LayoutNode*, int> receiver, bool entered) {
+    for (std::optional<std::pair<LayoutNode*, int>> at = receiver; at && dnd_; at = receiverAround(at->first, at->second)) {
+        auto t = std::ranges::find_if(dnd_->targets, [&](const DragSession::Target& t) {
+            return t.receiver && t.node == at->first && t.ordinal == at->second;
+        });
+        if (t == dnd_->targets.end()) continue;
+        int before = t->entered;
+        t->entered = entered ? before + 1 : std::max(0, before - 1);
+        bool tell = entered ? t->entered == 1 : before > 0 && t->entered == 0;
+        const ContentReceiverElement* e = receiverOf(*at->first, at->second);
+        if (tell && e && e->listener) {
+            std::shared_ptr<ReceiveContentListener> listener = e->listener;
+            entered ? listener->onDragEnter() : listener->onDragExit();
+        }
+    }
+}
 
 void KompozHost::draw(GraphicsContext& canvas) {
     root().draw(canvas);
@@ -1346,22 +1411,33 @@ void KompozHost::beginDragAndDrop(std::shared_ptr<const DragAndDropTransferData>
     dnd_->source = source;
     dnd_->grab = grab;
     dnd_->pointer = pointer.value_or(Offset{-1e9f, -1e9f});  // from outside: over nothing until it says where
-    std::vector<LayoutNode*> all;
+    std::vector<DragSession::Target> all;
     collectDropTargets(root(), all);
     for (auto& [popup, anchor] : overlays_) collectDropTargets(*popup, all);
-    auto eventFor = [this](LayoutNode& n) {
-        Rect r = layerBoundsOf(n, dropTargetOf(n));
-        return DragAndDropEvent{dnd_->data, {dnd_->pointer.x - r.x, dnd_->pointer.y - r.y}};
-    };
-    for (LayoutNode* n : all) {
-        auto shouldStart = dropTargetOf(*n)->shouldStart;
-        if (!shouldStart || shouldStart(eventFor(*n))) dnd_->targets.push_back(n);
+    // (A contentReceiver takes part in every drag: what it takes, its onReceive decides.)
+    for (const DragSession::Target& t : all) {
+        auto shouldStart = t.receiver ? nullptr : dropTargetOf(*t.node)->shouldStart;
+        if (!shouldStart || shouldStart(dropEventFor(t))) dnd_->targets.push_back(t);
     }
-    for (LayoutNode* n : std::vector<LayoutNode*>(dnd_->targets))
-        if (dnd_ && std::find(dnd_->targets.begin(), dnd_->targets.end(), n) != dnd_->targets.end())
-            if (auto onStarted = dropTargetOf(*n)->target.onStarted) onStarted(eventFor(*n));
+    for (DragSession::Target t : std::vector<DragSession::Target>(dnd_->targets)) {
+        if (!dnd_) break;
+        if (t.receiver) {
+            if (const ContentReceiverElement* e = receiverOf(*t.node, t.ordinal); e && e->listener) {
+                std::shared_ptr<ReceiveContentListener> listener = e->listener;
+                listener->onDragStart();
+            }
+        } else if (auto onStarted = dropTargetOf(*t.node)->target.onStarted) {
+            onStarted(dropEventFor(t));
+        }
+    }
     if (dnd_ && pointer) moveDragAndDrop(*pointer);
     requestRedraw();
+}
+
+DragAndDropEvent KompozHost::dropEventFor(const detail::DropTarget& t, bool accepted) const {
+    Rect r = t.node->bounds();
+    if (const ModifierElement* e = elementOf(t)) r = t.node->boundsOf(e).value_or(r);
+    return DragAndDropEvent{dnd_->data, {dnd_->pointer.x - r.x, dnd_->pointer.y - r.y}, accepted};
 }
 
 void KompozHost::externalDragEntered(std::vector<std::string> mimeTypes) {
@@ -1383,6 +1459,26 @@ void KompozHost::externalDrop(DragAndDropTransferData data, Offset position) {
     endDragAndDrop(true);
 }
 
+std::optional<ClipEntry> KompozHost::clipEntry() const {
+    if (callbacks_.getClipEntry) return callbacks_.getClipEntry();
+    std::string text = clipboardText();
+    return text.empty() ? std::nullopt : std::optional(ClipEntry::withPlainText(std::move(text)));
+}
+
+void KompozHost::setClipEntry(const std::optional<ClipEntry>& entry) {
+    if (callbacks_.setClipEntry) return callbacks_.setClipEntry(entry);
+    setClipboardText(entry ? entry->getPlainText() : std::string());
+}
+
+std::optional<ClipMetadata> KompozHost::clipMetadata() const {
+    if (callbacks_.clipMetadata) return callbacks_.clipMetadata();
+    if (callbacks_.getClipEntry) {
+        std::optional<ClipEntry> entry = callbacks_.getClipEntry();
+        return entry ? std::optional(entry->clipMetadata) : std::nullopt;
+    }
+    return clipboardText().empty() ? std::nullopt : std::optional(ClipMetadata{{"text/plain"}});
+}
+
 void KompozHost::externalDragLeft() {
     if (dnd_) endDragAndDrop(false);
 }
@@ -1390,43 +1486,67 @@ void KompozHost::externalDragLeft() {
 void KompozHost::moveDragAndDrop(Offset p) {
     dnd_->pointer = p;
     requestRedraw();
-    auto eventFor = [this](LayoutNode& n) {
-        Rect r = layerBoundsOf(n, dropTargetOf(n));
-        return DragAndDropEvent{dnd_->data, {dnd_->pointer.x - r.x, dnd_->pointer.y - r.y}};
-    };
-    LayoutNode* over = nullptr;  // the topmost one under the pointer
-    for (auto it = dnd_->targets.rbegin(); it != dnd_->targets.rend() && !over; ++it)
-        if (layerBoundsOf(**it, dropTargetOf(**it)).contains(p)) over = *it;
-    if (over != dnd_->hovered) {
-        if (LayoutNode* left = std::exchange(dnd_->hovered, over))
-            if (auto onExited = dropTargetOf(*left)->target.onExited) onExited(eventFor(*left));
-        if (dnd_ && over)
-            if (auto onEntered = dropTargetOf(*over)->target.onEntered) onEntered(eventFor(*over));
+    int over = -1;  // the topmost one under the pointer
+    for (int i = int(dnd_->targets.size()) - 1; i >= 0 && over < 0; --i) {
+        const DragSession::Target& t = dnd_->targets[size_t(i)];
+        const ModifierElement* e = elementOf(t);
+        if (e && layerBoundsOf(*t.node, e).contains(p)) over = i;
     }
-    if (dnd_ && dnd_->hovered)
-        if (auto onMoved = dropTargetOf(*dnd_->hovered)->target.onMoved) onMoved(eventFor(*dnd_->hovered));
+    // Entering the new one first, then leaving the old one (as Compose's drag and drop does: a
+    // contentReceiver left for one inside it stays entered).
+    auto enter = [this](DragSession::Target t) {
+        if (t.receiver) return receiverDragHover({t.node, t.ordinal}, true);
+        if (auto onEntered = dropTargetOf(*t.node)->target.onEntered) onEntered(dropEventFor(t));
+    };
+    auto exit = [this](DragSession::Target t) {
+        if (t.receiver) return receiverDragHover({t.node, t.ordinal}, false);
+        if (auto onExited = dropTargetOf(*t.node)->target.onExited) onExited(dropEventFor(t));
+    };
+    if (over != dnd_->hovered) {
+        int left = std::exchange(dnd_->hovered, over);
+        if (over >= 0) enter(dnd_->targets[size_t(over)]);
+        if (dnd_ && left >= 0 && size_t(left) < dnd_->targets.size()) exit(dnd_->targets[size_t(left)]);
+    }
+    if (dnd_ && dnd_->hovered >= 0) {
+        const DragSession::Target& t = dnd_->targets[size_t(dnd_->hovered)];
+        if (!t.receiver)
+            if (auto onMoved = dropTargetOf(*t.node)->target.onMoved) onMoved(dropEventFor(t));
+    }
 }
 
 void KompozHost::endDragAndDrop(bool drop) {
-    std::unique_ptr<DragSession> s = std::move(dnd_);
-    auto eventFor = [&s](LayoutNode& n, bool accepted) {
-        Rect r = n.bounds();
-        if (const auto* e = dropTargetOf(n)) r = n.boundsOf(e).value_or(r);
-        return DragAndDropEvent{s->data, {s->pointer.x - r.x, s->pointer.y - r.y}, accepted};
-    };
     bool accepted = false;
-    if (s->hovered) {
-        if (drop) {
-            if (auto onDrop = dropTargetOf(*s->hovered)->target.onDrop) accepted = onDrop(eventFor(*s->hovered, false));
-        } else if (auto onExited = dropTargetOf(*s->hovered)->target.onExited) {
-            onExited(eventFor(*s->hovered, false));
+    if (dnd_->hovered >= 0) {
+        DragSession::Target t = dnd_->targets[size_t(dnd_->hovered)];
+        if (!drop) {
+            if (t.receiver) {
+                receiverDragHover({t.node, t.ordinal}, false);
+            } else if (auto onExited = dropTargetOf(*t.node)->target.onExited) {
+                onExited(dropEventFor(t));
+            }
+        } else if (t.receiver) {  // (Compose's ReceiveContentDragAndDropNode: taken if any of it was)
+            TransferableContent original{.clipEntry = dnd_->data->toClipEntry(), .source = TransferableContent::Source::DragAndDrop};
+            original.clipMetadata = original.clipEntry.clipMetadata;
+            accepted = receiveContent({t.node, t.ordinal}, original) != std::optional(original);
+        } else if (auto onDrop = dropTargetOf(*t.node)->target.onDrop) {
+            accepted = onDrop(dropEventFor(t));
         }
     }
-    for (LayoutNode* n : s->targets)
-        if (const auto* t = dropTargetOf(*n); t && t->target.onEnded) {
-            auto onEnded = t->target.onEnded;
-            onEnded(eventFor(*n, accepted));
+    if (!dnd_) return;
+    std::unique_ptr<DragSession> s = std::move(dnd_);
+    for (const DragSession::Target& t : s->targets) {
+        if (t.receiver) {
+            if (const ContentReceiverElement* e = receiverOf(*t.node, t.ordinal); e && e->listener) {
+                std::shared_ptr<ReceiveContentListener> listener = e->listener;
+                listener->onDragEnd();
+            }
+        } else if (const auto* d = dropTargetOf(*t.node); d && d->target.onEnded) {
+            auto onEnded = d->target.onEnded;
+            Rect r = t.node->bounds();
+            r = t.node->boundsOf(d).value_or(r);
+            onEnded(DragAndDropEvent{s->data, {s->pointer.x - r.x, s->pointer.y - r.y}, accepted});
         }
+    }
     requestRedraw();
 }
 
@@ -3444,8 +3564,15 @@ void KompozHost::nodeRemoved(LayoutNode* node) {
     if (dndSource_ == node) dndSource_ = nullptr;
     if (dnd_) {
         if (dnd_->source == node) dnd_->source = nullptr;
-        if (dnd_->hovered == node) dnd_->hovered = nullptr;
-        std::erase(dnd_->targets, node);
+        for (size_t i = dnd_->targets.size(); i-- > 0;) {
+            if (dnd_->targets[i].node != node) continue;
+            dnd_->targets.erase(dnd_->targets.begin() + std::ptrdiff_t(i));
+            if (dnd_->hovered == int(i)) {
+                dnd_->hovered = -1;
+            } else if (dnd_->hovered > int(i)) {
+                --dnd_->hovered;
+            }
+        }
     }
     semanticsIds_.erase(node);
     focusStates_.erase(node);
