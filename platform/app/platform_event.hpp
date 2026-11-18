@@ -5,7 +5,9 @@
 #include <kompoz/layout.hpp>
 
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace kompoz::platform {
 
@@ -29,8 +31,9 @@ enum class EventType {
     KeyDown, KeyUp,
     Text,                         // text typed (`text`)
     Back,                         // the system's back (Android's button)
-    // A drag from another app: begun, moved over the window, a file's path or some text, dropped.
-    DropBegin, DropMove, DropFile, DropText, DropComplete,
+    // A drag from another app: begun (`mimeTypes`: what it may carry, where told), moved over the
+    // window, what it carries (`clip`: its text, HTML, image, files' URIs), dropped (alone: it left).
+    DropBegin, DropMove, DropData, DropComplete,
     // Things learned on other threads: the desktop's accent color, the wallpaper's colors, an
     // assistive technology's requests.
     AccentChanged, WallpaperChanged, AccessibilityRequest,
@@ -50,7 +53,9 @@ struct Event {
     MouseButton button = MouseButton::Left;
     Key key = Key::Unknown;
     KeyModifiers modifiers;  // held down (pointer and key events)
-    std::string text;        // Text, DropFile (its path), DropText
+    std::string text;        // Text
+    std::vector<std::string> mimeTypes;      // DropBegin
+    std::shared_ptr<const ClipEntry> clip;  // DropData
 };
 
 } // namespace kompoz::platform

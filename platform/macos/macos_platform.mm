@@ -1,6 +1,7 @@
 #include "macos_platform.hpp"
 
 #include "../app/app_core.hpp"
+#include "../common/clip_formats.hpp"
 #include "../common/system.hpp"
 
 #import <AVFoundation/AVFoundation.h>
@@ -54,6 +55,70 @@ namespace {
 int64_t steadyNow() { return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
 std::string utf8(NSString* s) { return s ? std::string(s.UTF8String) : std::string(); }
+
+NSString* nsString(const std::string& s) { return [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSUTF8StringEncoding] ?: @""; }
+
+// ---- What a pasteboard holds (the clipboard's, a drag's) as a clip ----------------------------
+// Files are file URLs (an item each); text, HTML and an image (PNG, or TIFF turned to PNG, as a
+// screenshot is copied) the first item's.
+
+NSArray<NSURL*>* filesOn(NSPasteboard* board) {
+    return [board readObjectsForClasses:@[NSURL.class] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+}
+
+ClipMetadata clipMetadataOf(NSPasteboard* board) {
+    ClipMetadata metadata;
+    if (filesOn(board).count) return {{"text/uri-list"}};
+    if ([board availableTypeFromArray:@[NSPasteboardTypeString]]) metadata.mimeTypes.push_back("text/plain");
+    if ([board availableTypeFromArray:@[NSPasteboardTypeHTML]]) metadata.mimeTypes.push_back("text/html");
+    if ([board availableTypeFromArray:@[NSPasteboardTypePNG, NSPasteboardTypeTIFF]]) metadata.mimeTypes.push_back("image/png");
+    return metadata;
+}
+
+ClipEntry clipOf(NSPasteboard* board) {
+    if (NSArray<NSURL*>* files = filesOn(board); files.count) {
+        std::vector<std::string> uris;
+        for (NSURL* file in files) uris.push_back(utf8(file.absoluteString));
+        return clipOfFiles(uris);
+    }
+    ClipEntry entry;
+    entry.clipMetadata = clipMetadataOf(board);
+    ClipEntry::Item text;
+    if (NSString* chars = [board stringForType:NSPasteboardTypeString]) text.text = utf8(chars);
+    if (NSString* html = [board stringForType:NSPasteboardTypeHTML]) text.htmlText = utf8(html);
+    if (text.text || text.htmlText) entry.items.push_back(std::move(text));
+    NSData* png = [board dataForType:NSPasteboardTypePNG];
+    if (!png)
+        if (NSData* tiff = [board dataForType:NSPasteboardTypeTIFF])
+            png = [[NSBitmapImageRep imageRepWithData:tiff] representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+    if (png.length) {
+        auto bytes = static_cast<const uint8_t*>(png.bytes);
+        entry.items.push_back({.mimeType = "image/png", .data = std::vector<uint8_t>(bytes, bytes + png.length)});
+    }
+    return entry;
+}
+
+// A clip put on the clipboard: its text, HTML and image an item, its files theirs.
+void writeClip(NSPasteboard* board, const ClipEntry& entry) {
+    [board clearContents];
+    NSMutableArray* objects = [NSMutableArray array];
+    NSPasteboardItem* item = [[NSPasteboardItem alloc] init];
+    bool any = false;
+    if (std::optional<std::string> text = entry.readPlainText()) any = [item setString:nsString(*text) forType:NSPasteboardTypeString];
+    for (const ClipEntry::Item& i : entry.items)
+        if (i.htmlText) {
+            any = [item setString:nsString(*i.htmlText) forType:NSPasteboardTypeHTML] || any;
+            break;
+        }
+    for (const ClipEntry::Item& i : entry.items)
+        if (i.mimeType == "image/png" && !i.data.empty()) {
+            any = [item setData:[NSData dataWithBytes:i.data.data() length:i.data.size()] forType:NSPasteboardTypePNG] || any;
+            break;
+        }
+    if (any) [objects addObject:item];
+    for (const std::string& path : clipFiles(entry)) [objects addObject:[NSURL fileURLWithPath:nsString(path)]];
+    if (objects.count) [board writeObjects:objects];
+}
 
 // A key as Kompoz's: the layout's letter or digit (what it types without modifiers), else by its
 // key code (Carbon's kVK_*).
@@ -300,9 +365,15 @@ public:
             if (self->window_) [self->window_ invalidateCursorRectsForView:self->view_];
         };
         callbacks.getClipboard = [] { return utf8([NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString]); };
-        callbacks.setClipboard = [](const std::string& text) {
-            [NSPasteboard.generalPasteboard clearContents];
-            [NSPasteboard.generalPasteboard setString:[NSString stringWithUTF8String:text.c_str()] forType:NSPasteboardTypeString];
+        callbacks.setClipboard = [](const std::string& text) { writeClip(NSPasteboard.generalPasteboard, ClipEntry::withPlainText(text)); };
+        callbacks.getClipEntry = []() -> std::optional<ClipEntry> {
+            ClipEntry entry = clipOf(NSPasteboard.generalPasteboard);
+            return entry.items.empty() ? std::nullopt : std::optional(std::move(entry));
+        };
+        callbacks.setClipEntry = [](const std::optional<ClipEntry>& entry) { writeClip(NSPasteboard.generalPasteboard, entry.value_or(ClipEntry{})); };
+        callbacks.clipMetadata = []() -> std::optional<ClipMetadata> {
+            ClipMetadata m = clipMetadataOf(NSPasteboard.generalPasteboard);
+            return m.mimeTypes.empty() ? std::nullopt : std::optional(m);
         };
         callbacks.openUri = [self](const std::string& uri) {
             NSURL* url = [NSURL URLWithString:[NSString stringWithUTF8String:uri.c_str()]];
@@ -442,7 +513,7 @@ using kompoz::platform::MouseButton;
     if ((self = [super initWithFrame:frame])) {
         self.wantsLayer = YES;
         self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
-        [self registerForDraggedTypes:@[NSPasteboardTypeFileURL, NSPasteboardTypeString]];
+        [self registerForDraggedTypes:@[NSPasteboardTypeFileURL, NSPasteboardTypeString, NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeTIFF]];
     }
     return self;
 }
@@ -644,35 +715,30 @@ using kompoz::platform::MouseButton;
 
 // ---- Drops ----
 
-- (void)drop:(EventType)type at:(id<NSDraggingInfo>)drag text:(std::string)text {
+- (void)drop:(EventType)type at:(id<NSDraggingInfo>)drag {
     if (!platform) return;
     NSPoint p = [self convertPoint:drag.draggingLocation fromView:nil];
     Event e{.type = type, .x = float(p.x), .y = float(p.y)};
-    e.text = std::move(text);
+    if (type == EventType::DropBegin) e.mimeTypes = kompoz::platform::clipMetadataOf(drag.draggingPasteboard).mimeTypes;
+    if (type == EventType::DropData) e.clip = std::make_shared<kompoz::ClipEntry>(kompoz::platform::clipOf(drag.draggingPasteboard));
     platform->push(std::move(e));
 }
 - (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)drag {
-    [self drop:EventType::DropBegin at:drag text:std::string()];
-    [self drop:EventType::DropMove at:drag text:std::string()];
-    return NSDragOperationCopy;
+    [self drop:EventType::DropBegin at:drag];
+    [self drop:EventType::DropMove at:drag];
+    return kompoz::platform::clipMetadataOf(drag.draggingPasteboard).mimeTypes.empty() ? NSDragOperationNone : NSDragOperationCopy;
 }
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)drag {
-    [self drop:EventType::DropMove at:drag text:std::string()];
-    return NSDragOperationCopy;
+    [self drop:EventType::DropMove at:drag];
+    return kompoz::platform::clipMetadataOf(drag.draggingPasteboard).mimeTypes.empty() ? NSDragOperationNone : NSDragOperationCopy;
 }
 - (void)draggingExited:(id<NSDraggingInfo>)drag {
     if (platform) platform->push({.type = EventType::DropComplete});
 }
-// Files (their paths), else text.
+// All it carries: files, text, HTML, an image.
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)drag {
-    NSPasteboard* board = drag.draggingPasteboard;
-    NSArray<NSURL*>* files = [board readObjectsForClasses:@[NSURL.class] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
-    if (files.count) {
-        for (NSURL* file in files) [self drop:EventType::DropFile at:drag text:kompoz::platform::utf8(file.path)];
-    } else if (NSString* text = [board stringForType:NSPasteboardTypeString]) {
-        [self drop:EventType::DropText at:drag text:kompoz::platform::utf8(text)];
-    }
-    [self drop:EventType::DropComplete at:drag text:std::string()];
+    [self drop:EventType::DropData at:drag];
+    [self drop:EventType::DropComplete at:drag];
     return YES;
 }
 

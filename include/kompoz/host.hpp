@@ -31,6 +31,7 @@ struct DropTarget {
     LayoutNode* node;
     bool receiver = false;
     int ordinal = 0;
+    bool field = false;  // a TextFieldState field (its text is dropped in, at the caret the drag moves)
     // A contentReceiver's: the enters less the exits, its own and those of the ones inside it
     // (over one of those, it is over this one too).
     int entered = 0;
@@ -182,6 +183,9 @@ public:
     // (transformable): Ctrl+wheel, a touchpad pinch, Ctrl+Shift+wheel. Returns whether something took it.
     bool zoom(Offset position, float factor, float rotation = 0);
     void textInput(std::string_view text);  // typed text, inserted at the caret (desktop keyboards)
+    // Content the soft keyboard sent the focused field (Android's commitContent: an image, a GIF),
+    // for the contentReceivers around it: true if one took any of it (ImeOptions::acceptsContent).
+    bool commitContent(TransferableContent content);
     void textEdit(const TextEditState& state);  // full state from an input method (Android IME)
     // Returns whether the key was used. It goes to onPreviewKeyEvent handlers, the focused text
     // field and onKeyEvent handlers (see KeyEventElement), then: Tab and the arrow keys move focus,
@@ -698,6 +702,8 @@ private:
     static std::optional<std::pair<LayoutNode*, int>> receiverAround(LayoutNode* node, int ordinal);
     std::optional<TransferableContent> receiveContent(std::pair<LayoutNode*, int> receiver, TransferableContent content);
     void receiverDragHover(std::pair<LayoutNode*, int> receiver, bool entered);
+    void fieldDragHover(LayoutNode& field, bool over);
+    void insertIntoField(LayoutNode& field, const std::string& text);
     LayoutNode* longPressTrigger_ = nullptr;  // the TooltipBox anchor under the press
     int64_t triggerLongPressAt_ = -1;
     LayoutNode* hoveredTrigger_ = nullptr;

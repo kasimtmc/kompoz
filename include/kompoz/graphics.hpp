@@ -499,6 +499,17 @@ public:
     std::shared_ptr<Data> data_;
 };
 
+// An image's encoded bytes (PNG, JPEG, WebP, GIF's first frame, BMP) decoded (Compose
+// Multiplatform's ByteArray.decodeToImageBitmap()): an image a contentReceiver took as bytes (a
+// desktop clipboard's). Empty if they can't be decoded, or no app runs to decode them.
+ImageBitmap decodeToImageBitmap(const std::vector<uint8_t>& bytes);
+namespace detail {
+void setImageDecoder(std::function<ImageBitmap(const std::vector<uint8_t>&)> decoder);  // the app's (its platform's decoders)
+}
+namespace kt {
+inline ImageBitmap decodeToImageBitmap(const std::vector<uint8_t>& bytes) { return kompoz::decodeToImageBitmap(bytes); }  // bytes.decodeToImageBitmap()
+}
+
 // Pixels read from a bitmap (Compose's PixelMap): (x, y) its color.
 struct PixelMap {
     std::vector<uint32_t> buffer;  // ARGB

@@ -1459,7 +1459,7 @@ Modifier Modifier::contentReceiver(std::shared_ptr<ReceiveContentListener> recei
 Modifier Modifier::contentReceiver(std::function<std::optional<TransferableContent>(const TransferableContent&)> onReceive) const {
     struct Listener final : ReceiveContentListener {
         std::function<std::optional<TransferableContent>(const TransferableContent&)> receive;
-        std::optional<TransferableContent> onReceive(const TransferableContent& content) override { return receive(content); }
+        std::optional<TransferableContent> onReceive(TransferableContent content) override { return receive(content); }
     };
     auto listener = std::make_shared<Listener>();
     listener->receive = std::move(onReceive);

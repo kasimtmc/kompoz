@@ -13606,7 +13606,7 @@ TEST(content_receivers_take_drops_in_a_chain_from_the_innermost) {
         void onDragEnd() override { log->push_back(name + " end"); }
         void onDragEnter() override { log->push_back(name + " enter"); }
         void onDragExit() override { log->push_back(name + " exit"); }
-        std::optional<TransferableContent> onReceive(const TransferableContent& content) override {
+        std::optional<TransferableContent> onReceive(TransferableContent content) override {
             log->push_back(std::format("{} receives {}", name, content.clipEntry.items.size()));
             CHECK(content.source == TransferableContent::Source::DragAndDrop && content.hasMediaType({"text/uri-list"}));
             return content.consume(takes);
@@ -13636,6 +13636,92 @@ TEST(content_receivers_take_drops_in_a_chain_from_the_innermost) {
     host.externalDragMoved({50, 50});
     host.externalDragLeft();
     CHECK((log == std::vector<std::string>{"dış start", "iç start", "iç enter", "dış enter", "iç exit", "dış exit", "dış end", "iç end"}));
+}
+
+TEST(text_fields_take_drops_pastes_and_keyboard_content_through_the_receivers_around_them) {
+    std::vector<std::string> log;
+    std::optional<TextFieldState> inside, alone;
+    struct Images final : ReceiveContentListener {
+        std::vector<std::string>* log;
+        explicit Images(std::vector<std::string>* log) : log(log) {}
+        void onDragEnter() override { log->push_back("enter"); }
+        void onDragExit() override { log->push_back("exit"); }
+        std::optional<TransferableContent> onReceive(TransferableContent content) override {
+            const char* from[] = {"keyboard", "drop", "paste"};
+            log->push_back(std::format("{} {}", from[int(content.source)], content.clipEntry.items.size()));
+            return content.consume([](const ClipEntry::Item& item) { return item.uri.has_value() || !item.data.empty(); });
+        }
+    };
+    KompozTestRule rule([&] {
+        Column([&] {
+            inside = rememberTextFieldState("dünya");
+            alone = rememberTextFieldState("yalnız");
+            Box(Modifier().fillMaxWidth().height(200).contentReceiver(Images(&log)),
+                [&] { BasicTextField(*inside, Modifier().width(300).height(40).testTag("içteki")); });
+            BasicTextField(*alone, Modifier().width(300).height(40).testTag("yalnız"));
+        });
+    }, {400, 800});
+    KompozHost& host = rule.host();
+    Rect field = rule.onNodeWithTag("içteki").bounds();
+    Offset end{field.x + field.width - 2, field.y + field.height / 2};
+    // Text dragged over the field: the caret goes where it would drop, the receiver around it is
+    // over it too; dropped, it is put there.
+    host.externalDragEntered({"text/plain"});
+    host.externalDragMoved({300, 150});  // over the receiver only
+    host.externalDragMoved(end);         // over the field: the receiver isn't left
+    rule.waitForIdle();
+    CHECK(inside->selection() == (TextRange{6, 6}));  // (bytes: "ü" is two)
+    host.externalDrop({.text = " güzel", .mimeTypes = {"text/plain"}}, end);
+    rule.waitForIdle();
+    CHECK(inside->text() == "dünya güzel" && inside->selection() == (TextRange{13, 13}));
+    CHECK((log == std::vector<std::string>{"enter", "drop 1"}));
+    log.clear();
+    // An image with its caption: the receiver takes the image, the field the caption.
+    DragAndDropTransferData both{.mimeTypes = {"image/png", "text/plain"}};
+    both.clipEntry = ClipEntry{.items = {{.uri = "file:///tmp/kedi.png"}, {.text = "!"}}, .clipMetadata = {{"image/png", "text/plain"}}};
+    host.externalDragEntered(both.mimeTypes);
+    host.externalDragMoved(end);
+    host.externalDrop(both, end);
+    rule.waitForIdle();
+    CHECK(inside->text() == "dünya güzel!" && (log == std::vector<std::string>{"enter", "drop 2"}));
+    log.clear();
+    // A field without one around it takes no image.
+    Rect lone = rule.onNodeWithTag("yalnız").bounds();
+    host.externalDragEntered({"image/png"});
+    host.externalDragMoved({lone.x + 10, lone.y + 10});
+    host.externalDrop({.mimeTypes = {"image/png"}, .clipEntry = ClipEntry{.items = {{.uri = "file:///tmp/kedi.png"}}, .clipMetadata = {{"image/png"}}}},
+                      {lone.x + 10, lone.y + 10});
+    rule.waitForIdle();
+    CHECK(alone->text() == "yalnız" && log.empty());
+    // Pasted: all the clipboard holds goes to the receiver first.
+    std::optional<ClipEntry> board = ClipEntry{.items = {{.mimeType = "image/png", .data = {1, 2, 3}}, {.text = " ve kedi"}},
+                                               .clipMetadata = {{"image/png", "text/plain"}}};
+    ImeOptions told;
+    host.setCallbacks({.textInput = [&](bool, Rect, const TextEditState&, const ImeOptions& o) { told = o; },
+                       .getClipboard = [] { return std::string("düz"); },
+                       .getClipEntry = [&] { return board; }});
+    rule.onNodeWithTag("içteki").performClick();
+    rule.waitForIdle();
+    CHECK(told.acceptsContent);
+    host.keyDown(Key::End);
+    host.keyDown(Key::V, {.ctrl = true});
+    rule.waitForIdle();
+    CHECK(inside->text() == "dünya güzel! ve kedi" && (log == std::vector<std::string>{"paste 2"}));
+    log.clear();
+    // What the keyboard sends: to the receiver, taken if any of it was.
+    TransferableContent gif{.clipEntry = {.items = {{.uri = "content://klavye/1.gif"}}, .clipMetadata = {{"image/gif"}}},
+                            .clipMetadata = {{"image/gif"}},
+                            .platformTransferableContent = PlatformTransferableContent{"https://ornek.com/1.gif"}};
+    CHECK(host.commitContent(gif) && (log == std::vector<std::string>{"keyboard 1"}));
+    log.clear();
+    // The field alone pastes text as ever, and turns the keyboard's content down.
+    rule.onNodeWithTag("yalnız").performClick();
+    rule.waitForIdle();
+    CHECK(!told.acceptsContent && !host.commitContent(gif));
+    host.keyDown(Key::End);
+    host.keyDown(Key::V, {.ctrl = true});
+    rule.waitForIdle();
+    CHECK(alone->text() == "yalnızdüz" && log.empty());
 }
 
 TEST(window_size_classes_and_the_navigation_they_suit) {

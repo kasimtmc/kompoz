@@ -1,6 +1,7 @@
 #include "wayland_platform.hpp"
 
 #include "../../app/app_core.hpp"
+#include "../../common/clip_formats.hpp"
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
 #include "../../common/egl_window.hpp"
@@ -307,7 +308,15 @@ public:
             self->showCursor();
         };
         callbacks.getClipboard = [self] { return self->readClipboard(); };
-        callbacks.setClipboard = [self](const std::string& text) { self->writeClipboard(text); };
+        callbacks.setClipboard = [self](const std::string& text) { self->writeClipboard(ClipEntry::withPlainText(text)); };
+        callbacks.getClipEntry = [self] { return self->readClipEntry(); };
+        callbacks.setClipEntry = [self](const std::optional<ClipEntry>& entry) { self->writeClipboard(entry.value_or(ClipEntry{})); };
+        callbacks.clipMetadata = [self]() -> std::optional<ClipMetadata> {
+            if (self->source_) return self->ours_.items.empty() ? std::nullopt : std::optional(self->ours_.clipMetadata);
+            if (!self->selectionOffer_) return std::nullopt;
+            ClipMetadata m = clipMetadataOf(self->offerTypes_[self->selectionOffer_]);
+            return m.mimeTypes.empty() ? std::nullopt : std::optional(m);
+        };
         callbacks.openUri = [](const std::string& uri) { openUri(uri); };
     }
 
@@ -430,7 +439,8 @@ private:
     double dragX_ = 0, dragY_ = 0;
     std::map<wl_data_offer*, std::vector<std::string>> offerTypes_;
     wl_data_source* source_ = nullptr;
-    std::string clipboard_;
+    ClipEntry ours_;                   // on the clipboard from us
+    std::vector<ClipFormat> oursAs_;  // and as each type it is offered as
 
     int wakeFd_ = -1, timerFd_ = -1, repeatFd_ = -1;
     std::deque<Event> events_;
@@ -772,10 +782,18 @@ private:
     }
 
     std::string readClipboard() {
-        if (source_) return clipboard_;  // (ours: we would have to answer ourselves)
+        if (source_) return ours_.getPlainText();  // (ours: we would have to answer ourselves)
         if (!selectionOffer_) return {};
         const char* type = offered(selectionOffer_, {"text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT"});
         return type ? receive(selectionOffer_, type) : std::string();
+    }
+
+    // All the clipboard holds: text, HTML, an image, files' URIs.
+    std::optional<ClipEntry> readClipEntry() {
+        if (source_) return ours_.items.empty() ? std::nullopt : std::optional(ours_);
+        if (!selectionOffer_) return std::nullopt;
+        ClipEntry entry = clipFromFormats(offerTypes_[selectionOffer_], [&](const std::string& type) { return receive(selectionOffer_, type.c_str()); });
+        return entry.items.empty() ? std::nullopt : std::optional(std::move(entry));
     }
 
     // What an offer holds as `type`, read through a pipe from the app that offers it (which may
@@ -799,13 +817,17 @@ private:
         return text;
     }
 
-    void writeClipboard(const std::string& text) {
+    // Offered as each type it can be had in (nothing: the clipboard emptied).
+    void writeClipboard(const ClipEntry& entry) {
         if (!dataDevices_ || !dataDevice_) return;
-        clipboard_ = text;
+        ours_ = entry;
+        oursAs_ = clipFormats(entry);
         if (source_) wl_data_source_destroy(source_);
+        source_ = nullptr;
+        if (oursAs_.empty()) return wl_data_device_set_selection(dataDevice_, nullptr, lastSerial_);
         source_ = wl_data_device_manager_create_data_source(dataDevices_);
         wl_data_source_add_listener(source_, &kSource, this);
-        for (const char* type : {"text/plain;charset=utf-8", "text/plain", "UTF8_STRING"}) wl_data_source_offer(source_, type);
+        for (const ClipFormat& f : oursAs_) wl_data_source_offer(source_, f.type.c_str());
         wl_data_device_set_selection(dataDevice_, source_, lastSerial_);
     }
 
@@ -1249,11 +1271,14 @@ const wl_data_device_listener WaylandPlatform::kDataDevice = {
         p.dragOffer_ = offer;
         if (!offer) return;
         p.dragX_ = wl_fixed_to_double(x), p.dragY_ = wl_fixed_to_double(y);
-        const char* type = p.offered(offer, {"text/uri-list", "text/plain;charset=utf-8", "text/plain"});
+        ClipMetadata carries = clipMetadataOf(p.offerTypes_[offer]);  // (what it is, unread till the drop)
+        const char* type = p.offered(offer, {"text/uri-list", "x-special/gnome-copied-files", "text/plain;charset=utf-8", "text/plain",
+                                             "text/html", "image/png"});
+        if (!type && !carries.mimeTypes.empty()) type = p.offerTypes_[offer].front().c_str();
         wl_data_offer_accept(offer, serial, type);
         if (wl_data_offer_get_version(offer) >= 3)
             wl_data_offer_set_actions(offer, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
-        p.events_.push_back({.type = EventType::DropBegin});
+        p.events_.push_back({.type = EventType::DropBegin, .mimeTypes = carries.mimeTypes});
         p.events_.push_back(p.at(EventType::DropMove, p.dragX_, p.dragY_));
     },
     .leave = [](void* data, wl_data_device*) {
@@ -1272,17 +1297,9 @@ const wl_data_device_listener WaylandPlatform::kDataDevice = {
         WaylandPlatform& p = self(data);
         wl_data_offer* offer = p.dragOffer_;
         if (!offer) return;
-        if (p.offered(offer, {"text/uri-list"})) {
-            for (const std::string& path : filesInUriList(p.receive(offer, "text/uri-list"))) {
-                Event e = p.at(EventType::DropFile, p.dragX_, p.dragY_);
-                e.text = path;
-                p.events_.push_back(e);
-            }
-        } else if (const char* type = p.offered(offer, {"text/plain;charset=utf-8", "text/plain"})) {
-            Event e = p.at(EventType::DropText, p.dragX_, p.dragY_);
-            e.text = p.receive(offer, type);
-            p.events_.push_back(e);
-        }
+        Event e = p.at(EventType::DropData, p.dragX_, p.dragY_);
+        e.clip = std::make_shared<ClipEntry>(clipFromFormats(p.offerTypes_[offer], [&](const std::string& type) { return p.receive(offer, type.c_str()); }));
+        p.events_.push_back(std::move(e));
         if (wl_data_offer_get_version(offer) >= 3) wl_data_offer_finish(offer);
         p.forget(offer);
         p.events_.push_back({.type = EventType::DropComplete});
@@ -1294,11 +1311,13 @@ const wl_data_device_listener WaylandPlatform::kDataDevice = {
     },
 };
 
-// Ours on the clipboard: its text written to who asks.
+// Ours on the clipboard: written to who asks, as the type asked for.
 const wl_data_source_listener WaylandPlatform::kSource = {
     .target = [](void*, wl_data_source*, const char*) {},
-    .send = [](void* data, wl_data_source*, const char*, int32_t fd) {
-        const std::string& text = self(data).clipboard_;
+    .send = [](void* data, wl_data_source*, const char* type, int32_t fd) {
+        const auto& as = self(data).oursAs_;
+        auto f = std::ranges::find_if(as, [&](const ClipFormat& f) { return f.type == type; });
+        const std::string& text = f != as.end() ? f->bytes : std::string();
         for (size_t done = 0; done < text.size();) {
             ssize_t n = write(fd, text.data() + done, text.size() - done);
             if (n <= 0) break;

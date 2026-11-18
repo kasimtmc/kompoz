@@ -21,6 +21,16 @@ void setHandlers(std::function<void(const TextEditState&)> onEdit, std::function
                  std::function<void(const std::array<float, 46>&)> onInsets, std::function<void(float)> onFontScale);
 
 void attach();  // creates the input view, which also starts reporting window insets
+// Content the keyboard sent (an image, a GIF; commitContent): true if the app took any of it.
+// Runs on the UI thread, at once (the keyboard waits for the answer).
+void setContentHandler(std::function<bool(TransferableContent)> handler);
+
+// A clip across JNI (a byte[][]: its MIME types, a line each, then each item's text, HTML and URI,
+// null where it has none; KompozActivity.clipParts): read, and made (a local reference). An item
+// with only bytes has nothing Android's clip can hold, and is left out (Android's clips carry an
+// image by its content URI).
+ClipEntry clipFromJava(void* env, void* parts);
+void* clipToJava(void* env, const ClipEntry& entry);
 
 void show(const TextEditState& state, Rect areaPx, const ImeOptions& options);
 void update(const TextEditState& state);  // the app changed the text
@@ -49,6 +59,8 @@ PlatformGlyph renderGlyph(const std::string& utf8, int px);
 // BitmapFactory, and an http(s) GET's body (empty if it failed).
 ImageBitmap decodeImage(const std::vector<uint8_t>& bytes, const ImageRequestSize& size);
 std::vector<uint8_t> httpGet(const std::string& url);
+// A content:// URI's bytes, from its provider (any thread); empty if it can't be read.
+std::vector<uint8_t> readContent(const std::string& uri);
 // The calling thread's JNIEnv (a JNIEnv*), the thread attached to the VM if it wasn't; and, as a
 // thread that was ends, the VM let go of.
 void* jniEnv();

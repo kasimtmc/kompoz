@@ -1239,6 +1239,7 @@ const ContentReceiverElement* receiverOf(const LayoutNode& node, int ordinal) {
     return size_t(ordinal) < all.size() ? all[size_t(ordinal)] : nullptr;
 }
 const ModifierElement* elementOf(const detail::DropTarget& t) {
+    if (t.field) return t.node->modifier.find<FocusableElement>();
     return t.receiver ? static_cast<const ModifierElement*>(receiverOf(*t.node, t.ordinal)) : dropTargetOf(*t.node);
 }
 
@@ -1246,6 +1247,7 @@ void collectDropTargets(LayoutNode& node, std::vector<detail::DropTarget>& out) 
     int receivers = int(receiversOf(node).size());
     for (int i = 0; i < receivers; ++i) out.push_back({&node, true, i});
     if (dropTargetOf(node)) out.push_back({&node});
+    if (const auto* f = node.modifier.find<FocusableElement>(); f && f->onEdit && f->selection) out.push_back({&node, false, 0, true});
     for (auto* child : node.childrenInDrawOrder())
         if (child->isPlaced()) collectDropTargets(*child, out);
 }
@@ -1404,6 +1406,42 @@ bool KompozHost::startDragAndDrop(Offset p, int64_t time) {
     return true;
 }
 
+// A drag came over a TextFieldState field or left it: its caret shows while it is over it, and
+// the contentReceiver around it hears of it as if it were one (Compose's BasicTextField).
+void KompozHost::fieldDragHover(LayoutNode& field, bool over) {
+    if (field.dragHovered != over) {
+        field.dragHovered = over;
+        field.invalidateDraw();
+    }
+    if (auto around = receiverAround(&field, -1)) receiverDragHover(*around, over);
+}
+
+// Text dropped or left by contentReceivers, in place of the field's selection (its input
+// transformation going over it, as over what is typed).
+void KompozHost::insertIntoField(LayoutNode& field, const std::string& text) {
+    if (&field == focused_) return textInput(text);
+    const auto* f = field.modifier.find<FocusableElement>();
+    if (!f || !f->onEdit) return;
+    int length = int(f->value.size());
+    TextRange selection = f->selection.value_or(TextRange{length, length});
+    int from = std::clamp(std::min(selection.start, selection.end), 0, length), to = std::clamp(std::max(selection.start, selection.end), 0, length);
+    TextEditState before{f->value, selection.start, selection.end}, proposed = before;
+    proposed.text.replace(size_t(from), size_t(to - from), text);
+    proposed.selectionStart = proposed.selectionEnd = from + int(text.size());
+    TextEditState edit = f->transformEdit ? f->transformEdit(before, proposed) : proposed;
+    auto onEdit = f->onEdit;
+    onEdit(edit);
+}
+
+bool KompozHost::commitContent(TransferableContent content) {
+    const auto* f = isTextField(focused_) ? focused_->modifier.find<FocusableElement>() : nullptr;
+    auto around = f && f->selection ? receiverAround(focused_, -1) : std::nullopt;
+    if (!around) return false;
+    content.source = TransferableContent::Source::Keyboard;
+    TransferableContent original = content;
+    return receiveContent(*around, std::move(content)) != std::optional(original);
+}
+
 void KompozHost::beginDragAndDrop(std::shared_ptr<const DragAndDropTransferData> data, LayoutNode* source, Offset grab,
                                    std::optional<Offset> pointer) {
     dnd_ = std::make_unique<DragSession>();
@@ -1416,11 +1454,18 @@ void KompozHost::beginDragAndDrop(std::shared_ptr<const DragAndDropTransferData>
     for (auto& [popup, anchor] : overlays_) collectDropTargets(*popup, all);
     // (A contentReceiver takes part in every drag: what it takes, its onReceive decides.)
     for (const DragSession::Target& t : all) {
+        if (t.field) {  // text, or anything with a contentReceiver around it (Compose's textFieldDragAndDropNode)
+            const auto& types = dnd_->data->mimeTypes;
+            if (receiverAround(t.node, -1) || std::ranges::any_of(types, [](const std::string& m) { return mimeTypeMatches(m, "text/*"); }))
+                dnd_->targets.push_back(t);
+            continue;
+        }
         auto shouldStart = t.receiver ? nullptr : dropTargetOf(*t.node)->shouldStart;
         if (!shouldStart || shouldStart(dropEventFor(t))) dnd_->targets.push_back(t);
     }
     for (DragSession::Target t : std::vector<DragSession::Target>(dnd_->targets)) {
         if (!dnd_) break;
+        if (t.field) continue;
         if (t.receiver) {
             if (const ContentReceiverElement* e = receiverOf(*t.node, t.ordinal); e && e->listener) {
                 std::shared_ptr<ReceiveContentListener> listener = e->listener;
@@ -1495,10 +1540,12 @@ void KompozHost::moveDragAndDrop(Offset p) {
     // Entering the new one first, then leaving the old one (as Compose's drag and drop does: a
     // contentReceiver left for one inside it stays entered).
     auto enter = [this](DragSession::Target t) {
+        if (t.field) return fieldDragHover(*t.node, true);
         if (t.receiver) return receiverDragHover({t.node, t.ordinal}, true);
         if (auto onEntered = dropTargetOf(*t.node)->target.onEntered) onEntered(dropEventFor(t));
     };
     auto exit = [this](DragSession::Target t) {
+        if (t.field) return fieldDragHover(*t.node, false);
         if (t.receiver) return receiverDragHover({t.node, t.ordinal}, false);
         if (auto onExited = dropTargetOf(*t.node)->target.onExited) onExited(dropEventFor(t));
     };
@@ -1509,8 +1556,18 @@ void KompozHost::moveDragAndDrop(Offset p) {
     }
     if (dnd_ && dnd_->hovered >= 0) {
         const DragSession::Target& t = dnd_->targets[size_t(dnd_->hovered)];
-        if (!t.receiver)
+        if (t.field) {  // the caret where it would drop
+            const auto* f = t.node->modifier.find<FocusableElement>();
+            int at = f && f->offsetAt ? f->offsetAt(dropEventFor(t).position) : -1;
+            if (at >= 0 && t.node == focused_) {
+                if (imeState_.selectionStart != at || imeState_.selectionEnd != at) textEdit({imeState_.text, at, at});
+            } else if (at >= 0 && f->selection != std::optional(TextRange{at, at})) {
+                auto onEdit = f->onEdit;
+                onEdit({f->value, at, at});
+            }
+        } else if (!t.receiver) {
             if (auto onMoved = dropTargetOf(*t.node)->target.onMoved) onMoved(dropEventFor(t));
+        }
     }
 }
 
@@ -1518,7 +1575,23 @@ void KompozHost::endDragAndDrop(bool drop) {
     bool accepted = false;
     if (dnd_->hovered >= 0) {
         DragSession::Target t = dnd_->targets[size_t(dnd_->hovered)];
-        if (!drop) {
+        if (t.field) {
+            if (!drop) {
+                fieldDragHover(*t.node, false);
+            } else {  // its text, or what the contentReceivers around it left of it (Compose's BasicTextField)
+                t.node->dragHovered = false;
+                t.node->invalidateDraw();
+                ClipEntry clip = dnd_->data->toClipEntry();
+                std::optional<std::string> text = clip.readPlainText();
+                if (auto around = receiverAround(t.node, -1)) {
+                    TransferableContent content{.clipEntry = clip, .clipMetadata = clip.clipMetadata, .source = TransferableContent::Source::DragAndDrop};
+                    std::optional<TransferableContent> left = receiveContent(*around, std::move(content));
+                    text = left ? left->clipEntry.readPlainText() : std::nullopt;
+                }
+                if (text && dnd_) insertIntoField(*t.node, *text);
+                accepted = true;
+            }
+        } else if (!drop) {
             if (t.receiver) {
                 receiverDragHover({t.node, t.ordinal}, false);
             } else if (auto onExited = dropTargetOf(*t.node)->target.onExited) {
@@ -1535,7 +1608,9 @@ void KompozHost::endDragAndDrop(bool drop) {
     if (!dnd_) return;
     std::unique_ptr<DragSession> s = std::move(dnd_);
     for (const DragSession::Target& t : s->targets) {
-        if (t.receiver) {
+        if (t.field) {
+            if (t.node->dragHovered) t.node->dragHovered = false, t.node->invalidateDraw();
+        } else if (t.receiver) {
             if (const ContentReceiverElement* e = receiverOf(*t.node, t.ordinal); e && e->listener) {
                 std::shared_ptr<ReceiveContentListener> listener = e->listener;
                 listener->onDragEnd();
@@ -2993,10 +3068,23 @@ bool KompozHost::editKey(Key key, KeyModifiers modifiers) {
         if (from != to && callbacks_.setClipboard) callbacks_.setClipboard(std::string(text.substr(size_t(from), size_t(to - from))));
         if (key == Key::X) erase(from, to);
         return true;
-    case Key::V:
+    case Key::V: {
         if (!modifiers.ctrl) break;
-        if (callbacks_.getClipboard) textInput(callbacks_.getClipboard());
+        // In a TextFieldState field with contentReceivers around it, all the clipboard holds goes
+        // to them first, and what they leave of its text is pasted (Compose's TextFieldSelectionState.paste).
+        auto around = f->selection ? receiverAround(focused_, -1) : std::nullopt;
+        std::optional<ClipEntry> entry = around ? clipEntry() : std::nullopt;
+        if (!entry) {
+            if (callbacks_.getClipboard) textInput(callbacks_.getClipboard());
+            return true;
+        }
+        LayoutNode* field = focused_;
+        TransferableContent content{.clipEntry = *entry, .clipMetadata = entry->clipMetadata, .source = TransferableContent::Source::Clipboard};
+        std::optional<TransferableContent> left = receiveContent(*around, std::move(content));
+        std::optional<std::string> text = left ? left->clipEntry.readPlainText() : std::nullopt;
+        if (text && focused_ == field) textInput(*text);
         return true;
+    }
     case Key::Enter:
         if (!f->singleLine) {  // a new line; the soft keyboard's action key still runs the action
             textInput("\n");
@@ -3293,6 +3381,7 @@ void KompozHost::showTextInput(bool touched) {
     static_cast<KeyboardOptions&>(options) = f->keyboardOptions;
     options.singleLine = f->singleLine;
     options.showKeyboard = touched || f->keyboardOptions.showKeyboardOnFocus;
+    options.acceptsContent = f->selection && receiverAround(focused_, -1);
     callbacks_.textInput(true, focused_->bounds(), imeState_, options);
 }
 

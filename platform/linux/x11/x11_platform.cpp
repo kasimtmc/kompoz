@@ -1,6 +1,7 @@
 #include "x11_platform.hpp"
 
 #include "../../app/app_core.hpp"
+#include "../../common/clip_formats.hpp"
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
 #include "../../common/egl_window.hpp"
@@ -44,12 +45,12 @@ namespace {
 // The atoms the window speaks with, by their names.
 struct Atoms {
     Atom WM_PROTOCOLS, WM_DELETE_WINDOW, _NET_WM_PING, _NET_WM_NAME, _NET_WM_PID, _NET_WM_WINDOW_TYPE, _NET_WM_WINDOW_TYPE_NORMAL,
-        UTF8_STRING, CLIPBOARD, TARGETS, INCR, TEXT, TEXT_PLAIN_UTF8, TEXT_PLAIN, TEXT_URI_LIST, RESOURCE_MANAGER, KOMPOZ_SELECTION,
+        UTF8_STRING, CLIPBOARD, TARGETS, INCR, TEXT, RESOURCE_MANAGER, KOMPOZ_SELECTION,
         XdndAware, XdndEnter, XdndPosition, XdndStatus, XdndLeave, XdndDrop, XdndFinished, XdndSelection, XdndTypeList, XdndActionCopy;
 };
 constexpr const char* kAtomNames[] = {
     "WM_PROTOCOLS", "WM_DELETE_WINDOW", "_NET_WM_PING", "_NET_WM_NAME", "_NET_WM_PID", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
-    "UTF8_STRING", "CLIPBOARD", "TARGETS", "INCR", "TEXT", "text/plain;charset=utf-8", "text/plain", "text/uri-list", "RESOURCE_MANAGER",
+    "UTF8_STRING", "CLIPBOARD", "TARGETS", "INCR", "TEXT", "RESOURCE_MANAGER",
     "KOMPOZ_SELECTION", "XdndAware", "XdndEnter", "XdndPosition", "XdndStatus", "XdndLeave", "XdndDrop", "XdndFinished", "XdndSelection",
     "XdndTypeList", "XdndActionCopy"};
 static_assert(sizeof(Atoms) == sizeof(kAtomNames) / sizeof(*kAtomNames) * sizeof(Atom));
@@ -301,7 +302,14 @@ public:
             self->showCursor();
         };
         callbacks.getClipboard = [self] { return self->readClipboard(); };
-        callbacks.setClipboard = [self](const std::string& text) { self->writeClipboard(text); };
+        callbacks.setClipboard = [self](const std::string& text) { self->writeClipboard(ClipEntry::withPlainText(text)); };
+        callbacks.getClipEntry = [self] { return self->readClipEntry(); };
+        callbacks.setClipEntry = [self](const std::optional<ClipEntry>& entry) { self->writeClipboard(entry.value_or(ClipEntry{})); };
+        callbacks.clipMetadata = [self]() -> std::optional<ClipMetadata> {
+            if (self->ownsClipboard_) return self->ours_.items.empty() ? std::nullopt : std::optional(self->ours_.clipMetadata);
+            ClipMetadata m = clipMetadataOf(self->clipboardTypes());
+            return m.mimeTypes.empty() ? std::nullopt : std::optional(m);
+        };
         callbacks.openUri = [](const std::string& uri) { openUri(uri); };
     }
 
@@ -344,19 +352,21 @@ private:
     bool textActive_ = false, focused_ = false, spotStyle_ = false;
     XPoint textSpot_{};  // where the input method shows what is being composed: under the field's start
 
-    std::string clipboard_;
+    ClipEntry ours_;                   // on the clipboard from us
+    std::vector<ClipFormat> oursAs_;  // and as each type it is offered as
     bool ownsClipboard_ = false;
-    // A large clipboard sent in parts (INCR): to which window's property, from where.
+    // A large clipboard sent in parts (INCR): to which window's property, what, from where.
     struct Transfer {
         Window requestor;
         Atom property, target;
+        std::shared_ptr<const std::string> bytes;
         size_t offset;
     };
     std::vector<Transfer> transfers_;
 
-    // A drag from another app over the window (XDND): its source, the type taken, where it is.
+    // A drag from another app over the window (XDND): its source, the types it has, where it is.
     Window dragSource_ = 0;
-    Atom dragType_ = None;
+    std::vector<std::string> dragTypes_;
     bool dragBegun_ = false;
     double dragX_ = 0, dragY_ = 0;
 
@@ -770,10 +780,6 @@ private:
 
     // ---- Selections: the clipboard and drops --------------------------------------------
 
-    bool isText(Atom type) const {
-        return type == atoms_.UTF8_STRING || type == XA_STRING || type == atoms_.TEXT || type == atoms_.TEXT_PLAIN_UTF8 || type == atoms_.TEXT_PLAIN;
-    }
-
     // A property of a window as bytes (32-bit items as longs, as Xlib gives them), and its type;
     // deleted after if asked (a selection's answer, a part of one).
     std::optional<std::string> property(Window window, Atom name, Atom* type = nullptr, bool remove = false) {
@@ -835,41 +841,77 @@ private:
 
     std::string readClipboard() {
         Window owner = XGetSelectionOwner(display_, atoms_.CLIPBOARD);
-        if (owner == window_ && ownsClipboard_) return clipboard_;
+        if (owner == window_ && ownsClipboard_) return ours_.getPlainText();
         if (owner == None) return {};
         for (Atom target : {atoms_.UTF8_STRING, Atom(XA_STRING)})
             if (std::optional<std::string> text = convert(atoms_.CLIPBOARD, target, lastTime_)) return *text;
         return {};
     }
 
-    void writeClipboard(const std::string& text) {
-        clipboard_ = text;
-        XSetSelectionOwner(display_, atoms_.CLIPBOARD, window_, lastTime_);
-        ownsClipboard_ = XGetSelectionOwner(display_, atoms_.CLIPBOARD) == window_;
+    Atom atom(const std::string& name) { return XInternAtom(display_, name.c_str(), False); }
+    std::string nameOf(Atom a) {
+        char* name = a != None ? XGetAtomName(display_, a) : nullptr;
+        std::string out = name ? name : "";
+        if (name) XFree(name);
+        return out;
     }
 
-    // Another app asking for the clipboard we hold: what types it can have, or the text (in parts
-    // when it is larger than a request can carry).
+    // The types the clipboard's owner has it in (its TARGETS).
+    std::vector<std::string> clipboardTypes() {
+        if (XGetSelectionOwner(display_, atoms_.CLIPBOARD) == None) return {};
+        std::optional<std::string> list = convert(atoms_.CLIPBOARD, atoms_.TARGETS, lastTime_);
+        std::vector<std::string> types;
+        if (list)
+            for (size_t i = 0; i + sizeof(long) <= list->size(); i += sizeof(long))
+                types.push_back(nameOf(Atom(*reinterpret_cast<const long*>(list->data() + i))));
+        return types;
+    }
+
+    // All the clipboard holds: text, HTML, an image, files' URIs.
+    std::optional<ClipEntry> readClipEntry() {
+        if (XGetSelectionOwner(display_, atoms_.CLIPBOARD) == window_ && ownsClipboard_)
+            return ours_.items.empty() ? std::nullopt : std::optional(ours_);
+        ClipEntry entry = clipFromFormats(clipboardTypes(), [&](const std::string& type) {
+            return convert(atoms_.CLIPBOARD, atom(type), lastTime_).value_or(std::string());
+        });
+        return entry.items.empty() ? std::nullopt : std::optional(std::move(entry));
+    }
+
+    // Offered as each type it can be had in (nothing: given up).
+    void writeClipboard(const ClipEntry& entry) {
+        ours_ = entry;
+        oursAs_ = clipFormats(entry);
+        XSetSelectionOwner(display_, atoms_.CLIPBOARD, oursAs_.empty() ? None : window_, lastTime_);
+        ownsClipboard_ = !oursAs_.empty() && XGetSelectionOwner(display_, atoms_.CLIPBOARD) == window_;
+    }
+
+    // Another app asking for the clipboard we hold: what types it can have, or it as one of them
+    // (in parts when it is larger than a request can carry).
     void answerSelection(const XSelectionRequestEvent& r) {
         XSelectionEvent reply{};
         reply.type = SelectionNotify, reply.display = r.display, reply.requestor = r.requestor, reply.selection = r.selection;
         reply.target = r.target, reply.time = r.time, reply.property = None;
         Atom into = r.property != None ? r.property : r.target;  // (an obsolete client's)
         if (r.selection == atoms_.CLIPBOARD && ownsClipboard_) {
+            std::string wanted = r.target == atoms_.TEXT ? "UTF8_STRING" : nameOf(r.target);
+            auto f = std::ranges::find_if(oursAs_, [&](const ClipFormat& f) { return f.type == wanted; });
             if (r.target == atoms_.TARGETS) {
-                Atom targets[] = {atoms_.TARGETS, atoms_.UTF8_STRING, XA_STRING, atoms_.TEXT, atoms_.TEXT_PLAIN_UTF8, atoms_.TEXT_PLAIN};
-                XChangeProperty(display_, r.requestor, into, XA_ATOM, 32, PropModeReplace, reinterpret_cast<unsigned char*>(targets), int(std::size(targets)));
+                std::vector<Atom> targets{atoms_.TARGETS};
+                for (const ClipFormat& format : oursAs_) targets.push_back(format.type == "STRING" ? Atom(XA_STRING) : atom(format.type));
+                XChangeProperty(display_, r.requestor, into, XA_ATOM, 32, PropModeReplace, reinterpret_cast<unsigned char*>(targets.data()),
+                                int(targets.size()));
                 reply.property = into;
-            } else if (isText(r.target)) {
+            } else if (f != oursAs_.end()) {
                 Atom type = r.target == atoms_.TEXT ? atoms_.UTF8_STRING : r.target;
-                if (clipboard_.size() > partSize()) {
+                auto bytes = std::make_shared<const std::string>(f->bytes);
+                if (bytes->size() > partSize()) {
                     XSelectInput(display_, r.requestor, PropertyChangeMask);
-                    long size = long(clipboard_.size());
+                    long size = long(bytes->size());
                     XChangeProperty(display_, r.requestor, into, atoms_.INCR, 32, PropModeReplace, reinterpret_cast<unsigned char*>(&size), 1);
-                    transfers_.push_back({r.requestor, into, type, 0});
+                    transfers_.push_back({r.requestor, into, type, bytes, 0});
                 } else {
-                    XChangeProperty(display_, r.requestor, into, type, 8, PropModeReplace, reinterpret_cast<const unsigned char*>(clipboard_.data()),
-                                    int(clipboard_.size()));
+                    XChangeProperty(display_, r.requestor, into, type, 8, PropModeReplace, reinterpret_cast<const unsigned char*>(bytes->data()),
+                                    int(bytes->size()));
                 }
                 reply.property = into;
             }
@@ -889,9 +931,10 @@ private:
     void sendNextPart(Window window, Atom property) {
         for (auto t = transfers_.begin(); t != transfers_.end(); ++t) {
             if (t->requestor != window || t->property != property) continue;
-            size_t n = std::min(partSize(), clipboard_.size() - std::min(t->offset, clipboard_.size()));
+            const std::string& bytes = *t->bytes;
+            size_t n = std::min(partSize(), bytes.size() - std::min(t->offset, bytes.size()));
             XChangeProperty(display_, window, property, t->target, 8, PropModeReplace,
-                            reinterpret_cast<const unsigned char*>(clipboard_.data() + t->offset), int(n));
+                            reinterpret_cast<const unsigned char*>(bytes.data() + t->offset), int(n));
             t->offset += n;
             if (n == 0) {
                 XSelectInput(display_, window, NoEventMask);
@@ -916,7 +959,7 @@ private:
             return;
         }
         if (m.message_type == atoms_.XdndEnter) {
-            // The types it offers (three here, or its XdndTypeList): files, else UTF-8 text.
+            // The types it offers (three here, or its XdndTypeList).
             dragSource_ = Window(m.data.l[0]);
             std::vector<Atom> types;
             if (m.data.l[1] & 1) {
@@ -926,35 +969,34 @@ private:
                 for (int i = 2; i < 5; ++i)
                     if (m.data.l[i]) types.push_back(Atom(m.data.l[i]));
             }
-            dragType_ = None;
-            for (Atom wanted : {atoms_.TEXT_URI_LIST, atoms_.TEXT_PLAIN_UTF8, atoms_.UTF8_STRING, atoms_.TEXT_PLAIN})
-                if (dragType_ == None && std::find(types.begin(), types.end(), wanted) != types.end()) dragType_ = wanted;
+            dragTypes_.clear();
+            for (Atom type : types) dragTypes_.push_back(nameOf(type));
             dragBegun_ = false;
         } else if (m.message_type == atoms_.XdndPosition && Window(m.data.l[0]) == dragSource_) {
             int rootX = int((m.data.l[2] >> 16) & 0xffff), rootY = int(m.data.l[2] & 0xffff), x = 0, y = 0;
             Window child = 0;
             XTranslateCoordinates(display_, root_, window_, rootX, rootY, &x, &y, &child);
             dragX_ = x, dragY_ = y;
-            if (!dragBegun_) events_.push_back({.type = EventType::DropBegin});
+            ClipMetadata carries = clipMetadataOf(dragTypes_);  // (what it is, unread till the drop)
+            if (!dragBegun_) events_.push_back({.type = EventType::DropBegin, .mimeTypes = carries.mimeTypes});
             dragBegun_ = true;
             Event move{.type = EventType::DropMove, .time = monotonicNow(), .x = float(x), .y = float(y)};
             events_.push_back(move);
-            dragReply(atoms_.XdndStatus, dragType_ != None ? 1 | 2 : 0, dragType_ != None ? atoms_.XdndActionCopy : None);  // (1: taken; 2: tell each move)
+            bool takes = !carries.mimeTypes.empty();
+            dragReply(atoms_.XdndStatus, takes ? 1 | 2 : 0, takes ? atoms_.XdndActionCopy : None);  // (1: taken; 2: tell each move)
         } else if (m.message_type == atoms_.XdndLeave && Window(m.data.l[0]) == dragSource_) {
             if (dragBegun_) events_.push_back({.type = EventType::DropComplete});
             dragSource_ = 0, dragBegun_ = false;
         } else if (m.message_type == atoms_.XdndDrop && Window(m.data.l[0]) == dragSource_) {
-            std::optional<std::string> data = dragType_ != None ? convert(atoms_.XdndSelection, dragType_, Time(m.data.l[2])) : std::nullopt;
-            if (data && dragType_ == atoms_.TEXT_URI_LIST) {
-                for (const std::string& path : filesInUriList(*data)) {
-                    Event e{.type = EventType::DropFile, .time = monotonicNow(), .x = float(dragX_), .y = float(dragY_)};
-                    e.text = path;
-                    events_.push_back(e);
-                }
-            } else if (data) {
-                Event e{.type = EventType::DropText, .time = monotonicNow(), .x = float(dragX_), .y = float(dragY_)};
-                e.text = *data;
-                events_.push_back(e);
+            Time time = Time(m.data.l[2]);
+            ClipEntry clip = clipFromFormats(dragTypes_, [&](const std::string& type) {
+                return convert(atoms_.XdndSelection, atom(type), time).value_or(std::string());
+            });
+            bool data = !clip.items.empty();
+            if (data) {
+                Event e{.type = EventType::DropData, .time = monotonicNow(), .x = float(dragX_), .y = float(dragY_)};
+                e.clip = std::make_shared<ClipEntry>(std::move(clip));
+                events_.push_back(std::move(e));
             }
             dragReply(atoms_.XdndFinished, data ? 1 : 0, data ? atoms_.XdndActionCopy : None);
             events_.push_back({.type = EventType::DropComplete});

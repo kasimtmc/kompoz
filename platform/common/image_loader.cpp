@@ -1,5 +1,6 @@
 #include "image_loader.hpp"
 
+#include "clip_formats.hpp"
 #include "image_codec.hpp"
 #include "system.hpp"
 
@@ -252,6 +253,19 @@ bool logging() {
     return on;
 }
 
+// A model that isn't a web address: a path, a file:// URI (a dropped or pasted file's), or on
+// Android a content:// one (an image the keyboard sent, a drop's, the clipboard's).
+std::vector<uint8_t> readLocal(const std::string& model) {
+    if (model.starts_with("file://")) {
+        std::vector<std::string> paths = clipFiles({.items = {{.uri = model}}});
+        return paths.empty() ? std::vector<uint8_t>() : platform::readFile(paths[0]);
+    }
+#ifdef __ANDROID__
+    if (model.starts_with("content://")) return android_ime::readContent(model);
+#endif
+    return platform::readFile(model);
+}
+
 ImageBitmap loadNow(const std::string& model, const ImageRequestSize& size) {
     std::vector<uint8_t> bytes;
     const char* from = "file";
@@ -265,7 +279,7 @@ ImageBitmap loadNow(const std::string& model, const ImageRequestSize& size) {
         bytes = httpGet(model);
         from = "network";
     } else if (!isUrl(model)) {
-        bytes = platform::readFile(model);
+        bytes = readLocal(model);
     }
     if (bytes.empty()) {
         platform::log("kompoz: can't load " + model);
@@ -408,7 +422,7 @@ void loadImageAsync(const std::string& model, const ImageRequestSize& size, std:
     if (isUrl(model)) {
         kompoz_web_load_image(id, model.c_str(), nullptr, 0, size.width, size.height, size.fill);
     } else {
-        std::vector<uint8_t> bytes = platform::readFile(model);  // from the preloaded files
+        std::vector<uint8_t> bytes = readLocal(model);  // from the preloaded files (a drop's, written there)
         if (bytes.empty()) {
             auto it = webLoads().find(id);
             auto finish = std::move(it->second);

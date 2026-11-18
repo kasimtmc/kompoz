@@ -225,6 +225,9 @@ struct KeyboardOptions {
 struct ImeOptions : KeyboardOptions {
     bool singleLine = true;
     bool showKeyboard = true;  // false: the typing goes to the field, the software keyboard stays as it is
+    // A contentReceiver is around the field: the soft keyboard may send content (images, GIFs:
+    // Android's contentMimeTypes), given to KompozHost::commitContent.
+    bool acceptsContent = false;
 };
 
 struct FocusState {
@@ -2667,6 +2670,7 @@ public:
 
     // Interaction state, owned by the host.
     bool pressed = false, hovered = false, focused = false;
+    bool dragHovered = false;  // a TextFieldState field a drag is over: its caret shows where it would drop
     bool rtl = false;  // laid out right to left (LocalLayoutDirection where it was composed)
     // The stretch of a scrollable on it with no overscroll effect of its own (made by the host).
     std::shared_ptr<OverscrollEffect> stretch;

@@ -116,6 +116,9 @@ public:
         language_ = e->GetMethodID(activityClass, "language", "()Ljava/lang/String;");
         clipboard_ = e->GetMethodID(activityClass, "clipboard", "()[B");
         setClipboard_ = e->GetMethodID(activityClass, "setClipboard", "([B)V");
+        clipEntry_ = e->GetMethodID(activityClass, "clipEntry", "()[[B");
+        setClipEntry_ = e->GetMethodID(activityClass, "setClipEntry", "([[B)V");
+        clipMimeTypes_ = e->GetMethodID(activityClass, "clipMimeTypes", "()[B");
         openUri_ = e->GetMethodID(activityClass, "openUri", "([B)Z");
         keepScreenOnMethod_ = e->GetMethodID(activityClass, "keepScreenOn", "(Z)V");
         leave_ = e->GetMethodID(activityClass, "leave", "()V");
@@ -159,6 +162,7 @@ public:
         if (core) core->quit();
         core.reset();  // (the device goes before the window)
         android_ime::setHandlers(nullptr, nullptr, nullptr, nullptr);
+        android_ime::setContentHandler(nullptr);
         android_performance::stop();
         android_ime::setMediaHandler(nullptr);
         android_ime::setDeepLinkHandler(nullptr);
@@ -214,6 +218,19 @@ public:
         if (type == EventType::DidEnterForeground || type == EventType::WillEnterBackground) resumed_ = type == EventType::DidEnterForeground;
         if (type == EventType::FocusGained || type == EventType::FocusLost) focused_ = type == EventType::FocusGained;
         deliver({.type = type});
+    }
+
+    // A drag from another app over the view (kind 0 begun, 1 moved, 2 gone), and its drop.
+    void drag(int kind, float x, float y, std::vector<std::string> mimeTypes) {
+        Event e{.type = kind == 0 ? EventType::DropBegin : kind == 1 ? EventType::DropMove : EventType::DropComplete, .x = x, .y = y};
+        e.mimeTypes = std::move(mimeTypes);
+        deliver(e);
+    }
+    void drop(float x, float y, ClipEntry clip) {
+        Event data{.type = EventType::DropData, .x = x, .y = y};
+        data.clip = std::make_shared<ClipEntry>(std::move(clip));
+        deliver(data);
+        deliver({.type = EventType::DropComplete, .x = x, .y = y});
     }
 
     // A MotionEvent: fingers (and a stylus) as touches; a mouse's buttons, moves and wheel.
@@ -454,6 +471,37 @@ public:
             e->DeleteLocalRef(bytes);
             check(e);
         };
+        // All it holds: its items' text, HTML and URIs (an image is a content URI on Android).
+        callbacks.getClipEntry = [self]() -> std::optional<ClipEntry> {
+            JNIEnv* e = env();
+            jobject parts = e->CallObjectMethod(self->activity_, self->clipEntry_);
+            check(e);
+            if (!parts) return std::nullopt;
+            ClipEntry entry = android_ime::clipFromJava(e, parts);
+            e->DeleteLocalRef(parts);
+            return entry.items.empty() ? std::nullopt : std::optional(std::move(entry));
+        };
+        callbacks.setClipEntry = [self](const std::optional<ClipEntry>& entry) {
+            JNIEnv* e = env();
+            auto parts = static_cast<jobject>(android_ime::clipToJava(e, entry.value_or(ClipEntry{})));
+            e->CallVoidMethod(self->activity_, self->setClipEntry_, parts);
+            e->DeleteLocalRef(parts);
+            check(e);
+        };
+        callbacks.clipMetadata = [self]() -> std::optional<ClipMetadata> {  // (unread: Android doesn't tell the user of it)
+            JNIEnv* e = env();
+            auto bytes = static_cast<jbyteArray>(e->CallObjectMethod(self->activity_, self->clipMimeTypes_));
+            std::string lines = fromBytes(e, bytes);
+            if (bytes) e->DeleteLocalRef(bytes);
+            check(e);
+            ClipMetadata metadata;
+            for (size_t at = 0; at < lines.size();) {
+                size_t end = std::min(lines.find('\n', at), lines.size());
+                if (end > at) metadata.mimeTypes.push_back(lines.substr(at, end - at));
+                at = end + 1;
+            }
+            return metadata.mimeTypes.empty() ? std::nullopt : std::optional(std::move(metadata));
+        };
         callbacks.systemBarsAppearance = [](bool lightStatusBars, bool lightNavigationBars) {
             android_ime::setSystemBarsAppearance(lightStatusBars, lightNavigationBars);
         };
@@ -481,6 +529,7 @@ public:
         // Created again after Android ended the process: rememberSaveable values come back.
         if (std::vector<uint8_t> state = android_ime::takeRestoredState(); !state.empty()) h.restoreState(state);
         android_ime::setDeepLinkHandler([self](std::string link) { self->host_->openDeepLink(std::move(link)); });
+        android_ime::setContentHandler([self](TransferableContent content) { return self->host_->commitContent(std::move(content)); });
         android_ime::setHandlers(
             [self](const TextEditState& s) { self->host_->textEdit(s); }, [self](ImeAction action) { self->host_->imeAction(action); },
             [self](const std::array<float, 46>& v) {
@@ -583,6 +632,7 @@ public:
 
 private:
     jobject activity_ = nullptr, view_ = nullptr, assets_ = nullptr;
+    jmethodID clipEntry_ = nullptr, setClipEntry_ = nullptr, clipMimeTypes_ = nullptr;
     jmethodID displayInfo_ = nullptr, language_ = nullptr, clipboard_ = nullptr, setClipboard_ = nullptr, openUri_ = nullptr,
               keepScreenOnMethod_ = nullptr, leave_ = nullptr, finish_ = nullptr, requestFrame_ = nullptr, setCursor_ = nullptr;
     std::string filesDir_, externalFilesDir_;
@@ -759,6 +809,22 @@ JNIEXPORT void JNICALL Java_dev_kompoz_KompozView_nativeMotion(JNIEnv* e, jclass
 
 JNIEXPORT jboolean JNICALL Java_dev_kompoz_KompozView_nativeKey(JNIEnv*, jclass, jint code, jboolean down, jint meta) {
     return gApp && gApp->key(code, down, meta);
+}
+
+JNIEXPORT void JNICALL Java_dev_kompoz_KompozView_nativeDrag(JNIEnv* e, jclass, jint kind, jfloat x, jfloat y, jbyteArray types) {
+    if (!gApp) return;
+    std::vector<std::string> mimeTypes;
+    std::string lines = types ? kompoz::platform::fromBytes(e, types) : std::string();
+    for (size_t at = 0; at < lines.size();) {
+        size_t end = std::min(lines.find('\n', at), lines.size());
+        if (end > at) mimeTypes.push_back(lines.substr(at, end - at));
+        at = end + 1;
+    }
+    gApp->drag(kind, x, y, std::move(mimeTypes));
+}
+
+JNIEXPORT void JNICALL Java_dev_kompoz_KompozView_nativeDrop(JNIEnv* e, jclass, jfloat x, jfloat y, jobjectArray clip) {
+    if (gApp) gApp->drop(x, y, kompoz::android_ime::clipFromJava(e, clip));
 }
 
 } // extern "C"

@@ -1143,6 +1143,22 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Receiving content, as Compose foundation does**: `Modifier.contentReceiver` (a lambda, or a `ReceiveContentListener`
+  that hears of drags too) takes what is pasted into a `TextFieldState` field inside it, dropped on it or inside it, or
+  sent by the soft keyboard (images and GIFs, Android 7.1+). The `TransferableContent` (`source`,
+  `hasMediaType(MediaType.Image)`, `consume { item -> … }`) goes from the innermost receiver out, each given what the one
+  inside it left, and a field inserts the text none took. A drag over a field or a receiver inside one is over the
+  outer one too (it isn't told it left). `TextFieldState` fields take dropped text, their caret following the drag. Of
+  two drag targets, the one entered is now told before the one left, as in Compose.
+- **A clipboard and drops that carry more than text**: a `ClipEntry` is items (text, HTML, a URI, an image's bytes) and
+  a `clipMetadata` of their MIME types. Each platform reads and writes them in its own formats: Wayland's and X11's MIME
+  types, Windows' CF_UNICODETEXT, HTML Format, PNG, CF_DIB and CF_HDROP, macOS' pasteboard, Android's ClipData (an
+  image by its content URI), the web's paste event and ClipboardItem. Drops from other apps carry the same (images
+  among dropped files told by their names), and on Android the app takes drags from one beside it in split screen.
+  `decodeToImageBitmap()` decodes an image's bytes; `AsyncImage` loads `file://` URIs, and `content://` ones on Android.
+- **kompozc**: a local's smart cast after `if (x != null)` (`onImage(uri)` with `uri: String?`; not where the block
+  sets x), the lambda of `contentReceiver { content -> … }` giving `content`, `null` or `content.consume { … }`, and
+  `isEmpty()` of a C++ value that has `empty()` (an `ImageBitmap`).
 - **KOMPOZ_PROFILE counts no refresh missed where a frame had nothing new to show**: a frame that changed nothing on
   the screen isn't shown, and the refreshes until the next one shown were counted as missed. An animation the screen
   doesn't show (the showcase's Material tab, scrolled away from its moving dot, makes a frame for every refresh) made

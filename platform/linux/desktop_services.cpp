@@ -71,31 +71,6 @@ int64_t monotonicNow() {
     return int64_t(t.tv_sec) * 1'000'000'000 + t.tv_nsec;
 }
 
-std::vector<std::string> filesInUriList(const std::string& list) {
-    std::vector<std::string> files;
-    size_t start = 0;
-    while (start < list.size()) {
-        size_t end = list.find('\n', start);
-        std::string line = list.substr(start, end == std::string::npos ? std::string::npos : end - start);
-        start = end == std::string::npos ? list.size() : end + 1;
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (!line.starts_with("file://")) continue;
-        line.erase(0, 7);
-        if (size_t slash = line.find('/'); slash != 0) line.erase(0, slash);  // (a host before the path)
-        std::string path;
-        for (size_t i = 0; i < line.size(); ++i) {
-            if (line[i] == '%' && i + 2 < line.size() && std::isxdigit(uint8_t(line[i + 1])) && std::isxdigit(uint8_t(line[i + 2]))) {
-                path += char(std::stoi(line.substr(i + 1, 2), nullptr, 16));
-                i += 2;
-            } else {
-                path += line[i];
-            }
-        }
-        if (!path.empty()) files.push_back(path);
-    }
-    return files;
-}
-
 void quitOnSignals(int wakeFd) {
     gSignalWakeFd = wakeFd;
     struct sigaction quit{};

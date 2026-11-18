@@ -1180,6 +1180,23 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Compose foundation'daki gibi içerik alma**: `Modifier.contentReceiver` (bir lambda ya da sürüklemeleri de duyan bir
+  `ReceiveContentListener`) içindeki bir `TextFieldState` alanına yapıştırılanı, üstüne ya da içine bırakılanı ya da ekran
+  klavyesinin gönderdiğini (resimler ve GIF'ler, Android 7.1+) alır. `TransferableContent` (`source`,
+  `hasMediaType(MediaType.Image)`, `consume { item -> … }`) en içteki alıcıdan dışarı doğru gider, her biri içindekinin
+  bıraktığını alır; hiçbirinin almadığı metni bir alan ekler. Bir alanın ya da içindeki bir alıcının üstündeki sürükleme
+  dıştakinin de üstündedir (ona ayrıldığı söylenmez). `TextFieldState` alanları bırakılan metni alır, imleçleri
+  sürüklemeyi izler. İki sürükleme hedefinden girilene artık ayrılınandan önce söylenir, Compose'daki gibi.
+- **Metinden fazlasını taşıyan pano ve bırakmalar**: bir `ClipEntry` öğelerden (metin, HTML, bir URI, bir resmin
+  baytları) ve onların MIME türlerini söyleyen bir `clipMetadata`'dan oluşur. Her platform onları kendi biçimleriyle okur
+  ve yazar: Wayland'in ve X11'in MIME türleri, Windows'un CF_UNICODETEXT, HTML Format, PNG, CF_DIB ve CF_HDROP'u, macOS'un
+  panosu, Android'in ClipData'sı (bir resim içerik URI'siyle), web'in yapıştırma olayı ve ClipboardItem'ı. Başka
+  uygulamalardan bırakılanlar da aynısını taşır (bırakılan dosyalar arasındaki resimler adlarından anlaşılır); Android'de
+  uygulama bölünmüş ekranda yanındakinden gelen sürüklemeleri alır. `decodeToImageBitmap()` bir resmin baytlarını çözer;
+  `AsyncImage` `file://` URI'lerini, Android'de `content://` olanları da yükler.
+- **kompozc**: bir yerelin `if (x != null)` sonrası akıllı tür dönüşümü (`uri: String?` ile `onImage(uri)`; bloğun x'i
+  değiştirdiği yerde değil), `content`, `null` ya da `content.consume { … }` veren `contentReceiver { content -> … }`
+  lambdası ve `empty()`'si olan bir C++ değerinin `isEmpty()`'si (bir `ImageBitmap`).
 - **KOMPOZ_PROFILE, yeni gösterecek bir şeyi olmayan bir karenin ardından kaçan tazeleme saymaz**: ekranda hiçbir
   şeyi değiştirmeyen bir kare gösterilmez, bir sonraki gösterilen kareye kadarki tazelemeler kaçmış sayılıyordu.
   Ekranın göstermediği bir animasyon (showcase'in Material sekmesi, kayan noktasından uzağa kaydırılınca her tazeleme

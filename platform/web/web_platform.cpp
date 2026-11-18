@@ -1,6 +1,7 @@
 #include "web_platform.hpp"
 
 #include "../app/app_core.hpp"
+#include "../common/clip_formats.hpp"
 #include "../common/system.hpp"
 
 #include <emscripten.h>
@@ -53,45 +54,77 @@ EM_JS(void, web_install, (), {
         else if (area.value) send(_kompoz_web_text, area.value);
         area.value = '';
     });
+    // A clip handed to the core a part (a type and its bytes) at a time: pasted (kind 0) or dropped (1).
+    const sendClip = (kind, x, y, parts) => {
+        _kompoz_web_clip_begin();
+        for (const [type, data] of parts) {
+            const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+            const t = stringToNewUTF8(type), p = _malloc(Math.max(1, bytes.length));
+            HEAPU8.set(bytes, p);
+            _kompoz_web_clip_part(t, p, bytes.length);
+            _free(p), _free(t);
+        }
+        _kompoz_web_clip_end(kind, x, y);
+    };
+    // What a DataTransfer holds as such parts: its text, HTML and links, and its files: an
+    // image's bytes as they are (`asBytes`: a pasted screenshot), else written into the virtual
+    // file system (/tmp/drop/<n>/<name>) and named by a link.
+    let drops = 0;
+    const partsOf = async (t, asBytes) => {
+        const parts = [], uris = [];
+        if (t.files && t.files.length) {
+            const dir = '/tmp/drop/' + (drops++);
+            for (const file of t.files) {
+                const bytes = new Uint8Array(await file.arrayBuffer().catch(() => new ArrayBuffer(0)));
+                if (asBytes && file.type.startsWith('image/')) { parts.push([file.type, bytes]); continue; }
+                FS.mkdirTree(dir);
+                FS.writeFile(dir + '/' + file.name, bytes);
+                uris.push('file://' + encodeURI(dir + '/' + file.name));
+            }
+        }
+        if (uris.length) return [['text/uri-list', uris.join('\r\n') + '\r\n']];
+        for (const type of ['text/plain', 'text/html', 'text/uri-list']) {
+            const data = t.getData(type);
+            if (data && !(type === 'text/uri-list' && t.getData('text/plain'))) parts.push([type, data]);  // (a link with its text: the text)
+        }
+        return parts;
+    };
     area.addEventListener('paste', (e) => {
         e.preventDefault();
-        send(_kompoz_web_paste, e.clipboardData ? e.clipboardData.getData('text/plain') : '');
+        _kompoz_web_paste_begun();  // (its files are read before Ctrl+V goes on)
+        if (!e.clipboardData) return sendClip(0, 0, 0, []);
+        // (Read now: the files can only be had while the event is handled.)
+        const files = Array.from(e.clipboardData.files || []), text = {};
+        for (const type of ['text/plain', 'text/html', 'text/uri-list']) text[type] = e.clipboardData.getData(type);
+        partsOf({files: files, getData: (type) => text[type]}, true).then((parts) => sendClip(0, 0, 0, parts));
     });
     const copy = (e) => {
         e.preventDefault();
-        if (e.clipboardData) e.clipboardData.setData('text/plain', UTF8ToString(_kompoz_web_clipboard()));
+        if (!e.clipboardData) return;
+        e.clipboardData.setData('text/plain', UTF8ToString(_kompoz_web_clipboard()));
+        const html = UTF8ToString(_kompoz_web_clipboard_html());
+        if (html) e.clipboardData.setData('text/html', html);
     };
     area.addEventListener('copy', copy);
     area.addEventListener('cut', copy);
-    // Drops: files first (each read into /tmp/drop/<n>/<name>), else text.
-    let drops = 0;
+    // Drops: what it carries told as it comes over (its types: a file's own, where the browser
+    // tells it), all of it at the drop.
     const where = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
     const drop = (kind, e, text) => { const [x, y] = where(e); const p = stringToNewUTF8(text || ''); _kompoz_web_drop(kind, x, y, p); _free(p); };
-    canvas.addEventListener('dragenter', (e) => { e.preventDefault(); drop(0, e); });
+    const typesOf = (t) => {
+        const types = [];
+        for (const item of t.items || []) types.push(item.kind === 'file' ? (item.type ? 'Files:' + item.type : 'Files') : item.type);
+        return types.join('\n');
+    };
+    canvas.addEventListener('dragenter', (e) => { e.preventDefault(); drop(0, e, typesOf(e.dataTransfer)); });
     canvas.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; drop(1, e); });
     canvas.addEventListener('dragleave', (e) => { drop(4, e); });
     canvas.addEventListener('drop', (e) => {
         e.preventDefault();
-        const t = e.dataTransfer;
-        if (t.files && t.files.length) {
-            const dir = '/tmp/drop/' + (drops++);
-            FS.mkdirTree(dir);
-            let left = t.files.length;
-            for (const file of t.files) {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const path = dir + '/' + file.name;
-                    FS.writeFile(path, new Uint8Array(reader.result));
-                    drop(2, e, path);
-                    if (--left === 0) drop(4, e);
-                };
-                reader.onerror = () => { if (--left === 0) drop(4, e); };
-                reader.readAsArrayBuffer(file);
-            }
-        } else {
-            drop(3, e, t.getData('text/plain'));
-            drop(4, e);
-        }
+        const [x, y] = where(e), t = e.dataTransfer;
+        const text = {}, files = Array.from(t.files || []);
+        for (const type of ['text/plain', 'text/html', 'text/uri-list']) text[type] = t.getData(type);
+        partsOf({files: files, getData: (type) => text[type]}, false).then((parts) => sendClip(1, x, y, parts));
     });
     // The color scheme, the pixel ratio (another screen, the page zoomed), the #fragment.
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => _kompoz_web_changed(0));
@@ -125,8 +158,19 @@ EM_JS(void, web_canvas_offset, (float* x, float* y), {
     HEAPF32[x >> 2] = r.left, HEAPF32[y >> 2] = r.top;
 });
 EM_JS(void, web_set_cursor, (const char* name), { document.getElementById('canvas').style.cursor = UTF8ToString(name); });
-EM_JS(void, web_write_clipboard, (const char* text), {
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(UTF8ToString(text)).catch(() => {});
+// A clip to the system clipboard: its text, and its HTML and an image (PNG) where the browser
+// takes them (ClipboardItem).
+EM_JS(void, web_write_clipboard, (const char* text, const char* html, const uint8_t* png, int pngSize), {
+    if (!navigator.clipboard) return;
+    const plain = UTF8ToString(text), markup = UTF8ToString(html);
+    if ((markup || pngSize) && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+        const parts = {'text/plain': new Blob([plain], {type: 'text/plain'})};
+        if (markup) parts['text/html'] = new Blob([markup], {type: 'text/html'});
+        if (pngSize) parts['image/png'] = new Blob([HEAPU8.slice(png, png + pngSize)], {type: 'image/png'});
+        navigator.clipboard.write([new ClipboardItem(parts)]).catch(() => {});
+    } else if (navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(plain).catch(() => {});
+    }
 });
 EM_JS(void, web_open, (const char* url), { window.open(UTF8ToString(url), '_blank', 'noopener'); });
 EM_JS(void, web_vibrate, (int millis), {
@@ -295,11 +339,11 @@ public:
             static constexpr const char* names[] = {"default", "pointer", "text", "crosshair", "move", "ew-resize", "ns-resize", "not-allowed", "wait"};
             web_set_cursor(names[std::min(size_t(cursor), std::size(names) - 1)]);
         };
-        callbacks.getClipboard = [self] { return self->clipboard_; };
-        callbacks.setClipboard = [self](const std::string& text) {
-            self->clipboard_ = text;
-            web_write_clipboard(text.c_str());  // (and the copy event that follows Ctrl+C takes it)
-        };
+        callbacks.getClipboard = [self] { return self->clipboard_.getPlainText(); };
+        callbacks.setClipboard = [self](const std::string& text) { self->writeClipboard(ClipEntry::withPlainText(text)); };
+        // (What the last paste brought, or what the app put there: the page can't read the clipboard as it likes.)
+        callbacks.getClipEntry = [self] { return self->clipboard_.items.empty() ? std::nullopt : std::optional(self->clipboard_); };
+        callbacks.setClipEntry = [self](const std::optional<ClipEntry>& entry) { self->writeClipboard(entry.value_or(ClipEntry{})); };
         callbacks.openUri = [](const std::string& uri) { web_open(uri.c_str()); };
         callbacks.locationChanged = [](const std::string& path) { web_set_hash(path.c_str()); };
         callbacks.hapticFeedback = [](HapticFeedbackType type) {
@@ -332,15 +376,65 @@ public:
         deliver(Event{.type = EventType::KeyDown, .time = now(), .key = Key::Backspace});
         deliver(Event{.type = EventType::KeyUp, .time = now(), .key = Key::Backspace});
     }
-    void pasted(const char* text) {
-        clipboard_ = text;
-        if (heldPaste_) deliver(*std::exchange(heldPaste_, std::nullopt));
+    // The app's clip to the system clipboard (and to the copy event that follows Ctrl+C).
+    void writeClipboard(const ClipEntry& entry) {
+        clipboard_ = entry;
+        copied_ = clipboard_.getPlainText();
+        copiedHtml_.clear();
+        const ClipEntry::Item* image = nullptr;
+        for (const ClipEntry::Item& item : entry.items) {
+            if (item.htmlText && copiedHtml_.empty()) copiedHtml_ = *item.htmlText;
+            if (!image && item.mimeType == "image/png" && !item.data.empty()) image = &item;
+        }
+        web_write_clipboard(copied_.c_str(), copiedHtml_.c_str(), image ? image->data.data() : nullptr, image ? int(image->data.size()) : 0);
     }
-    const char* clipboard() const { return clipboard_.c_str(); }
+    // A clip from the page, a part at a time, then pasted (kind 0) or dropped (1, at x, y).
+    void clipBegin() { parts_.clear(); }
+    void clipPart(const char* type, const uint8_t* data, int size) { parts_.push_back({type, std::string(reinterpret_cast<const char*>(data), size_t(size))}); }
+    void clipEnd(int kind, float x, float y) {
+        std::vector<std::string> types;
+        for (const ClipFormat& part : parts_) types.push_back(part.type);
+        ClipEntry clip = clipFromFormats(types, [&](const std::string& type) {
+            auto part = std::ranges::find_if(parts_, [&](const ClipFormat& p) { return p.type == type; });
+            return part != parts_.end() ? part->bytes : std::string();
+        });
+        parts_.clear();
+        if (kind == 0) {
+            clipboard_ = std::move(clip);
+            pasting_ = false;
+            releasePaste();
+            return;
+        }
+        if (!clip.items.empty()) {
+            Event e{.type = EventType::DropData, .time = now(), .x = x, .y = y};
+            e.clip = std::make_shared<ClipEntry>(std::move(clip));
+            deliver(std::move(e));
+        }
+        deliver({.type = EventType::DropComplete, .time = now(), .x = x, .y = y});
+    }
+    // Ctrl+V's press, held for the paste event: let go once it brought the clipboard (or, if none
+    // came, a moment after).
+    void pasteBegun() { pasting_ = true; }
+    void releasePaste() {
+        if (heldPaste_ && !pasting_) deliver(*std::exchange(heldPaste_, std::nullopt));
+    }
+    const char* clipboard() const { return copied_.c_str(); }
+    const char* clipboardHtml() const { return copiedHtml_.c_str(); }
+    // A drag begun (kind 0; `data`: its types, a line each, "Files:<type>" for a file's), moved (1)
+    // or gone (4).
     void dropped(int kind, float x, float y, const char* data) {
-        static constexpr EventType kinds[] = {EventType::DropBegin, EventType::DropMove, EventType::DropFile, EventType::DropText, EventType::DropComplete};
-        Event e{.type = kinds[std::clamp(kind, 0, 4)], .time = now(), .x = x, .y = y};
-        e.text = data;
+        Event e{.type = kind == 0 ? EventType::DropBegin : kind == 1 ? EventType::DropMove : EventType::DropComplete, .time = now(), .x = x, .y = y};
+        if (kind == 0) {
+            std::vector<std::string> types;
+            std::string all = data;
+            for (size_t at = 0; at < all.size();) {
+                size_t end = std::min(all.find('\n', at), all.size());
+                std::string type = all.substr(at, end - at);
+                at = end + 1;
+                types.push_back(type.starts_with("Files") ? "text/uri-list" : type);  // (a file goes as a link to its copy)
+            }
+            e.mimeTypes = clipMetadataOf(types).mimeTypes;
+        }
         deliver(std::move(e));
     }
     void changed(int what) {
@@ -367,7 +461,10 @@ private:
     long timeout_ = 0;                // the coroutines' delay set (emscripten_set_timeout), 0: none
     int buttonsDown_ = 0;
     std::optional<Event> heldPaste_;  // Ctrl+V's press, until the paste event has the clipboard
-    std::string clipboard_;
+    ClipEntry clipboard_;                 // what the last paste brought, or the app's last copy
+    std::string copied_, copiedHtml_;     // the app's last copy as the copy event gives it
+    std::vector<ClipFormat> parts_;       // a clip coming from the page
+    bool pasting_ = false;                // a paste event's clip on its way
 
     double scale() const {
         if (auto v = option("KOMPOZ_SCALE"); v && std::atof(v->c_str()) > 0) return std::atof(v->c_str());
@@ -530,7 +627,7 @@ private:
         }
         if (shortcut && (name == "v" || name == "V")) {  // (its press held for the paste event's text)
             heldPaste_ = e;
-            emscripten_set_timeout([](void*) { gPlatform->pasted(gPlatform->clipboard()); }, 100, nullptr);
+            emscripten_set_timeout([](void*) { gPlatform->releasePaste(); }, 100, nullptr);
             return false;
         }
         deliver(e);
@@ -546,8 +643,12 @@ private:
 extern "C" {
 EMSCRIPTEN_KEEPALIVE void kompoz_web_text(const char* text) { gPlatform->typed(text); }
 EMSCRIPTEN_KEEPALIVE void kompoz_web_backspace() { gPlatform->pressBackspace(); }
-EMSCRIPTEN_KEEPALIVE void kompoz_web_paste(const char* text) { gPlatform->pasted(text); }
+EMSCRIPTEN_KEEPALIVE void kompoz_web_paste_begun() { gPlatform->pasteBegun(); }
+EMSCRIPTEN_KEEPALIVE void kompoz_web_clip_begin() { gPlatform->clipBegin(); }
+EMSCRIPTEN_KEEPALIVE void kompoz_web_clip_part(const char* type, const uint8_t* data, int size) { gPlatform->clipPart(type, data, size); }
+EMSCRIPTEN_KEEPALIVE void kompoz_web_clip_end(int kind, float x, float y) { gPlatform->clipEnd(kind, x, y); }
 EMSCRIPTEN_KEEPALIVE const char* kompoz_web_clipboard() { return gPlatform->clipboard(); }
+EMSCRIPTEN_KEEPALIVE const char* kompoz_web_clipboard_html() { return gPlatform->clipboardHtml(); }
 EMSCRIPTEN_KEEPALIVE void kompoz_web_drop(int kind, float x, float y, const char* data) { gPlatform->dropped(kind, x, y, data); }
 EMSCRIPTEN_KEEPALIVE void kompoz_web_changed(int what) { gPlatform->changed(what); }
 }

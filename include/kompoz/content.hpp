@@ -116,7 +116,7 @@ struct ReceiveContentListener {
     virtual void onDragEnd() {}
     virtual void onDragEnter() {}
     virtual void onDragExit() {}
-    virtual std::optional<TransferableContent> onReceive(const TransferableContent& transferableContent) = 0;
+    virtual std::optional<TransferableContent> onReceive(TransferableContent transferableContent) = 0;
 };
 
 } // namespace kompoz

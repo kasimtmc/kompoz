@@ -24,6 +24,7 @@ JavaVM* gVm = nullptr;
 pthread_key_t gAttached;  // set on the threads attached to the VM here: let go of as they end
 jclass gClass = nullptr;
 jmethodID gMediaInfo = nullptr;
+jmethodID gReadContent = nullptr;
 jmethodID gShow = nullptr, gUpdate = nullptr, gHide = nullptr, gAttach = nullptr, gFontScale = nullptr,
           gRenderGlyph = nullptr, gDynamicPalette = nullptr, gWallpaperColors = nullptr, gSystemBars = nullptr, gDecodeImage = nullptr, gImageBounds = nullptr, gHaptic = nullptr, gImeControlBy = nullptr, gSetFrameRate = nullptr, gImeControlEnd = nullptr, gHttpGet = nullptr,
           gStateSaved = nullptr, gTakeRestoredState = nullptr, gSetBackEnabled = nullptr, gViewConfiguration = nullptr,
@@ -36,6 +37,7 @@ std::function<void(const TextEditState&)> gOnEdit;
 // (reported after the focus moved to another field) is dropped.
 int gSession = 0;
 std::function<void(ImeAction)> gOnAction;
+std::function<bool(TransferableContent)> gOnContent;
 std::function<void(const std::array<float, 46>&)> gOnInsets;
 std::function<void(float)> gOnFontScale;
 std::function<void()> gOnMedia;
@@ -136,6 +138,67 @@ void setHandlers(std::function<void(const TextEditState&)> onEdit, std::function
     gOnFontScale = std::move(onFontScale);
 }
 
+void setContentHandler(std::function<bool(TransferableContent)> handler) {
+    std::lock_guard lock(gMutex);
+    gOnContent = std::move(handler);
+}
+
+ClipEntry clipFromJava(void* env, void* parts) {
+    auto* e = static_cast<JNIEnv*>(env);
+    auto array = static_cast<jobjectArray>(parts);
+    ClipEntry entry;
+    if (!array) return entry;
+    jsize count = e->GetArrayLength(array);
+    auto string = [&](jsize i) -> std::optional<std::string> {
+        auto bytes = static_cast<jbyteArray>(e->GetObjectArrayElement(array, i));
+        if (!bytes) return std::nullopt;
+        std::string s(size_t(e->GetArrayLength(bytes)), '\0');
+        e->GetByteArrayRegion(bytes, 0, jsize(s.size()), reinterpret_cast<jbyte*>(s.data()));
+        e->DeleteLocalRef(bytes);
+        return s;
+    };
+    std::string types = count > 0 ? string(0).value_or("") : "";
+    for (size_t at = 0; at < types.size();) {
+        size_t end = std::min(types.find('\n', at), types.size());
+        if (end > at) entry.clipMetadata.mimeTypes.push_back(types.substr(at, end - at));
+        at = end + 1;
+    }
+    for (jsize i = 1; i + 2 < count; i += 3) entry.items.push_back({.text = string(i), .htmlText = string(i + 1), .uri = string(i + 2)});
+    return entry;
+}
+
+void* clipToJava(void* env, const ClipEntry& entry) {
+    auto* e = static_cast<JNIEnv*>(env);
+    std::vector<const ClipEntry::Item*> items;
+    for (const ClipEntry::Item& item : entry.items)
+        if (item.text || item.htmlText || item.uri) items.push_back(&item);
+    // Its MIME types: as told, or by what its items hold.
+    std::vector<std::string> types = entry.clipMetadata.mimeTypes;
+    if (types.empty())
+        for (const ClipEntry::Item* item : items) {
+            const char* type = item->htmlText ? "text/html" : item->uri ? "text/uri-list" : "text/plain";
+            if (std::ranges::find(types, type) == types.end()) types.push_back(type);
+        }
+    std::string lines;
+    for (const std::string& type : types) lines += type + '\n';
+    jclass bytesClass = e->FindClass("[B");
+    jobjectArray parts = e->NewObjectArray(jsize(1 + items.size() * 3), bytesClass, nullptr);
+    e->DeleteLocalRef(bytesClass);
+    auto put = [&](jsize i, const std::optional<std::string>& s) {
+        if (!s) return;
+        jbyteArray bytes = toBytes(e, *s);
+        e->SetObjectArrayElement(parts, i, bytes);
+        e->DeleteLocalRef(bytes);
+    };
+    put(0, lines);
+    for (size_t i = 0; i < items.size(); ++i) {
+        put(jsize(1 + i * 3), items[i]->text);
+        put(jsize(2 + i * 3), items[i]->htmlText);
+        put(jsize(3 + i * 3), items[i]->uri);
+    }
+    return parts;
+}
+
 void attach() {
     if (!gClass) return;
     JNIEnv* e = env();
@@ -149,7 +212,8 @@ void show(const TextEditState& state, Rect area, const ImeOptions& options) {
     jbyteArray text = toBytes(e, state.text);
     e->CallStaticVoidMethod(gClass, gShow, text, jint(state.selectionStart), jint(state.selectionEnd), jint(area.x),
                             jint(area.y), jint(area.width), jint(area.height), jint(inputType(options)),
-                            jint(imeAction(options.imeAction, options.singleLine)), jint(++gSession), jboolean(options.showKeyboard));
+                            jint(imeAction(options.imeAction, options.singleLine)), jint(++gSession), jboolean(options.showKeyboard),
+                            jboolean(options.acceptsContent));
     e->DeleteLocalRef(text);
     checkException(e);
 }
@@ -508,6 +572,22 @@ std::vector<uint8_t> httpGet(const std::string& url) {
     return body;
 }
 
+std::vector<uint8_t> readContent(const std::string& uri) {
+    if (!gClass || !gReadContent) return {};
+    JNIEnv* e = env();
+    if (e->PushLocalFrame(8) != 0) return {};
+    jstring juri = e->NewStringUTF(uri.c_str());
+    auto result = static_cast<jbyteArray>(e->CallStaticObjectMethod(gClass, gReadContent, juri));
+    checkException(e);
+    std::vector<uint8_t> bytes;
+    if (result) {
+        bytes.resize(size_t(e->GetArrayLength(result)));
+        e->GetByteArrayRegion(result, 0, jsize(bytes.size()), reinterpret_cast<jbyte*>(bytes.data()));
+    }
+    e->PopLocalFrame(nullptr);
+    return bytes;
+}
+
 void* jniEnv() {
     JNIEnv* e = nullptr;
     if (!gVm) return nullptr;
@@ -573,7 +653,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     }
     android_ime::gClass = static_cast<jclass>(e->NewGlobalRef(local));
     e->DeleteLocalRef(local);
-    android_ime::gShow = e->GetStaticMethodID(android_ime::gClass, "show", "([BIIIIIIIIIZ)V");
+    android_ime::gShow = e->GetStaticMethodID(android_ime::gClass, "show", "([BIIIIIIIIIZZ)V");
     android_ime::gUpdate = e->GetStaticMethodID(android_ime::gClass, "update", "([BII)V");
     android_ime::gHide = e->GetStaticMethodID(android_ime::gClass, "hide", "()V");
     android_ime::gAttach = e->GetStaticMethodID(android_ime::gClass, "attach", "()V");
@@ -585,6 +665,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     android_ime::gImeControlBy = e->GetStaticMethodID(android_ime::gClass, "imeControlBy", "(F)V");
     android_ime::gImeControlEnd = e->GetStaticMethodID(android_ime::gClass, "imeControlEnd", "(F)V");
     android_ime::gHttpGet = e->GetStaticMethodID(android_ime::gClass, "httpGet", "(Ljava/lang/String;)[B");
+    android_ime::gReadContent = e->GetStaticMethodID(android_ime::gClass, "readContent", "(Ljava/lang/String;)[B");
     android_ime::gStateSaved = e->GetStaticMethodID(android_ime::gClass, "stateSaved", "([B)V");
     android_ime::gTakeRestoredState = e->GetStaticMethodID(android_ime::gClass, "takeRestoredState", "()[B");
     android_ime::gDynamicPalette = e->GetStaticMethodID(android_ime::gClass, "dynamicPalette", "()[I");
@@ -771,6 +852,24 @@ JNIEXPORT void JNICALL Java_dev_kompoz_KompozInput_nativeOnMediaChanged(JNIEnv*,
         }
         if (handler) handler();
     });
+}
+
+// (On the UI thread, where the app runs: answered at once, as the keyboard waits for it.)
+JNIEXPORT jboolean JNICALL Java_dev_kompoz_KompozInput_nativeOnContent(JNIEnv* e, jclass, jobjectArray clip, jbyteArray linkUri) {
+    std::function<bool(TransferableContent)> handler;
+    {
+        std::lock_guard lock(android_ime::gMutex);
+        handler = android_ime::gOnContent;
+    }
+    if (!handler) return JNI_FALSE;
+    TransferableContent content{.clipEntry = android_ime::clipFromJava(e, clip), .source = TransferableContent::Source::Keyboard};
+    content.clipMetadata = content.clipEntry.clipMetadata;
+    if (linkUri) {
+        std::string link(size_t(e->GetArrayLength(linkUri)), '\0');
+        e->GetByteArrayRegion(linkUri, 0, jsize(link.size()), reinterpret_cast<jbyte*>(link.data()));
+        content.platformTransferableContent = PlatformTransferableContent{std::move(link)};
+    }
+    return handler(std::move(content)) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL Java_dev_kompoz_KompozInput_nativeOnAction(JNIEnv*, jclass, jint code) {

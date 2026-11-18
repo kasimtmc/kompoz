@@ -399,8 +399,10 @@ public final class KompozInput {
     // `session`: this showing's number, which the edits made from here on carry; the native side
     // drops those still coming from the field before (the keyboard reports them a moment late).
     // `showKeyboard` false: the view takes the typing, the keyboard isn't asked to come up.
+    // `acceptsContent`: a contentReceiver is around the field: the keyboard may send content
+    // (images, GIFs; Android 7.1+), which goes to it (commitContent).
     static void show(byte[] text, int selStart, int selEnd, int x, int y, int w, int h, int inputType, int imeAction, int session,
-                     boolean showKeyboard) {
+                     boolean showKeyboard, boolean acceptsContent) {
         final String s = new String(text, StandardCharsets.UTF_8);
         final int start = charIndex(text, selStart), end = charIndex(text, selEnd);
         ui.post(() -> {
@@ -410,7 +412,7 @@ public final class KompozInput {
             params.leftMargin = x;
             params.topMargin = y + h;
             view.setLayoutParams(params);
-            view.setOptions(inputType, imeAction);
+            view.setOptions(inputType, imeAction, acceptsContent);
             view.setState(s, start, end);
             // Only now: restarting the keyboard (above) closes its connection, which reports the
             // text it had, the field before's, as it goes.
@@ -609,6 +611,23 @@ public final class KompozInput {
             return null;
         } finally {
             if (connection != null) connection.disconnect();
+        }
+    }
+
+    // A content:// URI's bytes (an image the keyboard sent, a drop's, the clipboard's), from its
+    // provider; null if it can't be read. Called from the image loader's threads.
+    static byte[] readContent(String uri) {
+        Activity activity = KompozActivity.current;
+        if (activity == null) return null;
+        try (InputStream in = activity.getContentResolver().openInputStream(android.net.Uri.parse(uri))) {
+            if (in == null) return null;
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[16384];
+            for (int n; (n = in.read(buffer)) > 0;) out.write(buffer, 0, n);
+            return out.toByteArray();
+        } catch (Exception e) {
+            android.util.Log.w("Kompoz", "can't read " + uri + ": " + e);
+            return null;
         }
     }
 
@@ -1214,6 +1233,7 @@ public final class KompozInput {
 
     static native void nativeOnEdit(int session, byte[] text, int selStart, int selEnd, int compStart, int compEnd);
     static native void nativeOnAction(int action);
+    static native boolean nativeOnContent(byte[][] clip, byte[] linkUri);  // clip: as KompozActivity.clipParts gives it
     static native void nativeOnInsets(int[] values);  // see sendInsets
     static native void nativeOnFontScale(float scale);
     static native void nativeOnMediaChanged();  // see mediaInfo
@@ -1245,17 +1265,19 @@ public final class KompozInput {
         final Editable editable = Editable.Factory.getInstance().newEditable("");
         Connection connection;
         int inputType = InputType.TYPE_CLASS_TEXT, imeAction = EditorInfo.IME_ACTION_DONE;
+        boolean acceptsContent;
 
         InputView(Context context) {
             super(context);
             setFocusable(false);  // only while a text field is focused, see show()
         }
 
-        /** Keyboard type and action key of the focused field (from its KeyboardOptions). */
-        void setOptions(int type, int action) {
-            if (type == inputType && action == imeAction) return;
+        /** Keyboard type and action key of the focused field (from its KeyboardOptions), and whether it takes content. */
+        void setOptions(int type, int action, boolean content) {
+            if (type == inputType && action == imeAction && content == acceptsContent) return;
             inputType = type;
             imeAction = action;
+            acceptsContent = content;
             imm(getContext()).restartInput(this);
         }
 
@@ -1292,6 +1314,8 @@ public final class KompozInput {
             info.initialSelStart = Selection.getSelectionStart(editable);
             info.initialSelEnd = Selection.getSelectionEnd(editable);
             if (Build.VERSION.SDK_INT >= 30) info.setInitialSurroundingText(editable);
+            // Any content, as Compose asks for where a contentReceiver is: its onReceive decides.
+            if (acceptsContent && Build.VERSION.SDK_INT >= 25) info.contentMimeTypes = new String[] {"*/*"};
             connection = new Connection(this);
             return connection;
         }
@@ -1325,6 +1349,23 @@ public final class KompozInput {
         @Override
         public Editable getEditable() {
             return owner.editable;
+        }
+
+        // Content the keyboard sends (an image, a GIF): read with the permission it grants, to the
+        // contentReceivers around the field; true if one took any of it.
+        @Override
+        public boolean commitContent(android.view.inputmethod.InputContentInfo info, int flags, android.os.Bundle options) {
+            if (!owner.acceptsContent) return false;
+            if ((flags & INPUT_CONTENT_GRANT_READ_URI_PERMISSION) != 0) {
+                try {
+                    info.requestPermission();
+                } catch (Exception e) {
+                    return false;
+                }
+            }
+            android.content.ClipData clip = new android.content.ClipData(info.getDescription(), new android.content.ClipData.Item(info.getContentUri()));
+            android.net.Uri link = info.getLinkUri();
+            return nativeOnContent(KompozActivity.clipParts(clip), link != null ? link.toString().getBytes(StandardCharsets.UTF_8) : null);
         }
 
         // Report once per batch, after the IME finished a group of operations.

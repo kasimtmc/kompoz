@@ -429,7 +429,8 @@ fun DragAndDropSection() {
     var overDrop by remember { mutableStateOf(false) }
     Section("Sürükle-bırak (dragAndDropSource / dragAndDropTarget)") {
         Text("Bir kartı basılı tutup öbür sütuna sürükleyin (fareyle doğrudan sürükleyin); Escape vazgeçer. Masaüstünde " +
-                 "dosya yöneticisinden ya da tarayıcıdan aşağıdaki alana dosya / metin de bırakabilirsiniz.",
+                 "dosya yöneticisinden ya da tarayıcıdan, Android'de bölünmüş ekrandaki bir uygulamadan aşağıdaki alana " +
+                 "dosya / metin de bırakabilirsiniz.",
              color = cs.onSurfaceVariant, style = typography.bodyMedium)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (column in 0 until 2) {
@@ -496,5 +497,70 @@ fun DragAndDropSection() {
             contentAlignment = Alignment.CenterStart) {
             Text(if (dropped.isEmpty()) "Buraya bırakın" else "Bırakılan: $dropped", color = cs.onSurfaceVariant, style = typography.bodyMedium)
         }
+    }
+}
+
+// Compose foundation's contentReceiver: images pasted, dropped or sent by the keyboard (a GIF from
+// Gboard) are taken here; what isn't an image goes on to the field (its text).
+@Kompozable
+fun ContentReceiverSection() {
+    val cs = MaterialTheme.colorScheme
+    val state = rememberTextFieldState()
+    var links by remember { mutableStateOf(listOf<String>()) }        // images by their URI (Android, dropped files)
+    var pictures by remember { mutableStateOf(listOf<ImageBitmap>()) }  // images as bytes (a desktop clipboard's)
+    var hovering by remember { mutableStateOf(false) }
+    var last by remember { mutableStateOf("") }
+    val listener = remember {
+        object : ReceiveContentListener {
+            override fun onDragEnter() { hovering = true }
+            override fun onDragExit() { hovering = false }
+            override fun onDragEnd() { hovering = false }
+            override fun onReceive(transferableContent: TransferableContent): TransferableContent? {
+                last = when (transferableContent.source) {
+                    TransferableContent.Source.Keyboard -> "klavyeden"
+                    TransferableContent.Source.DragAndDrop -> "bırakıldı"
+                    else -> "yapıştırıldı"
+                }
+                if (!transferableContent.hasMediaType(MediaType.Image)) return transferableContent
+                return transferableContent.consume { item ->
+                    val uri = item.uri
+                    if (uri != null) {
+                        links = links + uri
+                        true
+                    } else if (item.data.isNotEmpty()) {
+                        val picture = item.data.decodeToImageBitmap()
+                        if (!picture.isEmpty()) pictures = pictures + picture
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
+    }
+    Section("contentReceiver · TransferableContent") {
+        Column(modifier = Modifier
+                   .fillMaxWidth()
+                   .contentReceiver(listener)
+                   .border(if (hovering) 2.dp else 1.dp, if (hovering) cs.primary else cs.outlineVariant, RoundedCornerShape(16.dp))
+                   .padding(12.dp),
+               verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(state, modifier = Modifier.fillMaxWidth(), label = { Text("Resim yapıştırın ya da bırakın") })
+            if (links.isNotEmpty() || pictures.isNotEmpty()) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (link in links)
+                        AsyncImage(model = link, contentDescription = "Alınan resim", contentScale = ContentScale.Crop,
+                                   modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)))
+                    for (picture in pictures)
+                        Image(bitmap = picture, contentDescription = "Alınan resim", contentScale = ContentScale.Crop,
+                              modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)))
+                }
+            }
+            Text(if (last.isEmpty()) "Henüz bir şey gelmedi" else "Son gelen: $last · ${links.size + pictures.size} resim",
+                 color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+        Text("Alana bir resim yapıştırın (Ctrl+V), sürükleyip bırakın ya da Android'de klavyeden bir GIF / çıkartma gönderin: " +
+                 "resimleri çevreleyen contentReceiver alır, metin alana gider.",
+             color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
 }

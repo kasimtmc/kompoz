@@ -222,7 +222,7 @@ fun PressToRecord() {
 
 ## Sürükle-bırak
 
-`dragAndDropSource` verilerle bir sürükleme başlatır; `dragAndDropTarget` uygulamanın içinden gelen bırakmaları ya da masaüstünde dışarıdan gelen dosyaları kabul eder:
+`dragAndDropSource` verilerle bir sürükleme başlatır; `dragAndDropTarget` uygulamanın içinden ya da başka uygulamalardan gelen bırakmaları kabul eder (dosya yöneticisinden dosyalar, tarayıcıdan metin, HTML ya da bir resim; Android'de bölünmüş ekranda yanındaki uygulamadan):
 
 ```kotlin
 @Kompozable
@@ -237,6 +237,33 @@ fun DropZone() {
     }
 }
 ```
+
+## İçerik alma
+
+`Modifier.contentReceiver` üstüne ya da içine yapıştırılanı, bırakılanı ya da ekran klavyesinin gönderdiğini (Gboard'dan bir resim ya da GIF) Compose foundation'daki gibi alır. Dinleyicisi bir `TransferableContent` alır: `clipEntry`'nin öğeleri (her biri metin, HTML, bir URI ya da bir masaüstü panosu resmi öyle tutuyorsa resmin baytları), neler taşıdığı (`hasMediaType(MediaType.Image)`) ve nereden geldiği (`source`). Almadığını geri verir (`consume { item -> … }` işlediği öğeleri alır); bu, çevresindeki `contentReceiver`'a, sonra gideceği yere gider: içindeki bir `TextFieldState` alanı metnini ekler.
+
+```kotlin
+@Kompozable
+fun Composer() {
+    val state = rememberTextFieldState()
+    var images by remember { mutableStateOf(listOf<String>()) }
+    Column(modifier = Modifier.contentReceiver { content ->
+        if (!content.hasMediaType(MediaType.Image)) return@contentReceiver content
+        content.consume { item ->
+            val uri = item.uri
+            if (uri != null) images = images + uri
+            uri != null
+        }
+    }) {
+        TextField(state, label = { Text("Mesaj") })
+        Row { for (image in images) AsyncImage(model = image, contentDescription = null, modifier = Modifier.size(64.dp)) }
+    }
+}
+```
+
+Bir `ReceiveContentListener` nesnesi sürüklemeleri de duyar: bir sürükleme herhangi bir yerde başlarken ve biterken `onDragStart` ile `onDragEnd`, alıcının üstüne gelip ayrılırken `onDragEnter` ile `onDragExit` (içindeki bir alan ya da başka bir alıcı onun parçasıdır: onların üstüne gitmek ayrılmak değildir). Bayt olarak gelen bir resim `item.data.decodeToImageBitmap()` ile `ImageBitmap` olur; `AsyncImage` bir `file://` URI'sini, Android'de bir `content://` URI'sini de gösterir.
+
+Pano da aynısını tutar: `clipboard().getClipEntry()` tuttuğu her şeyi verir; `setClipEntry` metni, HTML'i (`ClipEntry.withHtmlText`), dosyaların URI'lerini ve resimleri her platformun panosunun aldığı biçimde koyar (Android'inkine bir resim içerik URI'siyle konur).
 
 ## Ayrıca bakın
 

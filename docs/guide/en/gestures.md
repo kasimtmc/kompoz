@@ -222,7 +222,7 @@ fun PressToRecord() {
 
 ## Drag and drop
 
-`dragAndDropSource` starts a drag with data; `dragAndDropTarget` accepts drops, from inside the app or, on the desktop, files from outside it:
+`dragAndDropSource` starts a drag with data; `dragAndDropTarget` accepts drops, from inside the app or from other apps (files from a file manager, text, HTML or an image from a browser; on Android, from an app beside it in split screen):
 
 ```kotlin
 @Kompozable
@@ -237,6 +237,33 @@ fun DropZone() {
     }
 }
 ```
+
+## Receiving content
+
+`Modifier.contentReceiver` takes what is pasted, dropped or sent by the soft keyboard (an image or GIF from Gboard) on it or inside it, as Compose foundation's does. Its listener gets a `TransferableContent`: the `clipEntry`'s items (each text, HTML, a URI, or an image's bytes where a desktop clipboard holds one as such), what it holds (`hasMediaType(MediaType.Image)`) and where it came from (`source`). It gives back what it didn't take (`consume { item -> … }` takes the items it handles), which goes on to the `contentReceiver` around it, then to where it was going: a `TextFieldState` field inside it inserts its text.
+
+```kotlin
+@Kompozable
+fun Composer() {
+    val state = rememberTextFieldState()
+    var images by remember { mutableStateOf(listOf<String>()) }
+    Column(modifier = Modifier.contentReceiver { content ->
+        if (!content.hasMediaType(MediaType.Image)) return@contentReceiver content
+        content.consume { item ->
+            val uri = item.uri
+            if (uri != null) images = images + uri
+            uri != null
+        }
+    }) {
+        TextField(state, label = { Text("Message") })
+        Row { for (image in images) AsyncImage(model = image, contentDescription = null, modifier = Modifier.size(64.dp)) }
+    }
+}
+```
+
+A `ReceiveContentListener` object hears of drags too: `onDragStart` and `onDragEnd` as one begins and ends anywhere, `onDragEnter` and `onDragExit` as it comes over the receiver and leaves it (a field or another receiver inside it is part of it: going over them is not leaving). An image as bytes becomes an `ImageBitmap` with `item.data.decodeToImageBitmap()`; `AsyncImage` shows a `file://` URI, and a `content://` one on Android.
+
+The clipboard holds the same: `clipboard().getClipEntry()` gives all it holds and `setClipEntry` puts text, HTML (`ClipEntry.withHtmlText`), files' URIs and images on it, as each platform's clipboard takes them (an image goes on Android's by its content URI).
 
 ## See also
 

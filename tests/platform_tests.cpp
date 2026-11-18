@@ -4,6 +4,7 @@
 // registry, the accessibility bus's launcher and a screen reader.
 
 #include "../platform/linux/atspi_bridge.hpp"
+#include "../platform/common/clip_formats.hpp"
 #include "../platform/common/image_codec.hpp"
 #include "../platform/common/image_loader.hpp"
 #include "../platform/linux/libdbus.hpp"
@@ -855,12 +856,57 @@ void atspiBridgeFollowsTheDesktop() {
 
 } // namespace
 
+// A clip as the MIME-typed clipboards and drags hold it, and read back from what they offer.
+void clipsGoByMimeTypes() {
+    ClipEntry entry = ClipEntry::withHtmlText("kalın yazı", "<b>kalın</b> yazı");
+    entry.items.push_back({.mimeType = "image/png", .data = {0x89, 'P', 'N', 'G'}});
+    std::vector<platform::ClipFormat> formats = platform::clipFormats(entry);
+    auto as = [&](const std::string& type) {
+        auto f = std::ranges::find_if(formats, [&](const platform::ClipFormat& f) { return f.type == type; });
+        return f != formats.end() ? std::optional(f->bytes) : std::nullopt;
+    };
+    CHECK(formats.front().type == "text/plain;charset=utf-8" && as("UTF8_STRING") == "kalın yazı" && as("STRING"));
+    CHECK(as("text/html") == "<b>kalın</b> yazı" && as("image/png") == std::string("\x89PNG", 4) && !as("text/uri-list"));
+    // Read back: the text and HTML an item, the image another; only what is asked for read.
+    std::vector<std::string> types;
+    for (const auto& f : formats) types.push_back(f.type);
+    std::vector<std::string> read;
+    ClipEntry back = platform::clipFromFormats(types, [&](const std::string& type) {
+        read.push_back(type);
+        return *as(type);
+    });
+    CHECK(back.items.size() == 2 && back.items[0].text == "kalın yazı" && back.items[0].htmlText == "<b>kalın</b> yazı");
+    CHECK(back.items[1].mimeType == "image/png" && back.items[1].data.size() == 4);
+    CHECK((read == std::vector<std::string>{"text/plain;charset=utf-8", "text/html", "image/png"}));
+    CHECK((back.clipMetadata.mimeTypes == std::vector<std::string>{"text/plain", "text/html", "image/png"}));
+    CHECK((platform::clipMetadataOf(types).mimeTypes == back.clipMetadata.mimeTypes));
+    // HTML in UTF-16 with its byte order mark (as some browsers write it), and X11's text alone.
+    ClipEntry wide = platform::clipFromFormats({"text/html", "UTF8_STRING"}, [](const std::string& type) {
+        return type == "text/html" ? std::string("\xFF\xFE<\0b\0>\0\xE7\0", 10) : std::string("ç");
+    });
+    CHECK(wide.items.size() == 1 && wide.items[0].htmlText == "<b>ç" && wide.items[0].text == "ç");
+    // Files: an item each, from a URI list or a file manager's copied files (whose text is left).
+    ClipEntry files = platform::clipFromFormats({"x-special/gnome-copied-files", "text/plain"}, [](const std::string& type) {
+        return type == "text/plain" ? std::string("/tmp/a b.png") : std::string("copy\nfile:///tmp/a%20b.png\nfile:///tmp/c.txt");
+    });
+    CHECK(files.items.size() == 2 && files.items[0].uri == "file:///tmp/a%20b.png" && !files.items[0].text);
+    CHECK((files.clipMetadata.mimeTypes == std::vector<std::string>{"text/uri-list", "image/png"}));  // (an image among them, by its name)
+    CHECK(platform::imageTypeOfName("/a/B.JPEG") == "image/jpeg" && platform::imageTypeOfName("notlar.txt").empty());
+    CHECK((platform::clipFiles(files) == std::vector<std::string>{"/tmp/a b.png", "/tmp/c.txt"}));
+    ClipEntry windows{.items = {{.uri = platform::fileUri("C:\\Belgeler\\ö.txt")}}};
+    CHECK(windows.items[0].uri == "file:///C:/Belgeler/%C3%B6.txt" && (platform::clipFiles(windows) == std::vector<std::string>{"C:/Belgeler/ö.txt"}));
+    CHECK(platform::clipFormats(files).size() == 1 && platform::clipFormats(files)[0].type == "text/uri-list" &&
+          platform::clipFormats(files)[0].bytes == "file:///tmp/a%20b.png\r\nfile:///tmp/c.txt\r\n");
+    CHECK(platform::clipFormats(ClipEntry{}).empty() && platform::clipFromFormats({}, [](const std::string&) { return std::string(); }).items.empty());
+}
+
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0);  // what failed seen before a crash
     // libdbus kept loaded throughout, and what it keeps for the process freed at the end, its users
     // all done (as SDL_Quit does): else it goes unloaded with that still held (LeakSanitizer).
     void* dbus = dlopen("libdbus-1.so.3", RTLD_NOW | RTLD_LOCAL);
     kdeConfigIsRead();
+    clipsGoByMimeTypes();
     imagesAreDecoded();
     pngAndBmpAreRead();
     wallpaperChangesAreFollowed();

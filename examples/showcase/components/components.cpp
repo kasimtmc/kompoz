@@ -45,6 +45,7 @@ fun ComponentsScreen(modifier: Modifier) {
         item(key = "PositionSection") { PositionSection() }
         item(key = "ZIndexSection") { ZIndexSection() }
         item(key = "DragAndDropSection") { DragAndDropSection() }
+        item(key = "ContentReceiverSection") { ContentReceiverSection() }
         item(key = "AnimationsSection") { AnimationsSection() }
         item(key = "FlingSection") { FlingSection() }
         item(key = "ImagesSection") { ImagesSection() }

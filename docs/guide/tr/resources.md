@@ -113,7 +113,7 @@ fun ShareRow(link: String) {
 | Hizmet | Ne yapar |
 |---|---|
 | `uriHandler().openUri(uri)` | Bir bağlantı açar: uygulamanın kendi derin bağlantılarından birini uygulamada, `http(s)`'yi tarayıcıda, diğerlerini (`mailto:`, `tel:`) onları karşılayan uygulamada. |
-| `LocalClipboardManager.current.setText(text)`, `getText()` | Sistem panosundaki metin. `clipboard()`, Compose 1.8'in coroutine sürümüdür. |
+| `LocalClipboardManager.current.setText(text)`, `getText()` | Sistem panosundaki metin. `clipboard()`, Compose 1.8'in coroutine sürümüdür; panonun tuttuğu her şeyle: metin, HTML, resimler, dosyalar ([İçerik alma](gestures.md#içerik-alma)). |
 | `hapticFeedback().performHapticFeedback(type)` | Sistemin yaptığı gibi kısa bir titreşim: Android'de Android'inki, web'de tarayıcınınki, masaüstlerinde hiçbir şey. |
 | `LocalSoftwareKeyboardController.current.hide()`, `show()` | Odaklanmış alanın yazılım klavyesini gizler ya da gösterir. |
 | `LocalFocusManager.current.clearFocus()` | Odağı kaldırır (bkz. [Hareketler](gestures.md#odak)). |

@@ -51,7 +51,11 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "dragAndDropSource", "update", "LifecycleResumeEffect", "LifecycleStartEffect", "flatMapLatest", "mapLatest", "flatMapConcat",
     "removeIf", "removeAll", "ifEmpty", "ifBlank", "byValue", "rememberScrollableState", "rememberScrollable2DState",
     "staticKompozitionLocalOf", "CustomAccessibilityAction", "setProgress", "onKeyEvent", "onPreviewKeyEvent", "mediaQuery",
-    "derivedMediaQuery", "SubkompozLayout", "rememberPagerState", "rememberCarouselState"};
+    "derivedMediaQuery", "SubkompozLayout", "rememberPagerState", "rememberCarouselState", "contentReceiver", "consume"};
+
+// Functions whose lambda gives a nullable of what it is given (Compose's contentReceiver { content ->
+// gives what it left of it, null for nothing}): its returns of the two kinds made one type.
+const std::set<std::string, std::less<>> kNullableOfParameterLambdas = {"contentReceiver"};
 
 // Kotlin types the C++ way.
 const std::map<std::string, std::string, std::less<>> kTypes = {
@@ -155,7 +159,8 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "coerceIn", "coerceAtLeast", "coerceAtMost", "roundToInt", "toPx", "roundToPx", "toDp", "find", "add", "addAll", "removeAt", "remove", "repeat",
     "format", "indexOfFirst", "indexOfLast", "removeIf", "removeAll", "flatMap", "sortedByDescending", "maxByOrNull", "minByOrNull",
     "mapNotNull", "filterIndexed", "distinctBy", "takeUnless", "groupBy", "associateBy", "associateWith", "chunked", "partition",
-    "ifEmpty", "ifBlank", "shuffle", "isDigit", "isLetter", "isLetterOrDigit", "isWhitespace", "isUpperCase", "isLowerCase"};
+    "ifEmpty", "ifBlank", "shuffle", "isDigit", "isLetter", "isLetterOrDigit", "isWhitespace", "isUpperCase", "isLowerCase",
+    "decodeToImageBitmap"};
 
 // Kotlin's members that change nothing (what else a value's member call does may be anything: next(), add(x)).
 const std::set<std::string, std::less<>> kPureMembers = {
@@ -169,7 +174,7 @@ const std::set<std::string, std::less<>> kPureMembers = {
     "flatMap", "sortedByDescending", "maxByOrNull", "minByOrNull", "mapNotNull", "filterIndexed", "distinctBy", "groupBy",
     "associateBy", "associateWith", "chunked", "partition", "ifEmpty", "ifBlank", "isDigit", "isLetter", "isLetterOrDigit",
     "isWhitespace", "isUpperCase", "isLowerCase", "copy", "padStart", "padEnd", "plus", "minus", "times", "div", "rem", "toChar",
-    "code", "equals", "hashCode", "compareTo", "copyOf", "get", "keys", "values", "containsKey", "lerp", "compositeOver"};
+    "code", "equals", "hashCode", "compareTo", "copyOf", "get", "keys", "values", "containsKey", "lerp", "compositeOver", "decodeToImageBitmap"};
 
 // Calls whose lambda has a receiver, Kotlin's T.() -> R: the C++ lambda takes it
 // first, and the names the body doesn't declare that are the receiver's members are the receiver's
@@ -3006,10 +3011,10 @@ private:
     void ifStatement(const Node& n, bool tail) {
         out_->text("if (");
         std::vector<const Node*> casts;
-        castCondition(*n.kids[0], casts);
+        castCondition(*n.kids[0], casts, true);
         out_->text(") {");
         scopes_.emplace_back();
-        smartCasts(casts);
+        smartCasts(casts, n.kids[1].get());
         statements(*n.kids[1], tail);
         scopes_.pop_back();
         out_->text(" }");
@@ -3021,13 +3026,14 @@ private:
 
     // A condition, its `x is T` tests on locals (and a && chain's after them) giving Kotlin's smart casts:
     // what follows a test sees x as a T (`x is T && x.y > 0`), and `casts` gets the tests, for the block after.
-    void castCondition(const Node& c, std::vector<const Node*>& casts) {
+    // (`nullChecks`: an if statement's, whose block sees `x != null`'s x as its value.)
+    void castCondition(const Node& c, std::vector<const Node*>& casts, bool nullChecks = false) {
         if (c.kind == Node::Binary && c.text == "&&") {
             out_->text("(");
-            castCondition(*c.kids[0], casts);
+            castCondition(*c.kids[0], casts, nullChecks);
             out_->text(" && ");
-            if (casts.empty()) {
-                castCondition(*c.kids[1], casts);
+            if (std::none_of(casts.begin(), casts.end(), [](const Node* t) { return t->kind == Node::Is; })) {
+                castCondition(*c.kids[1], casts, nullChecks);
             } else {
                 out_->text(capture("[&]") + "() -> bool {");
                 scopes_.emplace_back();
@@ -3040,20 +3046,35 @@ private:
             out_->text(")");
             return;
         }
-        if (c.kind == Node::Paren && c.kids[0]->kind == Node::Binary && c.kids[0]->text == "&&") return castCondition(*c.kids[0], casts);
+        if (c.kind == Node::Paren && c.kids[0]->kind == Node::Binary && c.kids[0]->text == "&&") return castCondition(*c.kids[0], casts, nullChecks);
         expr(c);
         if (c.kind == Node::Is && !c.flag && c.kids[0]->kind == Node::Name)
             if (const VarKind* k = lookup(c.kids[0]->text); k && *k == Local) casts.push_back(&c);
+        // (`x != null`: x is seen as its value, Kotlin's smart cast, where the block doesn't set x)
+        if (nullChecks && c.kind == Node::Binary && c.text == "!=" && c.kids[0]->kind == Node::Name && c.kids[1]->kind == Node::Null)
+            if (const VarKind* k = lookup(c.kids[0]->text); k && *k == Local) casts.push_back(&c);
     }
     // Each test's view, under the local's own name (Kotlin's smart cast): the T inside its value.
-    void smartCasts(const std::vector<const Node*>& casts) {
+    void smartCasts(const std::vector<const Node*>& casts, const Node* block = nullptr) {
         for (const Node* is : casts) {
             const std::string& n = is->kids[0]->text;
+            bool notNull = is->kind == Node::Binary;
+            if (notNull && (!block || assigns(*block, n))) continue;  // (a var set in it stays as it is)
             std::string held = "kompoz_smart_" + std::to_string(++smart_);
-            out_->text(" const auto& " + held + " = ::kompoz::kt::as<" + rawType(*is->type) + ">(" + cppName(n) + "); [[maybe_unused]] const auto& " +
-                      cppName(n) + " = " + held + ";");
+            std::string view = notNull ? "::kompoz::kt::nonNull(" + cppName(n) + ")" : "::kompoz::kt::as<" + rawType(*is->type) + ">(" + cppName(n) + ")";
+            out_->text(" const auto& " + held + " = " + view + "; [[maybe_unused]] const auto& " + cppName(n) + " = " + held + ";");
             declare(n, Local);
         }
+    }
+    // Whether `n` is set anywhere in `node` (assigned, or ++/--).
+    static bool assigns(const Node& node, const std::string& n) {
+        if (node.kind == Node::Assign && !node.kids.empty() && node.kids[0]->kind == Node::Name && node.kids[0]->text == n) return true;
+        if (node.kind == Node::Unary && (node.text == "++" || node.text == "--") && !node.kids.empty() &&
+            node.kids[0]->kind == Node::Name && node.kids[0]->text == n)
+            return true;
+        for (const NodeP& k : node.kids)
+            if (k && assigns(*k, n)) return true;
+        return false;
     }
 
     void whenCondition(const Node::WhenBranch& b, const std::string& subject) {
@@ -4392,7 +4413,11 @@ private:
         }
         // (a coroutine giving a value: taskResult_, its last expression co_returned)
         std::string taskResult = suspend ? std::exchange(taskResult_, std::string()) : std::string();
-        out_->text(suspend ? ") -> ::kompoz::" + (taskResult.empty() ? std::string("Task {") : "TaskOf<" + taskResult + "> {") : std::string(") {"));
+        std::string given = l.flag && l.names.size() == 1 && l.names[0] != "_" ? cppName(l.names[0]) : !l.flag && !receiver && itUsed ? "it" : "";
+        if (!suspend && value && !given.empty() && kNullableOfParameterLambdas.contains(label))
+            out_->text(") -> std::optional<std::remove_cvref_t<decltype(" + given + ")>> {");
+        else
+            out_->text(suspend ? ") -> ::kompoz::" + (taskResult.empty() ? std::string("Task {") : "TaskOf<" + taskResult + "> {") : std::string(") {"));
         bool wasTaskValue = std::exchange(taskValue_, !taskResult.empty());
         if (receiver) out_->text(" [[maybe_unused]] auto* kompoz_this_" + self + " = &kompoz_receiver_" + self + ";");
         lambdaLabels_.push_back(label);

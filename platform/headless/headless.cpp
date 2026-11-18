@@ -75,8 +75,11 @@ public:
 
     void attach(KompozHost&, KompozHost::Callbacks& callbacks) override {
         callbacks.wake = [this] { post({.type = EventType::Wake}); };
-        callbacks.getClipboard = [this] { return clipboard_; };  // (the app's own)
-        callbacks.setClipboard = [this](const std::string& text) { clipboard_ = text; };
+        // (The app's own, all it holds.)
+        callbacks.getClipboard = [this] { return clipboard_ ? clipboard_->getPlainText() : std::string(); };
+        callbacks.setClipboard = [this](const std::string& text) { clipboard_ = ClipEntry::withPlainText(text); };
+        callbacks.getClipEntry = [this] { return clipboard_; };
+        callbacks.setClipEntry = [this](const std::optional<ClipEntry>& entry) { clipboard_ = entry; };
     }
     void composed(KompozHost&, bool, int64_t) override {}
 
@@ -103,7 +106,7 @@ public:
 private:
     HeadlessGpu gpu_;
     int width_ = 1, height_ = 1;
-    std::string clipboard_;
+    std::optional<ClipEntry> clipboard_;
     std::mutex mutex_;
     std::condition_variable posted_;
     std::deque<Event> events_;

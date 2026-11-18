@@ -1,9 +1,14 @@
 package dev.kompoz;
 
+import android.app.Activity;
+import android.content.ClipDescription;
 import android.content.Context;
 import android.os.Build;
 import android.util.SparseArray;
+import java.nio.charset.StandardCharsets;
 import android.view.Choreographer;
+import android.view.DragAndDropPermissions;
+import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
@@ -32,6 +37,43 @@ final class KompozView extends SurfaceView implements SurfaceHolder.Callback, Ch
         setFocusableInTouchMode(true);
         if (Build.VERSION.SDK_INT >= 26) setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_YES);
         KompozInput.drawSurface = this;
+        setOnDragListener((view, event) -> drag(event));
+    }
+
+    // ---- Drags from other apps (split screen, a window on a desktop) ------------------------
+
+    private static DragAndDropPermissions dropPermissions;  // to read the last drop's content URIs
+
+    // Over the view: begun (its MIME types told), moved, dropped (all it carries) or gone. Any
+    // drag is taken part in: what it carries, the app's dragAndDropTargets and contentReceivers decide.
+    private boolean drag(DragEvent event) {
+        switch (event.getAction()) {
+        case DragEvent.ACTION_DRAG_STARTED:
+            return true;
+        case DragEvent.ACTION_DRAG_ENTERED: {
+            ClipDescription description = event.getClipDescription();
+            StringBuilder types = new StringBuilder();
+            for (int i = 0; description != null && i < description.getMimeTypeCount(); ++i) types.append(description.getMimeType(i)).append('\n');
+            nativeDrag(0, 0, 0, types.toString().getBytes(StandardCharsets.UTF_8));
+            return true;
+        }
+        case DragEvent.ACTION_DRAG_LOCATION:
+            nativeDrag(1, event.getX(), event.getY(), null);
+            return true;
+        case DragEvent.ACTION_DRAG_EXITED:
+            nativeDrag(2, 0, 0, null);
+            return true;
+        case DragEvent.ACTION_DROP: {
+            Activity activity = KompozActivity.current;
+            if (dropPermissions != null) dropPermissions.release();
+            dropPermissions = activity != null && event.getClipData() != null ? activity.requestDragAndDropPermissions(event) : null;
+            if (event.getClipData() == null) return false;
+            nativeDrop(event.getX(), event.getY(), KompozActivity.clipParts(event.getClipData()));
+            return true;
+        }
+        default:
+            return true;
+        }
     }
 
     // ---- The surface ----------------------------------------------------------------------
@@ -167,4 +209,6 @@ final class KompozView extends SurfaceView implements SurfaceHolder.Callback, Ch
     private static native void nativeMotion(int action, int index, int count, int[] ids, float[] xy, long timeNanos, int toolType,
                                             int actionButton, float scrollX, float scrollY, int metaState);
     private static native boolean nativeKey(int keyCode, boolean down, int metaState);
+    private static native void nativeDrag(int kind, float x, float y, byte[] mimeTypes);  // 0 begun, 1 moved, 2 gone
+    private static native void nativeDrop(float x, float y, byte[][] clip);  // as KompozActivity.clipParts gives it
 }

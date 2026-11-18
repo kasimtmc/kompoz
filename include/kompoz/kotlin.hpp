@@ -96,6 +96,14 @@ concept PointerLike = std::is_pointer_v<std::remove_cvref_t<T>> ||
 
 // The object behind a pointer (a viewModel<T>()'s shared_ptr, a raw pointer), or the value itself:
 // Kotlin's `a.b` knows no pointers (an optional is not one: a nullable's ?. unwraps it).
+// A nullable seen past `x != null` (Kotlin's smart cast): an optional's value; anything else (a
+// handle, a pointer) as it is.
+template <class T>
+decltype(auto) nonNull(T&& x) {
+    if constexpr (requires { x.has_value(); *x; } && !PointerLike<T>) return (*x);
+    else return std::forward<T>(x);
+}
+
 template <class T>
 decltype(auto) deref(T&& x) {
     if constexpr (requires { x.kompoz_object(); }) return (x.kompoz_object());  // a kompozc class's handle: its object
@@ -1148,11 +1156,15 @@ auto filterNot(const C& c, F&& f, A&&... args) {
 }
 template <class C, class... A>
 bool isEmpty(const C& c, A&&... args) {
-    KOMPOZ_KT_OWN(isEmpty()) return kt::size(c) == 0;
+    KOMPOZ_KT_OWN(isEmpty())
+    if constexpr (requires { c.empty(); } && !requires { c.size(); }) return c.empty();  // (a C++ value that is only empty or not: an ImageBitmap)
+    else return kt::size(c) == 0;
 }
 template <class C, class... A>
 bool isNotEmpty(const C& c, A&&... args) {
-    KOMPOZ_KT_OWN(isNotEmpty()) return kt::size(c) != 0;
+    KOMPOZ_KT_OWN(isNotEmpty())
+    if constexpr (requires { c.empty(); } && !requires { c.size(); }) return !c.empty();
+    else return kt::size(c) != 0;
 }
 template <class C, class... A>
 bool isBlank(const C& c, A&&... args) {

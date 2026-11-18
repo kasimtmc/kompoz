@@ -113,7 +113,7 @@ fun ShareRow(link: String) {
 | Service | What it does |
 |---|---|
 | `uriHandler().openUri(uri)` | Opens a link: one of the app's own deep links in the app, `http(s)` in the browser, others (`mailto:`, `tel:`) in the app that takes them. |
-| `LocalClipboardManager.current.setText(text)`, `getText()` | The system clipboard's text. `clipboard()` is Compose 1.8's coroutine version. |
+| `LocalClipboardManager.current.setText(text)`, `getText()` | The system clipboard's text. `clipboard()` is Compose 1.8's coroutine version, with all the clipboard holds: text, HTML, images, files ([Receiving content](gestures.md#receiving-content)). |
 | `hapticFeedback().performHapticFeedback(type)` | A short vibration, as the system does it: Android's, the browser's on the web, nothing on desktops. |
 | `LocalSoftwareKeyboardController.current.hide()`, `show()` | Hides or shows the focused field's soft keyboard. |
 | `LocalFocusManager.current.clearFocus()` | Takes focus away (see [Gestures](gestures.md#focus)). |

@@ -8,6 +8,7 @@
 #include <kompoz/host.hpp>
 #include <kompoz/preview.hpp>
 
+#include "../common/clip_formats.hpp"
 #include "../common/system.hpp"
 #include "../gpu/renderer.hpp"
 #include "../common/font_system.hpp"
@@ -124,8 +125,7 @@ struct AppState {
     bool fullRedraw = false;   // KOMPOZ_FULL_REDRAW: all of every frame drawn, as before
     // A drag from another app coming in: what it drops, gathered until it is complete.
     bool dropping = false;
-    std::vector<std::string> dropFiles;
-    std::string dropText;
+    std::shared_ptr<const kompoz::ClipEntry> dropClip;  // what the drag carries, once told
     kompoz::Offset dropAt;
     int damageFrames = 0, damageWrong = 0, keepFrames = 0, keepWrong = 0;
     kompoz::detail::RekompozitionStats traced;
@@ -313,19 +313,6 @@ void compareDamage(App& app, const Rect& damage, const uint8_t* a, int pitchA, c
         app.logf("kompoz: damage check: %d pixels differ (by up to %d) in %d,%d %dx%d px; drawn again: %.0f,%.0f %.0fx%.0f px",
                 count, worst, x0, y0, x1 - x0 + 1, y1 - y0 + 1, damage.x * s, damage.y * s, damage.width * s, damage.height * s);
     }
-}
-
-// A dropped file's path as a file: URI ("text/uri-list"): Windows' backslashes and drive letters
-// turned around, anything but letters, digits and -._~/ percent-encoded.
-std::string fileUri(std::string path) {
-    std::replace(path.begin(), path.end(), '\\', '/');
-    if (path.size() > 1 && path[1] == ':') path.insert(path.begin(), '/');
-    std::string out = "file://";
-    for (unsigned char c : path) {
-        if (std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~' || c == '/' || c == ':') out += char(c);
-        else out += std::format("%{:02X}", c);
-    }
-    return out;
 }
 
 // Draws the frame: recorded, then what changed drawn again into the kept pixels, which are put
@@ -630,11 +617,13 @@ std::string stepScript(App& app) {
             in >> x >> y;
             std::getline(in >> std::ws, what);
             float k = 1 / app.pointToDp;  // dp -> window points
-            for (platform::EventType type : {platform::EventType::DropBegin, platform::EventType::DropMove,
-                                             command == "dropfile" ? platform::EventType::DropFile : platform::EventType::DropText,
+            auto clip = std::make_shared<kompoz::ClipEntry>(command == "droptext" ? kompoz::ClipEntry::withPlainText(what)
+                                                                                    : platform::clipOfFiles({platform::fileUri(what)}));
+            for (platform::EventType type : {platform::EventType::DropBegin, platform::EventType::DropMove, platform::EventType::DropData,
                                              platform::EventType::DropComplete}) {
                 platform::Event e{.type = type, .x = x * k, .y = y * k};
-                if (type == platform::EventType::DropFile || type == platform::EventType::DropText) e.text = what;
+                if (type == platform::EventType::DropBegin) e.mimeTypes = clip->clipMetadata.mimeTypes;
+                if (type == platform::EventType::DropData) e.clip = clip;
                 handleEvent(app, e);
             }
         } else if (command == "window") {  // window focuslost|focusgained|minimized|restored: as the window manager would
@@ -823,12 +812,13 @@ void handleEvent(App& app, const platform::Event& e) {
         break;
     case EventType::PointerLeft: host.pointerExit(); break;
     case EventType::MouseMove: host.pointerMove(at, app.eventTime(e.time)); break;
-    // Files from a file manager, text from a browser: the dragAndDropTargets take them.
+    // Files from a file manager, text, HTML or an image from a browser: the dragAndDropTargets
+    // and contentReceivers take them.
     case EventType::DropBegin:
         app.dropping = true;
-        app.dropFiles.clear();
-        app.dropText.clear();
-        host.externalDragEntered({"text/uri-list", "text/plain"});  // which one isn't told until the drop
+        app.dropClip.reset();
+        // (What it carries; some platforms don't tell until the drop.)
+        host.externalDragEntered(e.mimeTypes.empty() ? std::vector<std::string>{"text/uri-list", "text/plain"} : e.mimeTypes);
         break;
     case EventType::DropMove:
         if (!app.dropping) {
@@ -837,31 +827,29 @@ void handleEvent(App& app, const platform::Event& e) {
         }
         host.externalDragMoved(at);
         break;
-    case EventType::DropFile:
-        if (!e.text.empty()) app.dropFiles.push_back(e.text);
-        app.dropAt = at;
-        break;
-    case EventType::DropText:
-        app.dropText += e.text;
+    case EventType::DropData:
+        app.dropClip = e.clip;
         app.dropAt = at;
         break;
     case EventType::DropComplete: {
         app.dropping = false;
-        kompoz::DragAndDropTransferData data;
-        if (!app.dropFiles.empty()) {
-            data.mimeTypes = {"text/uri-list"};
-            for (const std::string& path : app.dropFiles) data.text += fileUri(path) + "\r\n";
-            data.files = std::move(app.dropFiles);
-        } else if (!app.dropText.empty()) {
-            data.mimeTypes = {"text/plain"};
-            data.text = std::move(app.dropText);
-        } else {
+        std::shared_ptr<const kompoz::ClipEntry> clip = std::exchange(app.dropClip, nullptr);
+        if (!clip || clip->items.empty()) {
             host.externalDragLeft();  // it left the window, or brought nothing
             break;
         }
+        // Its clip, and as the dragAndDropTargets read it: the files' paths (their URIs), or its text.
+        kompoz::DragAndDropTransferData data;
+        data.clipEntry = *clip;
+        data.mimeTypes = clip->clipMetadata.mimeTypes;
+        data.files = platform::clipFiles(*clip);
+        if (clip->clipMetadata.hasMimeType("text/uri-list")) {
+            for (const kompoz::ClipEntry::Item& item : clip->items)
+                if (item.uri) data.text += *item.uri + "\r\n";
+        } else {
+            data.text = clip->getPlainText();
+        }
         host.externalDrop(std::move(data), app.dropAt);
-        app.dropFiles.clear();
-        app.dropText.clear();
         break;
     }
     case EventType::MouseDown:
@@ -1028,6 +1016,7 @@ bool AppCore::start(int argc, char** argv) {
                     raw->config.content);
     });
 
+    kompoz::detail::setImageDecoder([](const std::vector<uint8_t>& bytes) { return decodeImage(bytes); });  // (decodeToImageBitmap)
     KompozHost::Callbacks callbacks{
         .loadImage = [](std::string_view path) { return loadImageFile(path); },
         .loadImageAsync = [](const std::string& model, kompoz::ImageRequestSize size, std::function<void(kompoz::ImageBitmap)> done) {

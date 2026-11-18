@@ -28,9 +28,6 @@ Key keyOf(uint32_t keysym);
 // The browser, or the app for the scheme (xdg-open), its process waited for on a thread.
 void openUri(const std::string& uri);
 int64_t monotonicNow();  // ns
-// The local files a text/uri-list names (file:// addresses, percent-decoded; comments and other
-// schemes left out): what a drop of files holds.
-std::vector<std::string> filesInUriList(const std::string& list);
 // `run` (a platform's app, what main returns, -1: it couldn't run) with libdbus kept loaded
 // until what it keeps for the process is freed after it, its users all done, as SDL_Quit does.
 int withDbus(const std::function<int()>& run);

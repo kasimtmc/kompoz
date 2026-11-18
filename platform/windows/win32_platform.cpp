@@ -2,7 +2,9 @@
 
 #include "../app/app_core.hpp"
 #include "../common/desktop_accent.hpp"
+#include "../common/clip_formats.hpp"
 #include "../common/egl_window.hpp"
+#include "../common/image_codec.hpp"
 #include "../common/system.hpp"
 #include "../common/wallpaper_colors.hpp"
 #include "uia_bridge.hpp"
@@ -22,6 +24,7 @@
 #include <mmsystem.h>
 #include <ole2.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #ifdef KOMPOZ_GPU_VULKAN
 #define VK_USE_PLATFORM_WIN32_KHR 1
 #include <vulkan/vulkan.h>
@@ -35,6 +38,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <format>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -54,6 +59,195 @@ std::string narrow(const wchar_t* s, int length = -1) {
     std::string out(size_t(WideCharToMultiByte(CP_UTF8, 0, s, length, nullptr, 0, nullptr, nullptr)), '\0');
     WideCharToMultiByte(CP_UTF8, 0, s, length, out.data(), int(out.size()), nullptr, nullptr);
     return out;
+}
+
+// ---- What the clipboard and drags hold, as Windows has it --------------------------------------
+// Text is CF_UNICODETEXT; HTML "HTML Format" (CF_HTML: a header telling where the fragment is, in
+// UTF-8); an image "PNG" (browsers, Office, the Snipping Tool) or a device-independent bitmap
+// (CF_DIB); files CF_HDROP.
+
+UINT htmlFormat() {
+    static UINT format = RegisterClipboardFormatW(L"HTML Format");
+    return format;
+}
+UINT pngFormat() {
+    static UINT format = RegisterClipboardFormatW(L"PNG");
+    return format;
+}
+
+// The fragment a CF_HTML holds (the whole of it if its header can't be read).
+std::string htmlOfCfHtml(const std::string& cf) {
+    auto number = [&](const char* key) -> long {
+        size_t at = cf.find(key);
+        return at == std::string::npos ? -1 : std::strtol(cf.c_str() + at + std::strlen(key), nullptr, 10);
+    };
+    long from = number("StartFragment:"), to = number("EndFragment:");
+    if (from < 0 || to < from || size_t(to) > cf.size()) from = number("StartHTML:"), to = number("EndHTML:");
+    if (from < 0 || to < from || size_t(to) > cf.size()) return cf;
+    return cf.substr(size_t(from), size_t(to - from));
+}
+
+// HTML as CF_HTML: the header's offsets, ten digits each, to where the markup and the fragment are.
+std::string cfHtmlOf(const std::string& html) {
+    auto header = [](size_t start, size_t end, size_t fragment, size_t fragmentEnd) {
+        return std::format("Version:0.9\r\nStartHTML:{:010}\r\nEndHTML:{:010}\r\nStartFragment:{:010}\r\nEndFragment:{:010}\r\n", start, end,
+                           fragment, fragmentEnd);
+    };
+    std::string before = "<html><body>\r\n<!--StartFragment-->", after = "<!--EndFragment-->\r\n</body></html>";
+    size_t start = header(0, 0, 0, 0).size(), fragment = start + before.size(), fragmentEnd = fragment + html.size();
+    return header(start, fragmentEnd + after.size(), fragment, fragmentEnd) + before + html + after;
+}
+
+// A CF_DIB as PNG: given the file header a .bmp has, read, and written as PNG.
+std::string pngOfDib(const std::string& dib) {
+    if (dib.size() < 40) return {};
+    auto u32 = [&](size_t at) { return uint32_t(uint8_t(dib[at])) | uint32_t(uint8_t(dib[at + 1])) << 8 | uint32_t(uint8_t(dib[at + 2])) << 16 |
+                                       uint32_t(uint8_t(dib[at + 3])) << 24; };
+    uint32_t header = u32(0), bpp = uint32_t(uint8_t(dib[14])) | uint32_t(uint8_t(dib[15])) << 8, compression = u32(16), colors = u32(32);
+    size_t palette = bpp <= 8 ? size_t(colors ? colors : 1u << bpp) * 4 : 0;
+    size_t masks = header == 40 && compression == 3 ? 12 : 0;  // (BI_BITFIELDS' masks after a 40-byte header)
+    uint32_t offset = uint32_t(14 + header + masks + palette), size = uint32_t(14 + dib.size());
+    std::string bmp = "BM";
+    for (uint32_t v : {size, 0u, offset})
+        for (int i = 0; i < 4; ++i) bmp += char(v >> (8 * i) & 0xFF);
+    bmp += dib;
+    RgbaImage image = decodeBmp(reinterpret_cast<const uint8_t*>(bmp.data()), bmp.size());
+    if (image.empty()) return {};
+    std::vector<uint8_t> png = encodePng(image.width, image.height, image.rgba.data());
+    return std::string(png.begin(), png.end());
+}
+
+// A PNG as a CF_DIB: 32 bits a pixel, the bottom row first, alpha in the fourth byte.
+std::string dibOfPng(const std::string& png) {
+    RgbaImage image = decodePng(reinterpret_cast<const uint8_t*>(png.data()), png.size());
+    if (image.empty()) return {};
+    BITMAPINFOHEADER h{};
+    h.biSize = sizeof h, h.biWidth = image.width, h.biHeight = image.height, h.biPlanes = 1, h.biBitCount = 32, h.biCompression = BI_RGB;
+    h.biSizeImage = DWORD(image.width * image.height * 4);
+    std::string dib(reinterpret_cast<const char*>(&h), sizeof h);
+    dib.reserve(sizeof h + h.biSizeImage);
+    for (int y = image.height - 1; y >= 0; --y)
+        for (int x = 0; x < image.width; ++x) {
+            const uint8_t* p = &image.rgba[size_t(y * image.width + x) * 4];
+            dib += char(p[2]), dib += char(p[1]), dib += char(p[0]), dib += char(p[3]);
+        }
+    return dib;
+}
+
+// The paths a CF_HDROP (a DROPFILES) holds.
+std::vector<std::string> pathsOfDropFiles(const std::string& bytes) {
+    std::vector<std::string> paths;
+    if (bytes.size() < sizeof(DROPFILES)) return paths;
+    DROPFILES files;
+    std::memcpy(&files, bytes.data(), sizeof files);
+    for (size_t at = files.pFiles; at < bytes.size();) {
+        if (files.fWide) {
+            std::wstring path;
+            for (; at + 1 < bytes.size(); at += 2) {
+                wchar_t c = wchar_t(uint8_t(bytes[at]) | uint8_t(bytes[at + 1]) << 8);
+                if (!c) break;
+                path += c;
+            }
+            at += 2;
+            if (path.empty()) break;
+            paths.push_back(narrow(path.c_str(), int(path.size())));
+        } else {
+            std::string path(bytes.c_str() + at);
+            at += path.size() + 1;
+            if (path.empty()) break;
+            std::wstring w(size_t(MultiByteToWideChar(CP_ACP, 0, path.data(), int(path.size()), nullptr, 0)), L'\0');
+            MultiByteToWideChar(CP_ACP, 0, path.data(), int(path.size()), w.data(), int(w.size()));
+            paths.push_back(narrow(w.c_str(), int(w.size())));
+        }
+    }
+    return paths;
+}
+
+// Paths as a CF_HDROP: a DROPFILES, then each path in UTF-16 and a NUL, and a NUL after the last.
+std::string dropFilesOf(const std::vector<std::string>& paths) {
+    DROPFILES files{};
+    files.pFiles = sizeof files, files.fWide = TRUE;
+    std::string bytes(reinterpret_cast<const char*>(&files), sizeof files);
+    for (const std::string& path : paths) {
+        std::wstring w = wide(path);
+        bytes.append(reinterpret_cast<const char*>(w.c_str()), (w.size() + 1) * sizeof(wchar_t));
+    }
+    bytes.append(sizeof(wchar_t), '\0');
+    return bytes;
+}
+
+// What a clipboard or a drag holds as a clip: the formats it `has`, each read by `get`.
+ClipEntry clipOfWindows(const std::function<bool(UINT)>& has, const std::function<std::string(UINT)>& get) {
+    if (has(CF_HDROP)) {
+        std::vector<std::string> uris;
+        for (const std::string& path : pathsOfDropFiles(get(CF_HDROP))) uris.push_back(fileUri(path));
+        if (!uris.empty()) return clipOfFiles(uris);
+    }
+    ClipEntry entry;
+    ClipEntry::Item text;
+    if (has(CF_UNICODETEXT)) {
+        std::string chars = get(CF_UNICODETEXT);
+        std::wstring w(reinterpret_cast<const wchar_t*>(chars.data()), chars.size() / sizeof(wchar_t));
+        w.resize(wcsnlen(w.c_str(), w.size()));
+        text.text = narrow(w.c_str(), int(w.size()));
+        entry.clipMetadata.mimeTypes.push_back("text/plain");
+    }
+    if (has(htmlFormat())) {
+        std::string cf = get(htmlFormat());
+        cf.resize(strnlen(cf.c_str(), cf.size()));
+        text.htmlText = htmlOfCfHtml(cf);
+        entry.clipMetadata.mimeTypes.push_back("text/html");
+    }
+    if (text.text || text.htmlText) entry.items.push_back(std::move(text));
+    std::string png = has(pngFormat()) ? get(pngFormat()) : has(CF_DIB) ? pngOfDib(get(CF_DIB)) : std::string();
+    if (!png.empty()) {
+        entry.items.push_back({.mimeType = "image/png", .data = std::vector<uint8_t>(png.begin(), png.end())});
+        entry.clipMetadata.mimeTypes.push_back("image/png");
+    }
+    return entry;
+}
+
+// What it holds, by the formats it has (unread).
+ClipMetadata clipMetadataOfWindows(const std::function<bool(UINT)>& has) {
+    ClipMetadata metadata;
+    if (has(CF_HDROP)) return {{"text/uri-list"}};
+    if (has(CF_UNICODETEXT)) metadata.mimeTypes.push_back("text/plain");
+    if (has(htmlFormat())) metadata.mimeTypes.push_back("text/html");
+    if (has(pngFormat()) || has(CF_DIB)) metadata.mimeTypes.push_back("image/png");
+    return metadata;
+}
+
+// A clip as the formats it is put on the clipboard as.
+std::vector<std::pair<UINT, std::string>> windowsFormatsOf(const ClipEntry& entry) {
+    std::vector<std::pair<UINT, std::string>> formats;
+    if (std::optional<std::string> text = entry.readPlainText()) {
+        std::wstring w = wide(*text);
+        formats.push_back({CF_UNICODETEXT, std::string(reinterpret_cast<const char*>(w.c_str()), (w.size() + 1) * sizeof(wchar_t))});
+    }
+    for (const ClipEntry::Item& item : entry.items)
+        if (item.htmlText) {
+            formats.push_back({htmlFormat(), cfHtmlOf(*item.htmlText) + '\0'});
+            break;
+        }
+    if (std::vector<std::string> paths = clipFiles(entry); !paths.empty()) formats.push_back({CF_HDROP, dropFilesOf(paths)});
+    for (const ClipEntry::Item& item : entry.items)
+        if (item.mimeType == "image/png" && !item.data.empty()) {
+            std::string png(item.data.begin(), item.data.end());
+            formats.push_back({pngFormat(), png});
+            if (std::string dib = dibOfPng(png); !dib.empty()) formats.push_back({CF_DIB, std::move(dib)});
+            break;
+        }
+    return formats;
+}
+
+// An HGLOBAL's bytes.
+std::string bytesOf(HGLOBAL global) {
+    std::string bytes;
+    if (const void* p = global ? GlobalLock(global) : nullptr) {
+        bytes.assign(static_cast<const char*>(p), GlobalSize(global));
+        GlobalUnlock(global);
+    }
+    return bytes;
 }
 
 int64_t steadyNow() { return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
@@ -101,7 +295,7 @@ bool darkMode() {
 
 class Win32Platform;
 
-// Drops from other apps (OLE): files, else text, told to the platform as they come.
+// Drops from other apps (OLE): files, text, HTML, an image, told to the platform as they come.
 class DropTarget final : public IDropTarget {
 public:
     explicit DropTarget(Win32Platform& platform) : platform_(platform) {}
@@ -128,7 +322,7 @@ public:
 private:
     Win32Platform& platform_;
     std::atomic<ULONG> references_{1};
-    bool taken_ = false;  // files or text in the drag
+    bool taken_ = false;  // something in the drag we take
 };
 
 // OpenGL ES through the driver's OpenGL (WGL_EXT_create_context_es2_profile), where ANGLE isn't
@@ -440,7 +634,13 @@ public:
             self->showCursor();
         };
         callbacks.getClipboard = [self] { return self->readClipboard(); };
-        callbacks.setClipboard = [self](const std::string& text) { self->writeClipboard(text); };
+        callbacks.setClipboard = [self](const std::string& text) { self->writeClipboard(ClipEntry::withPlainText(text)); };
+        callbacks.getClipEntry = [self] { return self->readClipEntry(); };
+        callbacks.setClipEntry = [self](const std::optional<ClipEntry>& entry) { self->writeClipboard(entry.value_or(ClipEntry{})); };
+        callbacks.clipMetadata = []() -> std::optional<ClipMetadata> {
+            ClipMetadata m = clipMetadataOfWindows([](UINT format) { return IsClipboardFormatAvailable(format) != FALSE; });
+            return m.mimeTypes.empty() ? std::nullopt : std::optional(m);
+        };
         callbacks.openUri = [self](const std::string& uri) {
             if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", wide(uri).c_str(), nullptr, nullptr, SW_SHOWNORMAL)) <= 32)
                 self->log("kompoz: can't open " + uri);
@@ -490,11 +690,12 @@ public:
     bool wantsFrames() const override { return a11y_ && a11y_->active() && semanticsDirty_; }  // one more frame publishes it
 
     // What a drop tells (DropTarget), at a point on the screen.
-    void dropped(EventType type, POINTL at, std::string text = {}) {
+    void dropped(EventType type, POINTL at, std::vector<std::string> mimeTypes = {}, std::shared_ptr<const ClipEntry> clip = nullptr) {
         POINT p{at.x, at.y};
         ScreenToClient(hwnd_, &p);
         Event e{.type = type, .time = now(), .x = float(p.x), .y = float(p.y)};
-        e.text = std::move(text);
+        e.mimeTypes = std::move(mimeTypes);
+        e.clip = std::move(clip);
         events_.push_back(std::move(e));
     }
 
@@ -841,31 +1042,49 @@ private:
         return text;
     }
 
-    void writeClipboard(const std::string& text) {
-        std::wstring chars = wide(text);
-        HGLOBAL data = GlobalAlloc(GMEM_MOVEABLE, (chars.size() + 1) * sizeof(wchar_t));
-        if (!data) return;
-        std::memcpy(GlobalLock(data), chars.c_str(), (chars.size() + 1) * sizeof(wchar_t));
-        GlobalUnlock(data);
-        if (OpenClipboard(hwnd_)) {
-            EmptyClipboard();
-            if (SetClipboardData(CF_UNICODETEXT, data)) data = nullptr;  // (the clipboard's now)
-            CloseClipboard();
+    // All the clipboard holds: text, HTML, an image, files.
+    std::optional<ClipEntry> readClipEntry() {
+        if (!OpenClipboard(hwnd_)) return std::nullopt;
+        ClipEntry entry = clipOfWindows([](UINT format) { return IsClipboardFormatAvailable(format) != FALSE; },
+                                        [](UINT format) { return bytesOf(GetClipboardData(format)); });
+        CloseClipboard();
+        return entry.items.empty() ? std::nullopt : std::optional(std::move(entry));
+    }
+
+    // Put on it as each format it can be had in (nothing: emptied).
+    void writeClipboard(const ClipEntry& entry) {
+        if (!OpenClipboard(hwnd_)) return;
+        EmptyClipboard();
+        for (const auto& [format, bytes] : windowsFormatsOf(entry)) {
+            HGLOBAL data = GlobalAlloc(GMEM_MOVEABLE, bytes.size());
+            if (!data) continue;
+            std::memcpy(GlobalLock(data), bytes.data(), bytes.size());
+            GlobalUnlock(data);
+            if (!SetClipboardData(format, data)) GlobalFree(data);  // (else the clipboard's now)
         }
-        if (data) GlobalFree(data);
+        CloseClipboard();
     }
 };
 
-// What a drag holds: files (CF_HDROP), else text (CF_UNICODETEXT).
+// What a drag holds, as the clipboard holds it.
 bool hasFormat(IDataObject* data, CLIPFORMAT format) {
     FORMATETC f{format, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
     return data->QueryGetData(&f) == S_OK;
 }
+std::string getFormat(IDataObject* data, CLIPFORMAT format) {
+    FORMATETC f{format, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    STGMEDIUM medium{};
+    if (data->GetData(&f, &medium) != S_OK) return {};
+    std::string bytes = bytesOf(medium.hGlobal);
+    ReleaseStgMedium(&medium);
+    return bytes;
+}
 
 HRESULT DropTarget::DragEnter(IDataObject* data, DWORD, POINTL at, DWORD* effect) {
-    taken_ = hasFormat(data, CF_HDROP) || hasFormat(data, CF_UNICODETEXT);
+    ClipMetadata carries = clipMetadataOfWindows([data](UINT format) { return hasFormat(data, CLIPFORMAT(format)); });
+    taken_ = !carries.mimeTypes.empty();
     *effect = taken_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
-    platform_.dropped(EventType::DropBegin, at);
+    platform_.dropped(EventType::DropBegin, at, carries.mimeTypes);
     platform_.dropped(EventType::DropMove, at);
     return S_OK;
 }
@@ -882,28 +1101,10 @@ HRESULT DropTarget::DragLeave() {
 }
 
 HRESULT DropTarget::Drop(IDataObject* data, DWORD, POINTL at, DWORD* effect) {
-    *effect = DROPEFFECT_NONE;
-    FORMATETC files{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL}, text{CF_UNICODETEXT, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
-    STGMEDIUM medium{};
-    if (data->GetData(&files, &medium) == S_OK) {
-        auto drop = static_cast<HDROP>(GlobalLock(medium.hGlobal));
-        UINT count = drop ? DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0) : 0;
-        for (UINT i = 0; i < count; ++i) {
-            std::wstring path(DragQueryFileW(drop, i, nullptr, 0) + 1, L'\0');
-            path.resize(DragQueryFileW(drop, i, path.data(), UINT(path.size())));
-            platform_.dropped(EventType::DropFile, at, narrow(path.c_str(), int(path.size())));
-        }
-        if (drop) GlobalUnlock(medium.hGlobal);
-        ReleaseStgMedium(&medium);
-        *effect = DROPEFFECT_COPY;
-    } else if (data->GetData(&text, &medium) == S_OK) {
-        if (auto* chars = static_cast<const wchar_t*>(GlobalLock(medium.hGlobal))) {
-            platform_.dropped(EventType::DropText, at, narrow(chars));
-            GlobalUnlock(medium.hGlobal);
-        }
-        ReleaseStgMedium(&medium);
-        *effect = DROPEFFECT_COPY;
-    }
+    auto clip = std::make_shared<ClipEntry>(clipOfWindows([data](UINT format) { return hasFormat(data, CLIPFORMAT(format)); },
+                                                          [data](UINT format) { return getFormat(data, CLIPFORMAT(format)); }));
+    *effect = clip->items.empty() ? DROPEFFECT_NONE : DROPEFFECT_COPY;
+    if (!clip->items.empty()) platform_.dropped(EventType::DropData, at, {}, std::move(clip));
     platform_.dropped(EventType::DropComplete, at);
     return S_OK;
 }

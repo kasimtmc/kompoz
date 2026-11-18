@@ -16,7 +16,7 @@
 namespace kompoz::platform::x11 {
 
 #define KOMPOZ_X11_FUNCTIONS(X)                                                                                       \
-    X(XInitThreads) X(XOpenDisplay) X(XCloseDisplay) X(XInternAtom) X(XInternAtoms) X(XCreateWindow)                  \
+    X(XInitThreads) X(XOpenDisplay) X(XCloseDisplay) X(XInternAtom) X(XInternAtoms) X(XGetAtomName) X(XCreateWindow)                  \
     X(XDestroyWindow)                                                                                                 \
     X(XMapWindow) X(XChangeProperty) X(XDeleteProperty) X(XGetWindowProperty) X(XFree) X(XSetWMProtocols)             \
     X(XAllocSizeHints) X(XSetWMNormalHints) X(XAllocClassHint) X(XSetClassHint) X(XPending) X(XNextEvent)             \
@@ -59,6 +59,7 @@ bool load();
 #define XCloseDisplay KOMPOZ_X11_RENAME(XCloseDisplay)
 #define XInternAtom KOMPOZ_X11_RENAME(XInternAtom)
 #define XInternAtoms KOMPOZ_X11_RENAME(XInternAtoms)
+#define XGetAtomName KOMPOZ_X11_RENAME(XGetAtomName)
 #define XCreateWindow KOMPOZ_X11_RENAME(XCreateWindow)
 #define XDestroyWindow KOMPOZ_X11_RENAME(XDestroyWindow)
 #define XMapWindow KOMPOZ_X11_RENAME(XMapWindow)

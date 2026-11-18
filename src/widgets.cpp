@@ -2889,11 +2889,11 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         Rect area{b.x + padStart, b.y + padTop, std::max(0.f, b.width - padStart - padEnd),
                   std::max(0.f, b.height - padTop - padBottom)};
         auto lines = breakLines(tm, shown, font, std::max(1.f, area.width), paragraphRtl);
-        bool synced = focusedNow && ime->text == value;
+        bool synced = (focusedNow || node.dragHovered) && ime->text == value;  // (a drag over it shows where it would drop)
         int caret = toDisplay(value, synced ? ime->selectionEnd : int(value.size()), transform);
         size_t caretLine = lineOf(lines, caret);
         float& scrollY = geometry->scrollY;
-        if (focusedNow) {
+        if (focusedNow || node.dragHovered) {
             float caretTop = float(caretLine) * lh;
             if (caretTop < scrollY) scrollY = caretTop;
             if (caretTop + lh > scrollY + area.height) scrollY = caretTop + lh - area.height;
@@ -2946,7 +2946,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
                           canvas.drawLine({x, y + glyphTop + m.ascent + 3}, {x + w, y + glyphTop + m.ascent + 3}, 1.5f, textColor);
                       });
         bool selecting = synced && ime->selectionStart != ime->selectionEnd;  // no caret over a selection
-        if (focusedNow && !o.readOnly && !selecting) {
+        if ((focusedNow || node.dragHovered) && !o.readOnly && !selecting) {
             float x = area.x + xAt(lines[caretLine], caret) + 1, y = lineTop(caretLine) + glyphTop;
             canvas.drawLine({x, y}, {x, y + m.ascent + m.descent}, 2, cursorColor);
         }
@@ -2962,7 +2962,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         FontMetrics m = tm.metrics(font);
         float baseline = b.y + (b.height - (m.ascent + m.descent)) / 2 + m.ascent + textShift;
         // Caret, selection and composition come from the IME while its text is what we show.
-        bool synced = focusedNow && ime->text == value;
+        bool synced = (focusedNow || node.dragHovered) && ime->text == value;  // (a drag over it shows where it would drop)
         auto widthTo = [&](int offset) { return detail::caretX(tm, shown, font, toDisplay(value, offset, transform), rtl); };
         auto spans = [&](int from, int to) {
             return detail::rangeXs(tm, shown, font, toDisplay(value, from, transform), toDisplay(value, to, transform), rtl);
@@ -2983,7 +2983,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         if (synced && ime->compositionStart >= 0)  // underline the word being composed, like Android
             for (auto [a, e] : spans(ime->compositionStart, ime->compositionEnd))
                 canvas.drawLine({x + a, baseline + 3}, {x + e, baseline + 3}, 1.5f, textColor);
-        if (focusedNow && !o.readOnly && !(synced && ime->selectionStart != ime->selectionEnd))  // no caret over a selection
+        if ((focusedNow || node.dragHovered) && !o.readOnly && !(synced && ime->selectionStart != ime->selectionEnd))  // no caret over a selection
             canvas.drawLine({x + caretOffset + 1, baseline - m.ascent}, {x + caretOffset + 1, baseline + m.descent}, 2, cursorColor);
         canvas.popClip();
         drawAffixes(canvas, b, baseline);

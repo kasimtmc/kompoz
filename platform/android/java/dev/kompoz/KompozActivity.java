@@ -2,6 +2,7 @@ package dev.kompoz;
 
 import android.app.Activity;
 import android.content.ClipData;
+import android.content.ClipDescription;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
@@ -174,6 +175,61 @@ public class KompozActivity extends Activity {
     void setClipboard(byte[] text) {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText(null, new String(text, StandardCharsets.UTF_8)));
+    }
+
+    // A clip as native code takes it (kompoz::ClipEntry): its MIME types, a line each, then each
+    // item's text, HTML and URI (null where it has none), all UTF-8.
+    static byte[][] clipParts(ClipData clip) {
+        ClipDescription description = clip.getDescription();
+        StringBuilder types = new StringBuilder();
+        for (int i = 0; description != null && i < description.getMimeTypeCount(); ++i) types.append(description.getMimeType(i)).append('\n');
+        byte[][] parts = new byte[1 + clip.getItemCount() * 3][];
+        parts[0] = types.toString().getBytes(StandardCharsets.UTF_8);
+        for (int i = 0; i < clip.getItemCount(); ++i) {
+            ClipData.Item item = clip.getItemAt(i);
+            CharSequence text = item.getText();
+            String html = item.getHtmlText();
+            Uri uri = item.getUri();
+            parts[1 + i * 3] = text != null ? text.toString().getBytes(StandardCharsets.UTF_8) : null;
+            parts[2 + i * 3] = html != null ? html.getBytes(StandardCharsets.UTF_8) : null;
+            parts[3 + i * 3] = uri != null ? uri.toString().getBytes(StandardCharsets.UTF_8) : null;
+        }
+        return parts;
+    }
+
+    // All the clipboard holds (null: empty). Reading it is what Android tells the user of ("pasted").
+    byte[][] clipEntry() {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData clip = clipboard != null && clipboard.hasPrimaryClip() ? clipboard.getPrimaryClip() : null;
+        return clip != null ? clipParts(clip) : null;
+    }
+
+    // What it holds, its MIME types a line each, unread (nothing: empty).
+    byte[] clipMimeTypes() {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipDescription description = clipboard != null && clipboard.hasPrimaryClip() ? clipboard.getPrimaryClipDescription() : null;
+        StringBuilder types = new StringBuilder();
+        for (int i = 0; description != null && i < description.getMimeTypeCount(); ++i) types.append(description.getMimeType(i)).append('\n');
+        return types.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    // A clip from native code, as clipParts gives one (no items: the clipboard emptied).
+    void setClipEntry(byte[][] parts) {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) return;
+        String[] types = new String(parts[0], StandardCharsets.UTF_8).split("\n");
+        ClipData clip = null;
+        for (int i = 1; i + 2 < parts.length; i += 3) {
+            String text = parts[i] != null ? new String(parts[i], StandardCharsets.UTF_8) : null;
+            String html = parts[i + 1] != null ? new String(parts[i + 1], StandardCharsets.UTF_8) : null;
+            Uri uri = parts[i + 2] != null ? Uri.parse(new String(parts[i + 2], StandardCharsets.UTF_8)) : null;
+            ClipData.Item item = new ClipData.Item(text, html, null, uri);
+            if (clip == null) clip = new ClipData(new ClipDescription(null, types), item);
+            else clip.addItem(item);
+        }
+        if (clip != null) clipboard.setPrimaryClip(clip);
+        else if (Build.VERSION.SDK_INT >= 28) clipboard.clearPrimaryClip();
+        else clipboard.setPrimaryClip(ClipData.newPlainText(null, ""));
     }
 
     // The browser, or the app for the address's scheme; false if none takes it.

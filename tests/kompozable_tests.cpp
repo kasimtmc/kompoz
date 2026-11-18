@@ -2618,6 +2618,41 @@ data class Detail(val id: Int, val tab: String? = null)
 @Serializable
 object Start
 
+// Compose foundation's content receiving, as its samples write it: a lambda that takes the images
+// and leaves the rest to the field, and a listener object that hears of drags too.
+@Kompozable
+fun ImagePicker(onImage: (String) -> Unit) {
+    val state = rememberTextFieldState()
+    var hovering by remember { mutableStateOf(false) }
+    val listener = remember {
+        object : ReceiveContentListener {
+            override fun onDragEnter() { hovering = true }
+            override fun onDragExit() { hovering = false }
+            override fun onReceive(transferableContent: TransferableContent): TransferableContent? {
+                if (!transferableContent.hasMediaType(MediaType.Image)) return transferableContent
+                return transferableContent.consume { item ->
+                    val uri = item.uri
+                    if (uri != null) onImage(uri)
+                    uri != null
+                }
+            }
+        }
+    }
+    Column(modifier = Modifier.contentReceiver(listener)) {
+        Text(if (hovering) "üstünde" else "bekliyor")
+        Box(modifier = Modifier.contentReceiver { content ->
+            if (content.source == TransferableContent.Source.Clipboard && content.hasMediaType(MediaType.HtmlText)) {
+                onImage("html")
+                return@contentReceiver null
+            }
+            content
+        }) {
+            BasicTextField(state, modifier = Modifier.width(300.dp).height(40.dp).testTag("alan"))
+        }
+        Text("metin ${state.text}")
+    }
+}
+
 @Kompozable
 fun Navigator(nav: NavController) {
     val entry by nav.currentBackStackEntryAsState()
@@ -3453,6 +3488,31 @@ TEST(app_shell_as_compose_writes_it) {
     rule.advanceTimeBy(1000);
     rule.waitForIdle();
     CHECK(rule.onNodeWithText("hesap 5").exists());
+}
+
+TEST(content_receivers_as_compose_writes_them) {
+    std::vector<std::string> images;
+    KompozTestRule rule([&] { ImagePicker([&](std::string uri) { images.push_back(std::move(uri)); }); }, {400, 800});
+    KompozHost& host = rule.host();
+    Rect field = rule.onNodeWithTag("alan").bounds();
+    Offset at{field.x + 10, field.y + 10};
+    DragAndDropTransferData both{.mimeTypes = {"image/png", "text/plain"}};
+    both.clipEntry = ClipEntry{.items = {{.uri = "content://resim/7"}, {.text = "yazı"}}, .clipMetadata = {{"image/png", "text/plain"}}};
+    host.externalDragEntered(both.mimeTypes);
+    host.externalDragMoved(at);
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("üstünde").exists());
+    host.externalDrop(both, at);
+    rule.waitForIdle();
+    CHECK((images == std::vector<std::string>{"content://resim/7"}) && rule.onNodeWithText("metin yazı").exists());
+    // HTML pasted: taken by the inner one, nothing pasted.
+    std::optional<ClipEntry> board = ClipEntry::withHtmlText("kalın", "<b>kalın</b>");
+    host.setCallbacks({.getClipEntry = [&] { return board; }});
+    rule.onNodeWithTag("alan").performClick();
+    rule.waitForIdle();
+    host.keyDown(Key::V, {.ctrl = true});
+    rule.waitForIdle();
+    CHECK(images.size() == 2 && images[1] == "html" && rule.onNodeWithText("metin yazı").exists());
 }
 
 TEST(navigation_as_compose_writes_it) {

@@ -222,7 +222,7 @@ if(KOMPOZ_BUILD_APP)
     else()
         set(kompoz_platform_source platform/main.cpp)
     endif()
-    add_library(kompoz_app OBJECT platform/app/app_core.cpp platform/app/title_bar.cpp platform/common/system.cpp ${kompoz_platform_source} platform/common/font_system.cpp
+    add_library(kompoz_app OBJECT platform/app/app_core.cpp platform/app/title_bar.cpp platform/common/clip_formats.cpp platform/common/system.cpp ${kompoz_platform_source} platform/common/font_system.cpp
                                    platform/common/image_loader.cpp platform/common/image_codec.cpp)
     target_link_libraries(kompoz_app PUBLIC kompoz_core Freetype::Freetype PNG::PNG)
     set_target_properties(kompoz_app PROPERTIES EXPORT_NAME app)
@@ -394,7 +394,7 @@ if(KOMPOZ_BUILD_APP)
     # The platform code that runs without a window (the wallpaper's colors, AT-SPI; UI Automation on
     # Windows), tested on its own.
     if(KOMPOZ_BUILD_TESTS AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
-        add_executable(kompoz_platform_tests tests/platform_tests.cpp platform/common/wallpaper_colors.cpp
+        add_executable(kompoz_platform_tests tests/platform_tests.cpp platform/common/wallpaper_colors.cpp platform/common/clip_formats.cpp
                        platform/common/image_loader.cpp platform/common/image_codec.cpp platform/linux/atspi_bridge.cpp
                        platform/common/system.cpp)
         target_link_libraries(kompoz_platform_tests PRIVATE $<TARGET_PROPERTY:kompoz_app,INTERFACE_LINK_LIBRARIES>)

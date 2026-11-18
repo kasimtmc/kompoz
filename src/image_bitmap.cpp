@@ -291,4 +291,23 @@ std::vector<std::shared_ptr<const DisplayList>> pending(const ImageBitmap& bitma
 
 } // namespace detail
 
+namespace {
+std::mutex gDecoderMutex;
+std::function<ImageBitmap(const std::vector<uint8_t>&)> gDecoder;
+} // namespace
+
+void detail::setImageDecoder(std::function<ImageBitmap(const std::vector<uint8_t>&)> decoder) {
+    std::lock_guard lock(gDecoderMutex);
+    gDecoder = std::move(decoder);
+}
+
+ImageBitmap decodeToImageBitmap(const std::vector<uint8_t>& bytes) {
+    std::function<ImageBitmap(const std::vector<uint8_t>&)> decoder;
+    {
+        std::lock_guard lock(gDecoderMutex);
+        decoder = gDecoder;
+    }
+    return decoder && !bytes.empty() ? decoder(bytes) : ImageBitmap{};
+}
+
 } // namespace kompoz
