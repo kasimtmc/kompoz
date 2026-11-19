@@ -66,7 +66,7 @@ NSArray<NSURL*>* filesOn(NSPasteboard* board) {
     return [board readObjectsForClasses:@[NSURL.class] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
 }
 
-ClipMetadata clipMetadataOf(NSPasteboard* board) {
+ClipMetadata pasteboardMetadata(NSPasteboard* board) {
     ClipMetadata metadata;
     if (filesOn(board).count) return {{"text/uri-list"}};
     if ([board availableTypeFromArray:@[NSPasteboardTypeString]]) metadata.mimeTypes.push_back("text/plain");
@@ -75,14 +75,14 @@ ClipMetadata clipMetadataOf(NSPasteboard* board) {
     return metadata;
 }
 
-ClipEntry clipOf(NSPasteboard* board) {
+ClipEntry pasteboardClip(NSPasteboard* board) {
     if (NSArray<NSURL*>* files = filesOn(board); files.count) {
         std::vector<std::string> uris;
         for (NSURL* file in files) uris.push_back(utf8(file.absoluteString));
         return clipOfFiles(uris);
     }
     ClipEntry entry;
-    entry.clipMetadata = clipMetadataOf(board);
+    entry.clipMetadata = pasteboardMetadata(board);
     ClipEntry::Item text;
     if (NSString* chars = [board stringForType:NSPasteboardTypeString]) text.text = utf8(chars);
     if (NSString* html = [board stringForType:NSPasteboardTypeHTML]) text.htmlText = utf8(html);
@@ -367,12 +367,12 @@ public:
         callbacks.getClipboard = [] { return utf8([NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString]); };
         callbacks.setClipboard = [](const std::string& text) { writeClip(NSPasteboard.generalPasteboard, ClipEntry::withPlainText(text)); };
         callbacks.getClipEntry = []() -> std::optional<ClipEntry> {
-            ClipEntry entry = clipOf(NSPasteboard.generalPasteboard);
+            ClipEntry entry = pasteboardClip(NSPasteboard.generalPasteboard);
             return entry.items.empty() ? std::nullopt : std::optional(std::move(entry));
         };
         callbacks.setClipEntry = [](const std::optional<ClipEntry>& entry) { writeClip(NSPasteboard.generalPasteboard, entry.value_or(ClipEntry{})); };
         callbacks.clipMetadata = []() -> std::optional<ClipMetadata> {
-            ClipMetadata m = clipMetadataOf(NSPasteboard.generalPasteboard);
+            ClipMetadata m = pasteboardMetadata(NSPasteboard.generalPasteboard);
             return m.mimeTypes.empty() ? std::nullopt : std::optional(m);
         };
         callbacks.openUri = [self](const std::string& uri) {
@@ -719,18 +719,18 @@ using kompoz::platform::MouseButton;
     if (!platform) return;
     NSPoint p = [self convertPoint:drag.draggingLocation fromView:nil];
     Event e{.type = type, .x = float(p.x), .y = float(p.y)};
-    if (type == EventType::DropBegin) e.mimeTypes = kompoz::platform::clipMetadataOf(drag.draggingPasteboard).mimeTypes;
-    if (type == EventType::DropData) e.clip = std::make_shared<kompoz::ClipEntry>(kompoz::platform::clipOf(drag.draggingPasteboard));
+    if (type == EventType::DropBegin) e.mimeTypes = kompoz::platform::pasteboardMetadata(drag.draggingPasteboard).mimeTypes;
+    if (type == EventType::DropData) e.clip = std::make_shared<kompoz::ClipEntry>(kompoz::platform::pasteboardClip(drag.draggingPasteboard));
     platform->push(std::move(e));
 }
 - (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)drag {
     [self drop:EventType::DropBegin at:drag];
     [self drop:EventType::DropMove at:drag];
-    return kompoz::platform::clipMetadataOf(drag.draggingPasteboard).mimeTypes.empty() ? NSDragOperationNone : NSDragOperationCopy;
+    return kompoz::platform::pasteboardMetadata(drag.draggingPasteboard).mimeTypes.empty() ? NSDragOperationNone : NSDragOperationCopy;
 }
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)drag {
     [self drop:EventType::DropMove at:drag];
-    return kompoz::platform::clipMetadataOf(drag.draggingPasteboard).mimeTypes.empty() ? NSDragOperationNone : NSDragOperationCopy;
+    return kompoz::platform::pasteboardMetadata(drag.draggingPasteboard).mimeTypes.empty() ? NSDragOperationNone : NSDragOperationCopy;
 }
 - (void)draggingExited:(id<NSDraggingInfo>)drag {
     if (platform) platform->push({.type = EventType::DropComplete});
