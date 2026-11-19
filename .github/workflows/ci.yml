@@ -390,8 +390,7 @@ jobs:
           distribution: temurin
           java-version: 17
       # Gradle's downloads (the wrapper, the plugins, their dependencies; 260 MB) kept from run to run, so a
-      # build doesn't hang on Maven Central answering (it failed to, twice on 2026-11-19). Not the CLion
-      # plugin's: its downloads are CLion itself, 2.2 GB of the repository's 10 GB of caches.
+      # build doesn't hang on Maven Central answering (it failed to, twice on 2026-11-19).
       - uses: actions/cache@v4
         with:
           path: |
@@ -419,6 +418,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # (As the Android job's, but for CLion itself, downloaded from JetBrains' /cpp/: 2 GB of the repository's
+      # 10 GB of caches, and it isn't what Maven Central's failures hold up.)
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            !~/.gradle/caches/modules-2/files-2.1/cpp
+            ~/.gradle/wrapper
+          key: gradle-clion-${{ hashFiles('editors/clion/*.gradle*', 'editors/clion/gradle/wrapper/gradle-wrapper.properties') }}
       - name: Build and verify
         working-directory: editors/clion
         run: ./gradlew --no-daemon buildPlugin verifyPlugin
