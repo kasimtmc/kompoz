@@ -418,12 +418,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      # (As the Android job's, but for CLion itself, downloaded from JetBrains' /cpp/: 2 GB of the repository's
-      # 10 GB of caches, and it isn't what Maven Central's failures hold up.)
+      # (As the Android job's, but for CLion itself, downloaded from JetBrains' /cpp/: 1.9 GB of the
+      # repository's 10 GB of caches, and it isn't what Maven Central's failures hold up; 290 MB without it.
+      # files-2.1's directories one by one: a directory given whole goes into the cache with all it holds.)
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/modules-2/*
+            !~/.gradle/caches/modules-2/files-2.1
+            ~/.gradle/caches/modules-2/files-2.1/*
             !~/.gradle/caches/modules-2/files-2.1/cpp
             ~/.gradle/wrapper
           key: gradle-clion-${{ hashFiles('editors/clion/*.gradle*', 'editors/clion/gradle/wrapper/gradle-wrapper.properties') }}
