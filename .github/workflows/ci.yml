@@ -389,6 +389,13 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          # Gradle's downloads (the wrapper, the plugins, their dependencies) kept from run to run, so a
+          # build doesn't hang on Maven Central answering (it failed to, twice on 2026-11-19)
+          cache: gradle
+          cache-dependency-path: |
+            examples/showcase/android/*.gradle*
+            examples/showcase/android/app/*.gradle*
+            examples/showcase/android/gradle/wrapper/gradle-wrapper.properties
       - uses: actions/cache@v4
         with:
           path: third_party/.downloads
@@ -410,6 +417,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+          cache: gradle  # (as the Android job's)
+          cache-dependency-path: |
+            editors/clion/*.gradle*
+            editors/clion/gradle/wrapper/gradle-wrapper.properties
       - name: Build and verify
         working-directory: editors/clion
         run: ./gradlew --no-daemon buildPlugin verifyPlugin
