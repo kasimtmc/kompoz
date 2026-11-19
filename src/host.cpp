@@ -3299,7 +3299,10 @@ void KompozHost::textAction(TextAction action) {
         setTouchSelection(false);
         break;
     }
-    case TextAction::Paste: editKey(Key::V, {.ctrl = true}); break;
+    case TextAction::Paste:  // (the toolbar goes, whatever was pasted: all of it may have gone to a contentReceiver)
+        editKey(Key::V, {.ctrl = true});
+        if (touchSelection_) setTouchSelection(false);
+        break;
     case TextAction::SelectAll: setTextSelection(0, int(imeState_.text.size())); break;
     }
 }
