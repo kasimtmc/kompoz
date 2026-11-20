@@ -1,5 +1,9 @@
 # Changes
 
+## 0.1.1
+
+- Kompoz's icon.
+
 ## 0.1.0
 
 - C++ sources with Kotlin declarations (`@Kompozable`, `fun`, `val`, `data class`, ...) shown as Kompoz C++: the

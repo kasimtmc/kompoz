@@ -12,11 +12,10 @@ A `.cpp` file with `@Kompozable` functions in Kotlin's syntax is both C++ and Ko
 
 It finds the build by the `compile_commands.json` and `kompozc_commands.json` that a CMake build with `kompozable` writes (Kompoz sets `CMAKE_EXPORT_COMPILE_COMMANDS`; set it in your project too), in the file's directory or one above it, or in a directory there such as `build/` or CLion's `cmake-build-debug/`. Arguments it doesn't know are clangd's; `--clangd PATH` names the clangd to start. Without a clangd it still gives kompozc's own diagnostics.
 
-**VS Code**: Kompoz's extension, in `editors/vscode`, shows a C++ file with Kotlin code as "Kompoz C++": its Kotlin highlighted as Kotlin, its C++ as C++, and the language server started for it. The C/C++ and clangd extensions leave such a file alone (they would mark the Kotlin); plain C++ files stay theirs. Build it and install the `.vsix` (Extensions, the `…` menu, Install from VSIX; or `code --install-extension`):
+**VS Code**: Kompoz's extension, in `editors/vscode`, shows a C++ file with Kotlin code as "Kompoz C++": its Kotlin highlighted as Kotlin, its C++ as C++, and the language server started for it. The C/C++ and clangd extensions leave such a file alone (they would mark the Kotlin); plain C++ files stay theirs. It is on Open VSX as `plyground.kompoz`: VSCodium, Code - OSS and the other editors that use Open VSX install it from their Extensions view. In Microsoft's VS Code, install the `.vsix` of a [VS Code release](https://github.com/kasimtmc/kompoz/releases) (Extensions, the `…` menu, Install from VSIX), or one you build:
 
 ```bash
 cd editors/vscode && npm ci && npm run package
-code --install-extension kompoz-0.1.0.vsix
 ```
 
 It finds kompozc as the CLion plugin does (below): the `kompoz.kompozcPath` setting, `KOMPOZC`, built in the workspace, or on `PATH`. `kompoz.clangdPath` and `kompoz.clangdArguments` are for the clangd behind it; **Kompoz: Restart kompozc --lsp** starts it again after a rebuild.
