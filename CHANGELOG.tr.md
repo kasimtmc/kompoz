@@ -1184,7 +1184,8 @@
   çözümleyicisiyle okunur (anahtar sözcükler, dizgiler ve şablonlarının kodu, sayılar, yorumlar, açıklamalar, bildirilen
   ve çağrılan işlevler ve sınıflar, dosyanın bildirdiği değerler, parametreler, özellikler, adlandırılmış argümanlar);
   C++ için clangd'ninkilerle clangd'nin listesinde birleştirilir (onda olmayan türler eklenir). clangd olmadan yalnızca
-  Kotlin'inkileri verir; yalnızca belgenin tamamı için.
+  Kotlin'inkileri verir; yalnızca belgenin tamamı için. clangd'nin bağlantıları da Kotlin'den uzak tutulur (maskeli görünümün
+  `#include`'u VS Code'da bir Kotlin satırının altını çiziyordu).
 - **kompozc**: bir nesne ifadesinin işlevleri, lambdalarında `this`'i adıyla yakalar (C++20 `[=]`'in yakalamasını eskimiş
   sayar).
 - **Bir VS Code eklentisi** (`editors/vscode`): Kotlin kodu içeren bir C++ dosyası "Kompoz C++" olarak gösterilir;

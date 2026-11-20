@@ -1445,6 +1445,12 @@ private:
             for (Json& h : result.array())
                 if (!inKotlin(std::as_const(h)["position"])) kept.push_back(std::move(h));
             result = Json(std::move(kept));
+        } else if (method == "textDocument/documentLink" && result.isArray()) {
+            // (the masked view's #include on a Kotlin line: its link would underline the Kotlin there)
+            Json::Array kept;
+            for (Json& l : result.array())
+                if (!inKotlin(std::as_const(l)["range"]["start"])) kept.push_back(std::move(l));
+            result = Json(std::move(kept));
         } else {
             // Edits anywhere in the answer (a rename, a code action's): none inside the Kotlin.
             std::function<void(Json&)> walk = [&](Json& v) {

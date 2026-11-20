@@ -173,6 +173,10 @@ for (line, word), (kind, mods) in [((fun_line - 1, '@Kompozable'), ('decorator',
     check(f'the Kotlin\'s {word} on line {line}: {kind}', got is not None and got[0] == kind and mods <= got[1])
 if not args.no_clangd:
     check("the C++'s tokens are clangd's (kompoz: a namespace)", seen.get((using_line, 'kompoz'), ('',))[0] == 'namespace')
+    # Links: the #include's, none on the Kotlin (where the masked view has an #include of its own).
+    links = request('textDocument/documentLink', {'textDocument': {'uri': uri}}) or []
+    link_lines = {l['range']['start']['line'] + 1 for l in links}
+    check('the #include is a link, nothing on the Kotlin is', line_of('#include') in link_lines and line_of('data class Sticker') not in link_lines)
 
 formatting = request('textDocument/formatting', {'textDocument': {'uri': uri}, 'options': {'tabSize': 4, 'insertSpaces': True}})
 check('no formatting of a file with Kotlin', formatting is None)

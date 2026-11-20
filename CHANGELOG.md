@@ -1147,6 +1147,7 @@
   (keywords, strings and their templates' code, numbers, comments, annotations, functions and classes declared and
   called, values the file declares, parameters, properties, named arguments), merged with clangd's for the C++ in
   clangd's legend (the types it lacks added). Without clangd it gives the Kotlin's alone; whole documents only.
+  clangd's links are kept off the Kotlin too (the masked view's `#include` underlined a Kotlin line in VS Code).
 - **kompozc**: an object expression's functions capture `this` by name in their lambdas (C++20 deprecates `[=]`'s).
 - **A VS Code extension** (`editors/vscode`): a C++ file with Kotlin code is shown as "Kompoz C++", its Kotlin
   highlighted as Kotlin (a grammar of its own) and its C++ as C++, and `kompozc --lsp` started for it (found as the
