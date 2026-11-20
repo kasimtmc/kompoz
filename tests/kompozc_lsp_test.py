@@ -111,7 +111,8 @@ lines = text.split('\n')
 line_of = lambda needle: next(i + 1 for i, l in enumerate(lines) if needle in l)
 text_line, fun_line, using_line = line_of('Text("$prefix'), line_of('fun StickerRow('), line_of('using namespace kompoz;')
 
-request('initialize', {'processId': None, 'rootUri': 'file://' + root, 'capabilities': {}})
+initialized = request('initialize', {'processId': None, 'rootUri': 'file://' + root, 'capabilities': {}})
+legend = initialized['capabilities']['semanticTokensProvider']['legend']
 send({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}})
 send({'jsonrpc': '2.0', 'method': 'textDocument/didOpen', 'params': {'textDocument': {'uri': uri, 'languageId': 'cpp', 'version': 1, 'text': text}}})
 version = [1]
@@ -150,6 +151,28 @@ if not args.no_clangd:
     check("no clangd hover inside the Kotlin", hover is None)
     completion = request('textDocument/completion', {'textDocument': {'uri': uri}, 'position': at(text_line, 4)})
     check('no clangd completion inside the Kotlin', completion is not None and completion.get('items') == [])
+
+# Semantic tokens: the Kotlin's kompozc's own (keywords, declarations, calls, strings, annotations), the C++'s clangd's.
+def tokens():
+    data, out, line, start = request('textDocument/semanticTokens/full', {'textDocument': {'uri': uri}})['data'], {}, 0, 0
+    for i in range(0, len(data), 5):
+        line += data[i]
+        start = data[i + 1] if data[i] else start + data[i + 1]
+        mods = {legend['tokenModifiers'][b] for b in range(len(legend['tokenModifiers'])) if data[i + 4] >> b & 1}
+        out[(line + 1, lines[line][start:start + data[i + 2]])] = (legend['tokenTypes'][data[i + 3]], mods)
+    return out
+
+
+seen = tokens()
+greeting_line = line_of('val StickerGreeting')
+for (line, word), (kind, mods) in [((fun_line - 1, '@Kompozable'), ('decorator', set())), ((fun_line, 'fun'), ('keyword', set())),
+                                   ((fun_line, 'StickerRow'), ('function', {'declaration'})), ((fun_line, 'sticker'), ('parameter', {'declaration'})),
+                                   ((text_line, 'Text'), ('function', set())), ((text_line, 'label'), ('property', set())),
+                                   ((greeting_line, '"selam "'), ('string', set())), ((greeting_line, 'Shout'), ('variable', set()))]:
+    got = seen.get((line, word))
+    check(f'the Kotlin\'s {word} on line {line}: {kind}', got is not None and got[0] == kind and mods <= got[1])
+if not args.no_clangd:
+    check("the C++'s tokens are clangd's (kompoz: a namespace)", seen.get((using_line, 'kompoz'), ('',))[0] == 'namespace')
 
 formatting = request('textDocument/formatting', {'textDocument': {'uri': uri}, 'options': {'tabSize': 4, 'insertSpaces': True}})
 check('no formatting of a file with Kotlin', formatting is None)

@@ -1180,6 +1180,13 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **kompozc --lsp Kotlin'i renklendirir**: Kotlin bölgeleri için anlamsal belirteçler, kompozc'nin kendi sözcük
+  çözümleyicisiyle okunur (anahtar sözcükler, dizgiler ve şablonlarının kodu, sayılar, yorumlar, açıklamalar, bildirilen
+  ve çağrılan işlevler ve sınıflar, dosyanın bildirdiği değerler, parametreler, özellikler, adlandırılmış argümanlar);
+  C++ için clangd'ninkilerle clangd'nin listesinde birleştirilir (onda olmayan türler eklenir). clangd olmadan yalnızca
+  Kotlin'inkileri verir; yalnızca belgenin tamamı için.
+- **kompozc**: bir nesne ifadesinin işlevleri, lambdalarında `this`'i adıyla yakalar (C++20 `[=]`'in yakalamasını eskimiş
+  sayar).
 - **Bir VS Code eklentisi** (`editors/vscode`): Kotlin kodu içeren bir C++ dosyası "Kompoz C++" olarak gösterilir;
   Kotlin'i Kotlin olarak (kendi dilbilgisiyle), C++'ı C++ olarak vurgulanır ve onun için `kompozc --lsp` başlatılır
   (CLion eklentisinin bulduğu gibi bulunur); C/C++ ve clangd eklentileri böyle bir dosyaya karışmaz. Dilbilgisi ve

@@ -7,7 +7,7 @@ Editors, previews, rebuilding on save, scripted screenshots, profiling and the e
 A `.cpp` file with `@Kompozable` functions in Kotlin's syntax is both C++ and Kotlin, which a C++ editor alone reads as broken C++. `kompozc --lsp` is a language server for such files: editors start it where they would start clangd, and it starts clangd behind itself.
 
 - In the C++ around the Kotlin, everything is clangd's: completion, hover, going to definitions, diagnostics.
-- In the Kotlin, the diagnostics are kompozc's (a syntax error, a name it can't place) and the C++ compiler's on the translation, each on the Kotlin line it comes from. clangd's completion and hover aren't given there, and formatting leaves such a file alone.
+- In the Kotlin, the diagnostics are kompozc's (a syntax error, a name it can't place) and the C++ compiler's on the translation, each on the Kotlin line it comes from. clangd's completion and hover aren't given there, and formatting leaves such a file alone. Its colors (semantic tokens) are kompozc's too: keywords, strings, numbers, comments, annotations, functions and classes declared and called, values, parameters, properties; an editor that colors by them (VS Code, Kate, CLion) shows the Kotlin as Kotlin.
 - Files without Kotlin go to clangd as they are.
 
 It finds the build by the `compile_commands.json` and `kompozc_commands.json` that a CMake build with `kompozable` writes (Kompoz sets `CMAKE_EXPORT_COMPILE_COMMANDS`; set it in your project too), in the file's directory or one above it, or in a directory there such as `build/` or CLion's `cmake-build-debug/`. Arguments it doesn't know are clangd's; `--clangd PATH` names the clangd to start. Without a clangd it still gives kompozc's own diagnostics.

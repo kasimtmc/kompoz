@@ -15,6 +15,7 @@
 #include "lsp.hpp"
 
 #include "json.hpp"
+#include "lexer.hpp"
 #include "translate.hpp"
 
 #include <algorithm>
@@ -468,6 +469,320 @@ struct Doc {
     }
 };
 
+// ---- The Kotlin's semantic tokens ----
+// clangd's tokens are kept off the Kotlin (its view there is blank); the Kotlin's are kompozc's own, read
+// with its lexer: keywords, strings (their templates' code as code), numbers, comments, annotations, and
+// what names are by where they stand: functions and classes declared and called, values declared,
+// parameters, properties after a dot, named arguments. Merged into one answer in clangd's legend, with the
+// types it lacks added to it.
+
+// The token types and modifiers by LSP's names, an index each (a modifier: a bit).
+struct Legend {
+    std::vector<std::string> types, modifiers;
+    int type(const std::string& name) {
+        auto it = std::find(types.begin(), types.end(), name);
+        if (it != types.end()) return int(it - types.begin());
+        types.push_back(name);
+        return int(types.size()) - 1;
+    }
+    int modifier(const std::string& name) {
+        auto it = std::find(modifiers.begin(), modifiers.end(), name);
+        if (it == modifiers.end()) it = modifiers.insert(modifiers.end(), name);
+        return 1 << int(it - modifiers.begin());
+    }
+    // The types and modifiers the Kotlin's tokens use, there from the start (a legend can't grow once told).
+    void addKotlin() {
+        for (const char* t : {"keyword", "string", "number", "comment", "decorator", "function", "class", "interface", "parameter", "variable",
+                              "property", "label", "type"})
+            type(t);
+        modifier("declaration");
+    }
+    Json json() const {
+        Json j;
+        Json::Array t, m;
+        for (const std::string& s : types) t.push_back(Json(s));
+        for (const std::string& s : modifiers) m.push_back(Json(s));
+        j["tokenTypes"] = Json(std::move(t));
+        j["tokenModifiers"] = Json(std::move(m));
+        return j;
+    }
+};
+
+struct SemanticToken {
+    int line, start, length, type, modifiers;
+    friend bool operator<(const SemanticToken& a, const SemanticToken& b) { return std::tie(a.line, a.start) < std::tie(b.line, b.start); }
+};
+
+namespace kotlin_tokens {
+
+bool hardKeyword(std::string_view w) {
+    static const std::set<std::string, std::less<>> words = {
+        "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface", "is", "null", "object",
+        "package", "return", "super", "this", "throw", "true", "try", "typealias", "typeof", "val", "var", "when", "while",
+        "catch", "finally", "import"};
+    return words.contains(w);
+}
+// Kotlin's soft keywords and modifiers: keywords where a declaration or a name follows (data class,
+// override fun, by lazy, companion object); names elsewhere (a value called data).
+bool softKeyword(std::string_view w) {
+    static const std::set<std::string, std::less<>> words = {
+        "abstract", "actual", "annotation", "by", "companion", "const", "constructor", "crossinline", "data", "enum", "expect",
+        "external", "field", "final", "get", "infix", "init", "inline", "inner", "internal", "lateinit", "noinline", "open",
+        "operator", "out", "override", "private", "protected", "public", "reified", "sealed", "set", "suspend", "tailrec",
+        "vararg", "value", "where"};
+    return words.contains(w);
+}
+
+struct Reader {
+    const std::string& text;
+    const Lines& lines;
+    Legend& legend;
+    std::vector<SemanticToken>& out;
+    int declaration;
+    // The values and functions the regions declare (a first reading): a name's kind where it is used.
+    std::set<std::string, std::less<>> values, functions;
+    bool collecting = false;
+
+    // A token over [from, to): one a line, as LSP's tokens can't go across lines.
+    void add(size_t from, size_t to, const char* type, int modifiers = 0) {
+        if (collecting) return;
+        int t = legend.type(type);
+        while (from < to) {
+            size_t nl = text.find('\n', from);
+            size_t end = nl == std::string::npos ? to : std::min(to, nl);
+            if (end > from) {
+                int line = lines.lineOf(from), start = lines.column(line, from);
+                out.push_back({line, start, lines.column(line, end) - start, t, modifiers});
+            }
+            from = end + 1;
+        }
+    }
+
+    // The comments between two tokens (what the lexer skips: blanks and comments).
+    void comments(size_t from, size_t to) {
+        while (from < to) {
+            size_t slash = text.find('/', from);
+            if (slash == std::string::npos || slash + 1 >= to) return;
+            if (text[slash + 1] == '/') {
+                size_t end = std::min(to, text.find('\n', slash) == std::string::npos ? to : text.find('\n', slash));
+                add(slash, end, "comment");
+                from = end;
+            } else if (text[slash + 1] == '*') {
+                size_t close = text.find("*/", slash + 2);
+                size_t end = close == std::string::npos ? to : std::min(to, close + 2);
+                add(slash, end, "comment");
+                from = end;
+            } else {
+                from = slash + 1;
+            }
+        }
+    }
+
+    // The tokens of [from, to), lexed from `from` (a region, or a template's code).
+    void read(size_t from, size_t to) {
+        std::vector<Token> tokens;
+        try {
+            Pos start;
+            start.line = lines.lineOf(from) + 1;
+            start.offset = from;
+            start.column = int(from - lines.starts[size_t(start.line - 1)]) + 1;
+            Lexer lexer(text, start);
+            for (;;) {
+                Token t = lexer.next();
+                if (t.kind == Tok::End || t.pos.offset >= to) break;
+                tokens.push_back(std::move(t));
+            }
+        } catch (const CompileError&) {
+            // (what is read up to the mistake keeps its tokens)
+        }
+        size_t last = from;
+        std::vector<Token> code;  // (but the line ends)
+        for (Token& t : tokens) {
+            comments(last, t.pos.offset);
+            last = t.end.offset;
+            if (t.kind != Tok::Newline) code.push_back(std::move(t));
+        }
+        comments(last, to);
+        classify(code);
+    }
+
+    void classify(const std::vector<Token>& code) {
+        auto op = [&](size_t i, std::string_view o) { return i < code.size() && code[i].kind == Tok::Op && code[i].text == o; };
+        auto ident = [&](size_t i) { return i < code.size() && code[i].kind == Tok::Ident; };
+        // The names a lambda's arrow follows ({ a, b -> }, { (x, y) -> }), from the brace on.
+        std::set<size_t> lambdaParameters;
+        for (size_t i = 0; i < code.size(); ++i) {
+            if (!op(i, "{")) continue;
+            std::vector<size_t> names;
+            size_t j = i + 1;
+            while (j < code.size() && (ident(j) || op(j, ",") || op(j, "(") || op(j, ")") || op(j, ":") || op(j, "<") || op(j, ">") || op(j, ".") ||
+                                       op(j, "?"))) {
+                if (ident(j) && !(j > 0 && (op(j - 1, ":") || op(j - 1, "<") || op(j - 1, ".")))) names.push_back(j);
+                ++j;
+            }
+            if (op(j, "->")) lambdaParameters.insert(names.begin(), names.end());
+        }
+        enum class After { None, Fun, Parameters, Class, Value } after = After::None;
+        int parameterDepth = -1, depth = 0;  // a fun declaration's parentheses: its parameters
+        for (size_t i = 0; i < code.size(); ++i) {
+            const Token& t = code[i];
+            size_t from = t.pos.offset, to = t.end.offset;
+            switch (t.kind) {
+            case Tok::Number: add(from, to, "number"); break;
+            case Tok::Char: add(from, to, "string"); break;
+            case Tok::String: string(t); break;
+            case Tok::Op:
+                if (t.text == "(") {
+                    if (after == After::Parameters) parameterDepth = depth, after = After::None;
+                    ++depth;
+                } else if (t.text == ")") {
+                    if (--depth == parameterDepth) parameterDepth = -1;
+                } else if (t.text == "@" && ident(i + 1) && code[i + 1].pos.offset == to) {
+                    bool label = i > 0 && ident(i - 1) && code[i - 1].end.offset == from;  // return@name
+                    if (label) {
+                        add(code[i + 1].pos.offset, code[i + 1].end.offset, "label");
+                    } else {  // an annotation, its dotted name too
+                        size_t end = code[i + 1].end.offset;
+                        size_t j = i + 1;
+                        while (op(j + 1, ".") && ident(j + 2)) j += 2, end = code[j].end.offset;
+                        add(from, end, "decorator");
+                        i = j;
+                    }
+                }
+                break;
+            case Tok::Ident: {
+                const std::string& w = t.text;
+                bool call = op(i + 1, "(") || op(i + 1, "{") || (op(i + 1, "<") && callAfterTypeArguments(code, i + 1));
+                if (hardKeyword(w) && !(i > 0 && op(i - 1, "."))) {
+                    add(from, to, "keyword");
+                    after = w == "fun" ? After::Fun : (w == "class" || w == "interface" || w == "object" || w == "typealias") ? After::Class
+                          : (w == "val" || w == "var") ? After::Value : after;
+                    if (w == "this" || w == "super") after = After::None;
+                    break;
+                }
+                if (softKeyword(w) && !(i > 0 && op(i - 1, ".")) &&
+                    (ident(i + 1) || ((w == "get" || w == "set" || w == "constructor") && op(i + 1, "(")) || (w == "init" && op(i + 1, "{")))) {
+                    add(from, to, "keyword");
+                    break;
+                }
+                if (after == After::Fun) {  // fun <T> Receiver.name(: the last name before the parameters
+                    if (op(i + 1, ".")) {
+                        add(from, to, "class");
+                    } else {
+                        add(from, to, "function", declaration);
+                        if (collecting) functions.insert(w);
+                        after = After::Parameters;
+                    }
+                    break;
+                }
+                if (after == After::Class) {
+                    add(from, to, "class", declaration);
+                    after = After::None;
+                    break;
+                }
+                if (after == After::Value) {  // val Receiver.name, val (a, b)
+                    if (op(i + 1, ".")) {
+                        add(from, to, "class");
+                    } else {
+                        add(from, to, "variable", declaration);
+                        if (collecting) values.insert(w);
+                        if (!op(i + 1, ",")) after = After::None;
+                    }
+                    break;
+                }
+                if (lambdaParameters.contains(i) || (parameterDepth >= 0 && depth == parameterDepth + 1 && op(i + 1, ":"))) {
+                    add(from, to, "parameter", declaration);
+                } else if (w == "it" && !op(i + 1, ":")) {
+                    add(from, to, "parameter");
+                } else if (call || (functions.contains(w) && op(i - 1, "::"))) {
+                    add(from, to, "function");
+                } else if (values.contains(w) && !(i > 0 && (op(i - 1, ".") || op(i - 1, "?.")))) {
+                    add(from, to, "variable");  // a value the file declares
+                } else if (op(i + 1, "=") && i > 0 && (op(i - 1, "(") || op(i - 1, ","))) {
+                    add(from, to, "parameter");  // a named argument
+                } else if (i > 0 && (op(i - 1, ".") || op(i - 1, "?."))) {
+                    add(from, to, std::isupper(static_cast<unsigned char>(w[0])) ? "class" : "property");
+                } else if (std::isupper(static_cast<unsigned char>(w[0]))) {
+                    add(from, to, "class");
+                }
+                break;
+            }
+            default: break;
+            }
+        }
+    }
+
+    // name<…>( or name<…> { : the angle brackets close on the same line before a call's parenthesis or lambda.
+    static bool callAfterTypeArguments(const std::vector<Token>& code, size_t lt) {
+        int open = 0;
+        for (size_t j = lt; j < code.size(); ++j) {
+            const Token& t = code[j];
+            if (t.kind == Tok::Op && t.text == "<") ++open;
+            else if (t.kind == Tok::Op && t.text == ">") {
+                if (--open == 0) return j + 1 < code.size() && code[j + 1].kind == Tok::Op && (code[j + 1].text == "(" || code[j + 1].text == "{");
+            } else if (t.kind != Tok::Ident && !(t.kind == Tok::Op && (t.text == "," || t.text == "." || t.text == "?" || t.text == "*"))) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // A string: its text, and the code of its templates read as code.
+    void string(const Token& t) {
+        size_t at = t.pos.offset;
+        for (const StringPart& part : t.parts) {
+            if (!part.expr) continue;
+            bool braced = part.pos.offset >= 2 && text[part.pos.offset - 1] == '{';
+            size_t open = part.pos.offset - (braced ? 2 : 1), close = part.pos.offset + part.text.size() + (braced ? 1 : 0);
+            add(at, open, "string");
+            if (braced) {
+                read(part.pos.offset, part.pos.offset + part.text.size());
+            } else {
+                Token name;
+                name.kind = Tok::Ident;
+                name.text = part.text;
+                name.pos = part.pos;
+                name.end = part.pos;
+                name.end.offset += part.text.size();
+                std::vector<Token> one{name};
+                classify(one);
+            }
+            at = close;
+        }
+        add(at, t.end.offset, "string");
+    }
+};
+
+}  // namespace kotlin_tokens
+
+// The Kotlin regions' tokens of `text`.
+std::vector<SemanticToken> kotlinTokens(const std::string& text, const std::vector<std::pair<size_t, size_t>>& regions, Legend& legend) {
+    Lines lines(text);
+    std::vector<SemanticToken> out;
+    kotlin_tokens::Reader reader{text, lines, legend, out, legend.modifier("declaration")};
+    reader.collecting = true;  // (first the names declared, then the tokens)
+    for (auto [begin, end] : regions) reader.read(begin, end);
+    reader.collecting = false;
+    for (auto [begin, end] : regions) reader.read(begin, end);
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+// Tokens as LSP sends them: each relative to the one before.
+Json::Array encodeTokens(const std::vector<SemanticToken>& tokens) {
+    Json::Array data;
+    int line = 0, start = 0;
+    for (const SemanticToken& t : tokens) {
+        data.push_back(Json(t.line - line));
+        data.push_back(Json(t.line == line ? t.start - start : t.start));
+        data.push_back(Json(t.length));
+        data.push_back(Json(t.type));
+        data.push_back(Json(t.modifiers));
+        line = t.line, start = t.start;
+    }
+    return data;
+}
+
 class Server {
 public:
     Server(std::string clangd, std::vector<std::string> clangdArgs, std::optional<fs::path> compileCommandsDir)
@@ -572,6 +887,13 @@ private:
                 result["capabilities"]["textDocumentSync"]["openClose"] = true;
                 result["capabilities"]["textDocumentSync"]["change"] = 1;
                 result["capabilities"]["textDocumentSync"]["save"] = true;
+                {
+                    std::lock_guard lock(mutex_);
+                    legend_ = Legend();
+                    legend_.addKotlin();
+                    result["capabilities"]["semanticTokensProvider"]["legend"] = legend_.json();
+                }
+                result["capabilities"]["semanticTokensProvider"]["full"] = true;
                 result["serverInfo"]["name"] = "kompozc";
                 toEditor(response(in["id"], std::move(result)));
                 return true;
@@ -669,6 +991,14 @@ private:
             }
         }
         if (!haveClangd_) {
+            if (method == "textDocument/semanticTokens/full") {  // (the Kotlin's alone)
+                Json result;
+                std::lock_guard lock(mutex_);
+                auto it = docs_.find(uri);
+                result["data"] = Json(it == docs_.end() ? Json::Array() : encodeTokens(kotlinTokens(it->second.text, it->second.regions, legend_)));
+                toEditor(response(in["id"], std::move(result)));
+                return true;
+            }
             if (request) toEditor(response(in["id"], Json()));
             return true;
         }
@@ -1017,9 +1347,20 @@ private:
             if (it != pending_.end()) what = it->second, pending_.erase(it);
         }
         if (what.first == "initialize") {
-            // Semantic tokens whole (a delta can't be kept off the Kotlin).
-            if (in["result"]["capabilities"]["semanticTokensProvider"]["full"].isObject())
-                message["result"]["capabilities"]["semanticTokensProvider"]["full"] = true;
+            // Semantic tokens whole (a delta can't be kept off the Kotlin, nor a range's be given the Kotlin's), in
+            // clangd's legend with the types the Kotlin's tokens need.
+            const Json& provider = in["result"]["capabilities"]["semanticTokensProvider"];
+            if (provider.isObject()) {
+                std::lock_guard lock(mutex_);
+                legend_ = Legend();
+                for (const Json& t : provider["legend"]["tokenTypes"].array()) legend_.types.push_back(t.string());
+                for (const Json& m : provider["legend"]["tokenModifiers"].array()) legend_.modifiers.push_back(m.string());
+                legend_.addKotlin();
+                Json& mine = message["result"]["capabilities"]["semanticTokensProvider"];
+                mine["legend"] = legend_.json();
+                mine["full"] = true;
+                mine.erase("range");
+            }
             if (in.has("result")) message["result"]["serverInfo"]["name"] = "kompozc (clangd)";
         } else if (!what.second.empty() && in.has("result")) {
             std::lock_guard lock(mutex_);
@@ -1084,20 +1425,21 @@ private:
             return doc.inKotlin(lines.offset(position["line"].integer(), position["character"].integer()));
         };
         if (method == "textDocument/semanticTokens/full" || method == "textDocument/semanticTokens/range") {
-            Json::Array& data = result["data"].array();
-            Json::Array kept;
-            int line = 0, start = 0, lastLine = 0, lastStart = 0;
-            for (size_t i = 0; i + 4 < data.size(); i += 5) {
-                int dl = data[i].integer(), ds = data[i + 1].integer();
-                line += dl;
-                start = dl ? ds : start + ds;
-                if (doc.inKotlin(lines.offset(line, start))) continue;
-                kept.push_back(line - lastLine);
-                kept.push_back(line == lastLine ? start - lastStart : start);
-                for (size_t k = 2; k < 5; ++k) kept.push_back(data[i + k]);
-                lastLine = line, lastStart = start;
+            const Json& read = result;
+            std::vector<SemanticToken> tokens = kotlinTokens(doc.text, doc.regions, legend_);  // (the Kotlin's)
+            int line = 0, start = 0;
+            if (read["data"].isArray()) {
+                const Json::Array& data = read["data"].array();
+                for (size_t i = 0; i + 4 < data.size(); i += 5) {
+                    int dl = int(data[i].integer()), ds = int(data[i + 1].integer());
+                    line += dl;
+                    start = dl ? ds : start + ds;
+                    if (doc.inKotlin(lines.offset(line, start))) continue;  // (clangd's are kept off it)
+                    tokens.push_back({line, start, int(data[i + 2].integer()), int(data[i + 3].integer()), int(data[i + 4].integer())});
+                }
             }
-            data = std::move(kept);
+            std::sort(tokens.begin(), tokens.end());
+            result["data"] = Json(encodeTokens(tokens));
         } else if (method == "textDocument/inlayHint") {
             Json::Array kept;
             for (Json& h : result.array())
@@ -1135,6 +1477,7 @@ private:
     std::optional<fs::path> compileCommandsDir_;
     Child clangd_;
     bool haveClangd_ = false;
+    Legend legend_;  // the semantic tokens' (clangd's, with the Kotlin's types)
 
     std::mutex mutex_;  // the documents, the builds, the translations due
     std::map<std::string, Doc> docs_;

@@ -1143,6 +1143,11 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **kompozc --lsp colors the Kotlin**: semantic tokens for the Kotlin regions, read with kompozc's own lexer
+  (keywords, strings and their templates' code, numbers, comments, annotations, functions and classes declared and
+  called, values the file declares, parameters, properties, named arguments), merged with clangd's for the C++ in
+  clangd's legend (the types it lacks added). Without clangd it gives the Kotlin's alone; whole documents only.
+- **kompozc**: an object expression's functions capture `this` by name in their lambdas (C++20 deprecates `[=]`'s).
 - **A VS Code extension** (`editors/vscode`): a C++ file with Kotlin code is shown as "Kompoz C++", its Kotlin
   highlighted as Kotlin (a grammar of its own) and its C++ as C++, and `kompozc --lsp` started for it (found as the
   CLion plugin finds it); the C/C++ and clangd extensions leave such a file alone. Grammar and unit tests, a CI job
