@@ -1,0 +1,88 @@
+# A tag like `vscode-v0.1.0` pushed: the VS Code extension (editors/vscode) checked, tested and packaged (its
+# package.json's version must be the tag's), attached to a GitHub release of its own (not the repository's latest:
+# that stays Kompoz's), and published to Open VSX when the repository has the `OVSX_PAT` secret. Run by hand
+# (workflow_dispatch) it only packages.
+name: VS Code extension release
+
+on:
+  push:
+    tags: ["vscode-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - name: The tag's version
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: editors/vscode
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "vscode-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::package.json has version $version, the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+      - name: Check, test and package
+        working-directory: editors/vscode
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kompoz-vscode
+          path: editors/vscode/*.vsix
+
+  release:
+    name: GitHub release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: kompoz-vscode
+          path: vsix
+      - name: Create it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#vscode-v}
+          # (the version's entry of the extension's CHANGELOG.md as the notes)
+          awk -v v="## $version" '$0 == v {on = 1; next} /^## / {on = 0} on' editors/vscode/CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" vsix/*.vsix --repo "$GITHUB_REPOSITORY" --latest=false \
+            --title "Kompoz for VS Code $version" --notes-file notes.md
+
+  open-vsx:
+    name: Open VSX
+    needs: [package, release]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    env:
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kompoz-vscode
+          path: vsix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Publish
+        if: env.OVSX_PAT != ''
+        run: npx --yes ovsx@1 publish vsix/*.vsix
+      - name: No token
+        if: env.OVSX_PAT == ''
+        run: echo "::notice::OVSX_PAT isn't set; the VS Code extension wasn't published to Open VSX."

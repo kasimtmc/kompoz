@@ -1191,7 +1191,8 @@
 - **Bir VS Code eklentisi** (`editors/vscode`): Kotlin kodu içeren bir C++ dosyası "Kompoz C++" olarak gösterilir;
   Kotlin'i Kotlin olarak (kendi dilbilgisiyle), C++'ı C++ olarak vurgulanır ve onun için `kompozc --lsp` başlatılır
   (CLion eklentisinin bulduğu gibi bulunur); C/C++ ve clangd eklentileri böyle bir dosyaya karışmaz. Dilbilgisi ve
-  birim testleri, `.vsix`'i paketleyen bir CI işi.
+  birim testleri, `.vsix`'i paketleyen bir CI işi. Simgesi Kompoz'unkidir (showcase'inki); bir `vscode-v<sürüm>` etiketi
+  onu yayımlar (bir GitHub sürümü, `OVSX_PAT` gizli değişkeniyle de Open VSX'te `plyground.kompoz` olarak).
 - **CI**: Android ve CLion eklentisi işleri Gradle'ın indirdiklerini (CLion'un kendisini değil) çalıştırmadan
   çalıştırmaya saklar; Maven Central onları iki kez düşürmüştü.
 - **Compose foundation'daki gibi içerik alma**: `Modifier.contentReceiver` (bir lambda ya da sürüklemeleri de duyan bir

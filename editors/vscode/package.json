@@ -4,6 +4,11 @@
   "description": "Kompoz's C++ sources with @Kompozable functions in Kotlin's syntax: kompozc's language server (in front of clangd) and highlighting for the Kotlin",
   "version": "0.1.0",
   "publisher": "plyground",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#6750A4",
+    "theme": "dark"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

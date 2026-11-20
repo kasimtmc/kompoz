@@ -55,6 +55,13 @@ it by hand on a Mac yet, and it hasn't been built for iOS. What is needed:
   UIAccessibility (iOS), as `platform/linux/atspi_bridge.cpp` and `platform/windows/uia_bridge.cpp` do, with tests
   like theirs in `tests/platform_tests*.cpp`.
 
+## The VS Code extension
+
+`editors/vscode` is released on its own. Raise the `version` in its `package.json`, add that version's entry at the top
+of its `CHANGELOG.md`, and push a tag `vscode-v<version>` (`vscode-v0.2.0`). `.github/workflows/vscode-release.yml`
+then checks, tests and packages it, attaches the `.vsix` to a GitHub release of its own, and publishes it to Open VSX
+(as `plyground.kompoz`) when the repository has the `OVSX_PAT` secret (an Open VSX access token).
+
 ## License
 
 Kompoz is licensed under the [Apache License 2.0](LICENSE). By contributing you agree that your contribution is

@@ -58,6 +58,13 @@ CI, Kompoz'u macOS'ta derliyor, testlerini çalıştırıyor ve orada bir uygula
   (iOS) bir köprü; `platform/linux/atspi_bridge.cpp` ve `platform/windows/uia_bridge.cpp` gibi, onlarınki gibi
   `tests/platform_tests*.cpp` testleriyle.
 
+## VS Code eklentisi
+
+`editors/vscode` kendi başına yayımlanır. `package.json`'undaki `version`'ı artırın, o sürümün kaydını
+`CHANGELOG.md`'sinin en üstüne ekleyin ve `vscode-v<sürüm>` etiketini gönderin (`vscode-v0.2.0`). Ardından
+`.github/workflows/vscode-release.yml` onu denetler, sınar ve paketler, `.vsix`'i kendine ait bir GitHub sürümüne ekler ve
+depoda `OVSX_PAT` gizli değişkeni (bir Open VSX erişim anahtarı) varsa Open VSX'te (`plyground.kompoz` olarak) yayımlar.
+
 ## Lisans
 
 Kompoz [Apache Lisansı 2.0](LICENSE) ile lisanslanmıştır. Katkıda bulunarak katkınızın da bu lisansla
