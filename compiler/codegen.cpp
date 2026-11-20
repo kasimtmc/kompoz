@@ -4541,6 +4541,7 @@ private:
         auto receiverLabels = std::exchange(receiverLabels_, {});
         auto lambdaLabels = std::exchange(lambdaLabels_, {});
         bool wasSuspend = std::exchange(suspend_, false), wasGlobal = std::exchange(global_, false);
+        bool wasInClass = std::exchange(inClass_, true);  // (its lambdas capture `this` by name: C++20 deprecates [=]'s)
         for (auto& m : o.kids) {
             out_->at(m->pos);
             out_->text(" " + (iface ? std::string("auto") : m->type ? type(*m->type) : std::string("void")) + " " + cppName(m->text) + "(");
@@ -4562,7 +4563,7 @@ private:
         receiverConst_ = std::move(receiverConst);
         receiverLabels_ = std::move(receiverLabels);
         lambdaLabels_ = std::move(lambdaLabels);
-        suspend_ = wasSuspend, global_ = wasGlobal;
+        suspend_ = wasSuspend, global_ = wasGlobal, inClass_ = wasInClass;
         out_->text(" }; return " + (iface ? plainType(*o.type) + "(" : std::string()) + "std::make_shared<kompoz_object>(");
         for (size_t i = 0; i < captured.size(); ++i) out_->text((i ? ", " : "") + cppName(captured[i].first));
         out_->text(std::string(iface ? ")" : "") + "); }()");
