@@ -1,0 +1,105 @@
+{
+  "name": "kompoz",
+  "displayName": "Kompoz",
+  "description": "Kompoz's C++ sources with @Kompozable functions in Kotlin's syntax: kompozc's language server (in front of clangd) and highlighting for the Kotlin",
+  "version": "0.1.0",
+  "publisher": "kasimtmc",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kasimtmc/kompoz",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "kompoz",
+    "compose",
+    "kotlin",
+    "c++",
+    "clangd"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:cpp"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "kompoz-cpp",
+        "aliases": [
+          "Kompoz C++",
+          "kompoz-cpp"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "kompoz-cpp",
+        "scopeName": "source.kompoz-cpp",
+        "path": "./syntaxes/kompoz-cpp.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.kotlin": "kotlin",
+          "meta.embedded.block.cpp": "cpp"
+        }
+      },
+      {
+        "scopeName": "source.kotlin.kompoz",
+        "path": "./syntaxes/kotlin.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Kompoz",
+      "properties": {
+        "kompoz.kompozcPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The `kompozc` to run as the language server. Empty: `KOMPOZC` from the environment, else `build/` or `cmake-build-*/compiler/kompozc` in the workspace, else `kompozc` on `PATH`."
+        },
+        "kompoz.clangdPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The clangd that `kompozc --lsp` starts (`--clangd`). Empty: `clangd` on `PATH`."
+        },
+        "kompoz.clangdArguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Arguments for clangd, given to `kompozc --lsp` after its own."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "kompoz.restartServer",
+        "title": "Restart kompozc --lsp",
+        "category": "Kompoz"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node20 --sourcemap",
+    "check": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test out/test/*.test.js && vscode-tmgrammar-test -g syntaxes/kompoz-cpp.tmLanguage.json -g syntaxes/kotlin.tmLanguage.json -g test/grammar/cpp.tmLanguage.json 'test/grammar/*.kompoz.cpp'",
+    "package": "cp ../../LICENSE LICENSE && esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node20 --minify && vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0",
+    "vscode-tmgrammar-test": "^0.1.3"
+  }
+}

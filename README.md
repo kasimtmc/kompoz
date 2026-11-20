@@ -93,7 +93,8 @@ kompoz::Application kompoz::createApplication(int, char**) {
 - **Tools**: headless UI tests (`KompozTestRule`), previews (`KOMPOZ_PREVIEW`), rebuild-and-restart on save
   that keeps the app's state (`scripts/dev.sh`), scripted screenshots, frame profiling, packaging for every
   platform (`scripts/package.sh`); editors: a language server (`kompozc --lsp`, in front of clangd) for CLion
-  (Kompoz's plugin), VS Code and Kate, its diagnostics on the Kotlin's lines.
+  and VS Code (Kompoz's plugin and extension: the Kotlin highlighted as Kotlin in VS Code) and Kate, its
+  diagnostics on the Kotlin's lines.
 
 The full list, with the status of each Compose API, is in [docs/components.md](docs/components.md).
 

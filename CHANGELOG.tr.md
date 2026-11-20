@@ -1180,6 +1180,12 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Bir VS Code eklentisi** (`editors/vscode`): Kotlin kodu içeren bir C++ dosyası "Kompoz C++" olarak gösterilir;
+  Kotlin'i Kotlin olarak (kendi dilbilgisiyle), C++'ı C++ olarak vurgulanır ve onun için `kompozc --lsp` başlatılır
+  (CLion eklentisinin bulduğu gibi bulunur); C/C++ ve clangd eklentileri böyle bir dosyaya karışmaz. Dilbilgisi ve
+  birim testleri, `.vsix`'i paketleyen bir CI işi.
+- **CI**: Android ve CLion eklentisi işleri Gradle'ın indirdiklerini (CLion'un kendisini değil) çalıştırmadan
+  çalıştırmaya saklar; Maven Central onları iki kez düşürmüştü.
 - **Compose foundation'daki gibi içerik alma**: `Modifier.contentReceiver` (bir lambda ya da sürüklemeleri de duyan bir
   `ReceiveContentListener`) içindeki bir `TextFieldState` alanına yapıştırılanı, üstüne ya da içine bırakılanı ya da ekran
   klavyesinin gönderdiğini (resimler ve GIF'ler, Android 7.1+) alır. `TransferableContent` (`source`,

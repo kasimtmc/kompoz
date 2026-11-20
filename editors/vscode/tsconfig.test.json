@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/kompozable.ts", "src/kompozc.ts", "test/*.test.ts"]
+}

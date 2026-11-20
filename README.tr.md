@@ -93,8 +93,9 @@ kompoz::Application kompoz::createApplication(int, char**) {
   ve sağdan sola yerleşim); pano, titreşim, URI'ler, IME.
 - **Araçlar**: pencere açmadan UI testleri (`KompozTestRule`), önizlemeler (`KOMPOZ_PREVIEW`), kaydedince uygulamanın
   durumunu koruyarak yeniden derleyip başlatma (`scripts/dev.sh`), betikle ekran görüntüsü, kare profili, her platform
-  için paketleme (`scripts/package.sh`); editörler: CLion (Kompoz'un eklentisi), VS Code ve Kate için, tanılarını
-  Kotlin'in satırlarında veren bir dil sunucusu (`kompozc --lsp`, clangd'nin önünde).
+  için paketleme (`scripts/package.sh`); editörler: CLion ve VS Code (Kompoz'un eklentileri: VS Code'da Kotlin, Kotlin
+  olarak vurgulanır) ve Kate için, tanılarını Kotlin'in satırlarında veren bir dil sunucusu (`kompozc --lsp`,
+  clangd'nin önünde).
 
 Her Compose API'sinin durumuyla tam liste [docs/components.tr.md](docs/components.tr.md)'de.
 

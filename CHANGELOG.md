@@ -1143,6 +1143,12 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **A VS Code extension** (`editors/vscode`): a C++ file with Kotlin code is shown as "Kompoz C++", its Kotlin
+  highlighted as Kotlin (a grammar of its own) and its C++ as C++, and `kompozc --lsp` started for it (found as the
+  CLion plugin finds it); the C/C++ and clangd extensions leave such a file alone. Grammar and unit tests, a CI job
+  that packages the `.vsix`.
+- **CI**: the Android and CLion plugin jobs keep Gradle's downloads (not CLion itself) from run to run, as Maven
+  Central failed them twice.
 - **Receiving content, as Compose foundation does**: `Modifier.contentReceiver` (a lambda, or a `ReceiveContentListener`
   that hears of drags too) takes what is pasted into a `TextFieldState` field inside it, dropped on it or inside it, or
   sent by the soft keyboard (images and GIFs, Android 7.1+). The `TransferableContent` (`source`,

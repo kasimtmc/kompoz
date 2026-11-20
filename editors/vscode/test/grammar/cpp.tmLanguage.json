@@ -1,0 +1,9 @@
+{
+  "$comment": "A stand-in for VS Code's C++ grammar (source.cpp) in the grammar tests: enough to tell its lines from the Kotlin's.",
+  "scopeName": "source.cpp",
+  "patterns": [
+    { "name": "comment.line.double-slash.cpp", "match": "//.*$" },
+    { "name": "meta.preprocessor.include.cpp", "match": "^\\s*#\\s*include\\b.*$" },
+    { "name": "keyword.other.cpp", "match": "\\b(class|struct|public|private|final|namespace|using|static|int|void|return)\\b" }
+  ]
+}

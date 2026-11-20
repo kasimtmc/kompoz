@@ -1,0 +1,14 @@
+{
+  "$comment": "A C++ source with Kotlin code in it (Kompoz's kompozable): C++ (VS Code's own grammar) but for its Kotlin declarations, at the start of a line. A Kotlin region begins at a line only Kotlin starts (an annotation, fun, val, var, object, data class, a class with a constructor...) and ends before a line at the start that doesn't go on with Kotlin (#include, TEST(, a C++ class), once its braces are closed. What only kompozc tells apart (class X { in either) is left as C++ here.",
+  "name": "Kompoz C++",
+  "scopeName": "source.kompoz-cpp",
+  "patterns": [{ "include": "#kotlin-region" }, { "include": "source.cpp" }],
+  "repository": {
+    "kotlin-region": {
+      "name": "meta.embedded.block.kotlin",
+      "begin": "^(?=@[A-Za-z]|(?:(?:private|internal|public|inline|suspend|operator|infix|tailrec|const|lateinit|data|sealed|abstract|open|annotation|value|fun)\\s+)*(?:fun|val|var|object|interface|typealias)\\b|(?:data|sealed|abstract|open|annotation|value)\\s+(?:class|interface)\\b|(?:enum\\s+)?class\\s+[A-Za-z_][A-Za-z0-9_]*\\s*(?:<[^>]*>\\s*)?\\()",
+      "end": "^(?=[^\\s}/*@])(?!(?:(?:private|internal|public|inline|suspend|operator|infix|tailrec|const|lateinit|data|sealed|abstract|open|annotation|value|fun)\\s+)*(?:fun|val|var|object|interface|typealias|import)\\b|(?:data|sealed|abstract|open|annotation|value)\\s+(?:class|interface)\\b|(?:enum\\s+)?class\\s+[A-Za-z_][A-Za-z0-9_]*\\s*(?:<[^>]*>\\s*)?\\()",
+      "patterns": [{ "include": "source.kotlin.kompoz" }]
+    }
+  }
+}

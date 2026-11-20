@@ -12,14 +12,14 @@ Kotlin söz dizimiyle `@Kompozable` işlevler içeren bir `.cpp` dosyası hem C+
 
 Derlemeyi, `kompozable` kullanan bir CMake derlemesinin yazdığı `compile_commands.json` ve `kompozc_commands.json` dosyalarından bulur (Kompoz `CMAKE_EXPORT_COMPILE_COMMANDS`'ı açar; kendi projenizde de açın): dosyanın dizininde ya da üstündekilerden birinde, ya da oradaki `build/` veya CLion'un `cmake-build-debug/`'ı gibi bir dizinde. Tanımadığı argümanlar clangd'nindir; `--clangd YOL` başlatılacak clangd'yi söyler. clangd olmadan da kompozc'nin kendi tanılarını verir.
 
-**VS Code** (clangd eklentisiyle), çalışma alanının `.vscode/settings.json` dosyasında:
+**VS Code**: Kompoz'un `editors/vscode` içindeki eklentisi, Kotlin kodu içeren bir C++ dosyasını "Kompoz C++" olarak gösterir: Kotlin'ini Kotlin olarak, C++'ını C++ olarak vurgular ve onun için dil sunucusunu başlatır. C/C++ ve clangd eklentileri böyle bir dosyaya karışmaz (Kotlin'i hatalı işaretlerlerdi); düz C++ dosyaları onlarda kalır. Derleyip `.vsix`'i kurun (Eklentiler, `…` menüsü, Install from VSIX; ya da `code --install-extension`):
 
-```json
-{
-    "clangd.path": "${workspaceFolder}/build/compiler/kompozc",
-    "clangd.arguments": ["--lsp"]
-}
+```bash
+cd editors/vscode && npm ci && npm run package
+code --install-extension kompoz-0.1.0.vsix
 ```
+
+kompozc'yu CLion eklentisi gibi bulur (aşağıda): `kompoz.kompozcPath` ayarı, `KOMPOZC`, çalışma alanında derlenmiş olanı ya da `PATH`'teki. `kompoz.clangdPath` ve `kompoz.clangdArguments` arkasındaki clangd içindir; **Kompoz: Restart kompozc --lsp** yeniden derlemeden sonra onu yeniden başlatır.
 
 **Kate**: Ayarlar, LSP İstemcisi, Kullanıcı Sunucu Ayarları'nda (`c` sunucusu Kate'in C ve C++ için olanıdır):
 
