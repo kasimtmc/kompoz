@@ -3,7 +3,7 @@
   "displayName": "Kompoz",
   "description": "Kompoz's C++ sources with @Kompozable functions in Kotlin's syntax: kompozc's language server (in front of clangd) and highlighting for the Kotlin",
   "version": "0.1.0",
-  "publisher": "kasimtmc",
+  "publisher": "plyground",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
