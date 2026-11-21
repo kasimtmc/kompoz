@@ -1143,6 +1143,8 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Conan**: the recipe leaves out libjpeg-turbo 3.2.1, whose static TurboJPEG library and the zlib libpng links
+  both define `z_errmsg` (3.2.0 and the versions after it are taken).
 - **The CLion plugin's releases**: Kompoz's icon, plyGround as its vendor, and its own `CHANGELOG.md` (each version's
   entry its change notes); a tag `clion-v<version>` builds and verifies it, attaches it to a GitHub release, and
   uploads it to JetBrains Marketplace with the `JETBRAINS_TOKEN` secret.

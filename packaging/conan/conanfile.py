@@ -44,7 +44,9 @@ class KompozConan(ConanFile):
             self.requires("vulkan-headers/[>=1.3]")
         if self.settings.os != "Windows":
             if self.options.with_jpeg:
-                self.requires("libjpeg-turbo/[>=2.1]")
+                # (not 3.2.1: its static TurboJPEG library defines the z_errmsg of its in-tree zlib, as
+                # the zlib libpng links does, and the link fails)
+                self.requires("libjpeg-turbo/[>=2.1 <3.2.1 || >3.2.1]")
             if self.options.with_webp:
                 self.requires("libwebp/[>=1.3]")
             if self.options.with_curl:

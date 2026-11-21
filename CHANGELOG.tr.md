@@ -1180,6 +1180,8 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Conan**: tarif libjpeg-turbo 3.2.1'i dışarıda bırakır; onun statik TurboJPEG kitaplığı da libpng'nin bağladığı zlib de
+  `z_errmsg`'i tanımlar (3.2.0 ve ondan sonraki sürümler alınır).
 - **CLion eklentisinin sürümleri**: Kompoz'un simgesi, yayıncısı olarak plyGround ve kendi `CHANGELOG.md`'si (her sürümün
   kaydı değişiklik notları olur); bir `clion-v<sürüm>` etiketi onu derler ve denetler, bir GitHub sürümüne ekler ve
   `JETBRAINS_TOKEN` gizli değişkeniyle JetBrains Marketplace'e yükler.
