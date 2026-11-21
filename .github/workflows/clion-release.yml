@@ -1,0 +1,93 @@
+# A tag like `clion-v0.2.2` pushed: the CLion plugin (editors/clion) built and verified against CLion 2026.3 (its
+# build.gradle.kts's version must be the tag's), attached to a GitHub release of its own (not the repository's
+# latest: that stays Kompoz's), and uploaded to JetBrains Marketplace when the repository has the `JETBRAINS_TOKEN`
+# secret (JetBrains reviews each version before it is listed). Run by hand (workflow_dispatch) it only builds.
+name: CLion plugin release
+
+on:
+  push:
+    tags: ["clion-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag's version
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: editors/clion
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' build.gradle.kts)
+          if [ "clion-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::build.gradle.kts has version $version, the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      # (ci.yml's cache, only read here: see there.)
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2/*
+            !~/.gradle/caches/modules-2/files-2.1
+            ~/.gradle/caches/modules-2/files-2.1/*
+            !~/.gradle/caches/modules-2/files-2.1/cpp
+            ~/.gradle/wrapper
+          key: gradle-clion-${{ hashFiles('editors/clion/*.gradle*', 'editors/clion/gradle/wrapper/gradle-wrapper.properties') }}
+      - name: Build and verify
+        working-directory: editors/clion
+        run: ./gradlew --no-daemon buildPlugin verifyPlugin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kompoz-clion
+          path: editors/clion/build/distributions/*.zip
+
+  release:
+    name: GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: kompoz-clion
+          path: zip
+      - name: Create it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#clion-v}
+          # (the version's entry of the plugin's CHANGELOG.md as the notes)
+          awk -v v="## $version" '$0 == v {on = 1; next} /^## / {on = 0} on' editors/clion/CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" zip/*.zip --repo "$GITHUB_REPOSITORY" --latest=false \
+            --title "Kompoz for CLion $version" --notes-file notes.md
+
+  jetbrains:
+    name: JetBrains Marketplace
+    needs: [build, release]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    env:
+      JETBRAINS_TOKEN: ${{ secrets.JETBRAINS_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kompoz-clion
+          path: zip
+      # (the zip built and verified above, with Marketplace's upload API: the plugin by its id in plugin.xml)
+      - name: Upload
+        if: env.JETBRAINS_TOKEN != ''
+        run: |
+          curl --fail-with-body --silent --show-error --header "Authorization: Bearer $JETBRAINS_TOKEN" \
+            -F xmlId=com.plyg.kompoz -F file=@"$(ls zip/*.zip)" https://plugins.jetbrains.com/api/updates/upload
+      - name: No token
+        if: env.JETBRAINS_TOKEN == ''
+        run: echo "::notice::JETBRAINS_TOKEN isn't set; the CLion plugin wasn't uploaded to JetBrains Marketplace."

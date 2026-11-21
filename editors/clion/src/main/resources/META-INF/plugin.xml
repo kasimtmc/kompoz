@@ -1,13 +1,15 @@
 <idea-plugin>
     <id>com.plyg.kompoz</id>
     <name>Kompoz</name>
-    <vendor url="https://github.com/kasimtmc/kompoz">Kompoz</vendor>
+    <vendor url="https://github.com/kasimtmc/kompoz">plyGround</vendor>
     <description><![CDATA[
         For C++ sources with <code>@Kompozable</code> functions written in Kotlin's syntax (Kompoz's
         <code>kompozable</code>): kompozc's language server, <code>kompozc --lsp</code>, in front of clangd.
         In such a file CLion's own C++ highlighting is turned off (it would read the Kotlin as broken C++);
         kompozc's errors, and the C++ compiler's on the translation, show on their own lines, and clangd's
         answers in the C++ around the Kotlin.
+        <p>kompozc is found in Settings, Tools, Kompoz, else in <code>KOMPOZC</code>, built in the project, or on
+        <code>PATH</code>. The setup guide: <a href="https://kasimtmc.github.io/kompoz/en/tools.html">Kompoz's tools</a>.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

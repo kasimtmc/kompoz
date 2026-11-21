@@ -1143,6 +1143,9 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **The CLion plugin's releases**: Kompoz's icon, plyGround as its vendor, and its own `CHANGELOG.md` (each version's
+  entry its change notes); a tag `clion-v<version>` builds and verifies it, attaches it to a GitHub release, and
+  uploads it to JetBrains Marketplace with the `JETBRAINS_TOKEN` secret.
 - **kompozc --lsp colors the Kotlin**: semantic tokens for the Kotlin regions, read with kompozc's own lexer
   (keywords, strings and their templates' code, numbers, comments, annotations, functions and classes declared and
   called, values the file declares, parameters, properties, named arguments), merged with clangd's for the C++ in

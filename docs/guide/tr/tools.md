@@ -30,7 +30,7 @@ kompozc'yu CLion eklentisi gibi bulur (aşağıda): `kompoz.kompozcPath` ayarı,
 }
 ```
 
-**CLion**: Kompoz'un `editors/clion` içindeki eklentisi, Kotlin kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). Onu kendi CLion'unuza karşı derleyin ve `build/distributions/` içindeki arşivi diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur). Gradle bir JDK ister; CLion'un kendi `jbr/` dizinindeki yeter:
+**CLion**: Kompoz'un `editors/clion` içindeki eklentisi, Kotlin kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). Bir [CLion sürümünün](https://github.com/kasimtmc/kompoz/releases) `.zip`'ini diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur) ya da onu kendi CLion'unuza karşı derleyip `build/distributions/` içindeki arşivi kurun. Gradle bir JDK ister; CLion'un kendi `jbr/` dizinindeki yeter:
 
 ```bash
 cd editors/clion && JAVA_HOME=/yol/clion/jbr ./gradlew buildPlugin -PclionPath=/yol/clion

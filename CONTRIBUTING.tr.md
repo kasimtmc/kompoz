@@ -65,6 +65,15 @@ CI, Kompoz'u macOS'ta derliyor, testlerini çalıştırıyor ve orada bir uygula
 `.github/workflows/vscode-release.yml` onu denetler, sınar ve paketler, `.vsix`'i kendine ait bir GitHub sürümüne ekler ve
 depoda `OVSX_PAT` gizli değişkeni (bir Open VSX erişim anahtarı) varsa Open VSX'te (`plyground.kompoz` olarak) yayımlar.
 
+## CLion eklentisi
+
+`editors/clion` da kendi başına yayımlanır. `build.gradle.kts`'indeki `version`'ı artırın, o sürümün kaydını
+`CHANGELOG.md`'sinin en üstüne ekleyin (maddeleri eklentinin değişiklik notları olur) ve `clion-v<sürüm>` etiketini
+gönderin (`clion-v0.3.0`). Ardından `.github/workflows/clion-release.yml` onu derler ve JetBrains'in Plugin Verifier'ıyla
+denetler, `.zip`'i kendine ait bir GitHub sürümüne ekler ve depoda `JETBRAINS_TOKEN` gizli değişkeni (bir Marketplace
+anahtarı) varsa JetBrains Marketplace'e (plyGround'un Kompoz'u olarak) yükler; JetBrains her sürümü listelemeden önce
+inceler.
+
 ## Lisans
 
 Kompoz [Apache Lisansı 2.0](LICENSE) ile lisanslanmıştır. Katkıda bulunarak katkınızın da bu lisansla

@@ -1,0 +1,5 @@
+<!-- Kompoz's icon (the showcase's launcher icon, as editors/vscode/images/icon.svg): a white K on Material's purple. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 48 48">
+  <path fill="#6750A4" d="M10,2h28a8,8 0,0 1,8 8v28a8,8 0,0 1,-8 8h-28a8,8 0,0 1,-8 -8v-28a8,8 0,0 1,8 -8z"/>
+  <path fill="#FFFFFF" d="M14.7,13.3h4.4v9.3l8.4,-9.3h5.3l-9.3,10.2 9.8,11.1h-5.3l-7.1,-8.4 -1.8,1.9v6.5h-4.4z"/>
+</svg>

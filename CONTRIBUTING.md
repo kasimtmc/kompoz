@@ -62,6 +62,15 @@ of its `CHANGELOG.md`, and push a tag `vscode-v<version>` (`vscode-v0.2.0`). `.g
 then checks, tests and packages it, attaches the `.vsix` to a GitHub release of its own, and publishes it to Open VSX
 (as `plyground.kompoz`) when the repository has the `OVSX_PAT` secret (an Open VSX access token).
 
+## The CLion plugin
+
+`editors/clion` is released on its own too. Raise the `version` in its `build.gradle.kts`, add that version's entry at
+the top of its `CHANGELOG.md` (its items are the plugin's change notes), and push a tag `clion-v<version>`
+(`clion-v0.3.0`). `.github/workflows/clion-release.yml` then builds it and checks it with JetBrains' Plugin Verifier,
+attaches the `.zip` to a GitHub release of its own, and uploads it to JetBrains Marketplace (as plyGround's Kompoz)
+when the repository has the `JETBRAINS_TOKEN` secret (a Marketplace token); JetBrains reviews each version before it
+is listed.
+
 ## License
 
 Kompoz is licensed under the [Apache License 2.0](LICENSE). By contributing you agree that your contribution is

@@ -1180,6 +1180,9 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **CLion eklentisinin sürümleri**: Kompoz'un simgesi, yayıncısı olarak plyGround ve kendi `CHANGELOG.md`'si (her sürümün
+  kaydı değişiklik notları olur); bir `clion-v<sürüm>` etiketi onu derler ve denetler, bir GitHub sürümüne ekler ve
+  `JETBRAINS_TOKEN` gizli değişkeniyle JetBrains Marketplace'e yükler.
 - **kompozc --lsp Kotlin'i renklendirir**: Kotlin bölgeleri için anlamsal belirteçler, kompozc'nin kendi sözcük
   çözümleyicisiyle okunur (anahtar sözcükler, dizgiler ve şablonlarının kodu, sayılar, yorumlar, açıklamalar, bildirilen
   ve çağrılan işlevler ve sınıflar, dosyanın bildirdiği değerler, parametreler, özellikler, adlandırılmış argümanlar);
