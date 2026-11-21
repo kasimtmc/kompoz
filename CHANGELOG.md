@@ -1153,7 +1153,7 @@
   highlighted as Kotlin (a grammar of its own) and its C++ as C++, and `kompozc --lsp` started for it (found as the
   CLion plugin finds it); the C/C++ and clangd extensions leave such a file alone. Grammar and unit tests, a CI job
   that packages the `.vsix`. Its icon is Kompoz's (the showcase's); a tag `vscode-v<version>` releases it (a GitHub
-  release, and Open VSX as `plyground.kompoz` with the `OVSX_PAT` secret). 0.1.0 is on Open VSX.
+  release, and Open VSX as `plyground.kompoz` with the `OVSX_PAT` secret). It is on Open VSX.
 - **CI**: the Android and CLion plugin jobs keep Gradle's downloads (not CLion itself) from run to run, as Maven
   Central failed them twice.
 - **Receiving content, as Compose foundation does**: `Modifier.contentReceiver` (a lambda, or a `ReceiveContentListener`
