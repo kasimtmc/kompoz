@@ -36,7 +36,7 @@ kompozc'yu CLion eklentisi gibi bulur (aşağıda): `kompoz.kompozcPath` ayarı,
 cd editors/clion && JAVA_HOME=/yol/clion/jbr ./gradlew buildPlugin -PclionPath=/yol/clion
 ```
 
-kompozc'yi Ayarlar, Araçlar, Kompoz'da; yoksa `KOMPOZC`'de; yoksa projede derlenmişini (`build/` ya da `cmake-build-*/compiler/kompozc`); yoksa `PATH`'te bulur.
+Eklenti dil sunucusu desteği olan öteki JetBrains editörleri (Rider, Android Studio, IntelliJ IDEA, ...) için de sunulur; CLion'da denenmiştir. kompozc'yi Ayarlar, Araçlar, Kompoz'da; yoksa `KOMPOZC`'de; yoksa projede derlenmişini (`build/` ya da `cmake-build-*/compiler/kompozc`); yoksa `PATH`'te bulur.
 
 ## Önizlemeler
 

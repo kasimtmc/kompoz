@@ -1147,7 +1147,8 @@
   both define `z_errmsg` (3.2.0 and the versions after it are taken).
 - **The CLion plugin's releases**: Kompoz's icon, plyGround as its vendor, and its own `CHANGELOG.md` (each version's
   entry its change notes); a tag `clion-v<version>` builds and verifies it, attaches it to a GitHub release, and
-  uploads it to JetBrains Marketplace with the `JETBRAINS_TOKEN` secret.
+  uploads it to JetBrains Marketplace with the `JETBRAINS_TOKEN` secret. It is offered for every JetBrains IDE with
+  language server support, not CLion only.
 - **kompozc --lsp colors the Kotlin**: semantic tokens for the Kotlin regions, read with kompozc's own lexer
   (keywords, strings and their templates' code, numbers, comments, annotations, functions and classes declared and
   called, values the file declares, parameters, properties, named arguments), merged with clangd's for the C++ in

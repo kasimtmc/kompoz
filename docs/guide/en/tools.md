@@ -36,7 +36,7 @@ It finds kompozc as the CLion plugin does (below): the `kompoz.kompozcPath` sett
 cd editors/clion && JAVA_HOME=/path/to/clion/jbr ./gradlew buildPlugin -PclionPath=/path/to/clion
 ```
 
-It finds kompozc in Settings, Tools, Kompoz, or else in `KOMPOZC`, or else built in the project (`build/` or `cmake-build-*/compiler/kompozc`), or else on `PATH`.
+The plugin is offered for the other JetBrains IDEs with language server support too (Rider, Android Studio, IntelliJ IDEA, ...); it has been tried in CLion. It finds kompozc in Settings, Tools, Kompoz, or else in `KOMPOZC`, or else built in the project (`build/` or `cmake-build-*/compiler/kompozc`), or else on `PATH`.
 
 ## Previews
 

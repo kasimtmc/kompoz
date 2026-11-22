@@ -1184,7 +1184,8 @@
   `z_errmsg`'i tanımlar (3.2.0 ve ondan sonraki sürümler alınır).
 - **CLion eklentisinin sürümleri**: Kompoz'un simgesi, yayıncısı olarak plyGround ve kendi `CHANGELOG.md`'si (her sürümün
   kaydı değişiklik notları olur); bir `clion-v<sürüm>` etiketi onu derler ve denetler, bir GitHub sürümüne ekler ve
-  `JETBRAINS_TOKEN` gizli değişkeniyle JetBrains Marketplace'e yükler.
+  `JETBRAINS_TOKEN` gizli değişkeniyle JetBrains Marketplace'e yükler. Yalnızca CLion için değil, dil sunucusu desteği
+  olan her JetBrains editörü için sunulur.
 - **kompozc --lsp Kotlin'i renklendirir**: Kotlin bölgeleri için anlamsal belirteçler, kompozc'nin kendi sözcük
   çözümleyicisiyle okunur (anahtar sözcükler, dizgiler ve şablonlarının kodu, sayılar, yorumlar, açıklamalar, bildirilen
   ve çağrılan işlevler ve sınıflar, dosyanın bildirdiği değerler, parametreler, özellikler, adlandırılmış argümanlar);

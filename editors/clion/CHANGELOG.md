@@ -1,5 +1,10 @@
 # Changes
 
+## 0.2.3
+
+- The description speaks of every JetBrains IDE with language server support, as the plugin is offered for all of
+  them (C++ is written in CLion, Rider, Android Studio, ...), not of CLion only.
+
 ## 0.2.2
 
 - Kompoz's icon, and plyGround as its vendor: released on GitHub and JetBrains Marketplace.
