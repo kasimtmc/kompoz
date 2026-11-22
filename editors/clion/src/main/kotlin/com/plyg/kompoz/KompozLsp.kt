@@ -13,6 +13,8 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
+import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -20,9 +22,12 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.ProjectWideLspClientDescriptor
+import com.intellij.platform.lsp.api.customization.LspCustomization
+import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
 import java.util.concurrent.ConcurrentHashMap
 
 private val LOG = logger<KompozLspIntegrationProvider>()
@@ -104,4 +109,17 @@ private class KompozLspClientDescriptor(project: Project) : ProjectWideLspClient
         GeneralCommandLine(KompozSettings.kompozc(project), "--lsp").withWorkDirectory(project.basePath)
 
     override fun getLanguageId(file: VirtualFile): String = "cpp"
+
+    // The server's colors (its semantic tokens: the Kotlin's kompozc's, the C++'s clangd's), which CLion asks for
+    // only in files it doesn't color itself. An annotation (@Kompozable) as Kotlin colors one: CLion's own mapping
+    // leaves decorators uncolored.
+    override val lspCustomization = object : LspCustomization() {
+        override val semanticTokensCustomizer = object : LspSemanticTokensSupport() {
+            override fun shouldAskServerForSemanticTokens(psiFile: PsiFile): Boolean =
+                psiFile.virtualFile?.let(KompozableSources::isKompozable) == true
+
+            override fun getTextAttributesKey(tokenType: String, modifiers: List<String>): TextAttributesKey? =
+                if (tokenType == "decorator") DefaultLanguageHighlighterColors.METADATA else super.getTextAttributesKey(tokenType, modifiers)
+        }
+    }
 }

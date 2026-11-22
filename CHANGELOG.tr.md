@@ -1180,6 +1180,9 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **CLion eklentisi Kotlin'i renklendirir**: CLion, Kotlin kodu içeren dosyalarda renkleri (anlamsal belirteçleri)
+  kompozc --lsp'den ister; bunları yalnızca kendi renklendirmediği dosyalar için isterdi. `@Kompozable` bir açıklama
+  (annotation) olarak renklenir (0.2.4).
 - **kompozc --lsp**: Kotlin'in C++'ındaki bir hata yalnızca clangd'nin mesajıdır; clangd'nin ardına eklediği notlar
   (oraya götüren, çeviride ve Kompoz'un başlıklarındaki şablon örneklemeleri) gösterilmez.
 - **GCC 16 ile kompozc --lsp**: bir derleme komutu dil standardını derleyicinin varsayılanına bırakıyorsa (CMake o

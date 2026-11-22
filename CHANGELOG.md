@@ -1143,6 +1143,8 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **The CLion plugin colors the Kotlin**: CLion asks kompozc --lsp for its colors (semantic tokens) in files with Kotlin
+  code, which it asks for only in files it doesn't color itself, and colors `@Kompozable` as an annotation (0.2.4).
 - **kompozc --lsp**: an error in the Kotlin's C++ is clangd's message alone, without the notes clangd adds after it
   (the template instantiations in the translation and Kompoz's headers that led there).
 - **kompozc --lsp with GCC 16**: where a compile command leaves the language standard to the compiler's default (CMake

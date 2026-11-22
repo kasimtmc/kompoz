@@ -1,5 +1,10 @@
 # Changes
 
+## 0.2.4
+
+- The Kotlin is colored as Kotlin: CLion asks kompozc --lsp for its colors (semantic tokens) in files with Kotlin code,
+  which it asks for only in files it doesn't color itself, and colors `@Kompozable` as an annotation.
+
 ## 0.2.3
 
 - The description speaks of every JetBrains IDE with language server support, as the plugin is offered for all of
