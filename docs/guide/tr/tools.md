@@ -20,15 +20,13 @@ cd editors/vscode && npm ci && npm run package
 
 kompozc'yu CLion eklentisi gibi bulur (aşağıda): `kompoz.kompozcPath` ayarı, `KOMPOZC`, çalışma alanında derlenmiş olanı ya da `PATH`'teki. `kompoz.clangdPath` ve `kompoz.clangdArguments` arkasındaki clangd içindir; **Kompoz: Restart kompozc --lsp** yeniden derlemeden sonra onu yeniden başlatır.
 
-**Kate**: Ayarlar, LSP İstemcisi, Kullanıcı Sunucu Ayarları'nda (`c` sunucusu Kate'in C ve C++ için olanıdır):
+**Kate**: Kate'in eklenti mağazası yoktur; `kompozc --kate` onu bir kez hazırlar:
 
-```json
-{
-    "servers": {
-        "c": { "command": ["/yol/build/compiler/kompozc", "--lsp", "--background-index"] }
-    }
-}
+```bash
+build/compiler/kompozc --kate
 ```
+
+Kate'e "Kompoz C++" vurgulamasını kurar (`.cpp`, `.cc` ve `.cxx` dosyaları: Kotlin'leri Kotlin olarak, C++'ları Kate'in C++'ı olarak vurgulanır; Kotlin'siz bir dosya C++ kalır) ve bu kompozc'nin dil sunucusunu, bu dosyalar için, Kate'in LSP istemcisi ayarlarına ekler; oradaki sunucular kalır. Kate'i yeniden başlatın; sunucuyu başlatıp başlatmayacağını bir kez sorar. kompozc'nin yeri değişince yeniden çalıştırın.
 
 **CLion**: Kompoz'un `editors/clion` içindeki eklentisi, Kotlin kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). Bir [CLion sürümünün](https://github.com/kasimtmc/kompoz/releases) `.zip`'ini diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur) ya da onu kendi CLion'unuza karşı derleyip `build/distributions/` içindeki arşivi kurun. Gradle bir JDK ister; CLion'un kendi `jbr/` dizinindeki yeter:
 

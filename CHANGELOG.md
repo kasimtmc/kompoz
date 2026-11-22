@@ -1143,6 +1143,9 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Kate**: `kompozc --kate` installs Kate's highlighting for "Kompoz C++" (`.cpp` files' Kotlin highlighted as
+  Kotlin, their C++ as Kate's C++) and adds kompozc's language server to Kate's LSP client settings for them, the
+  servers there kept. Tested in CI with KSyntaxHighlighting's own highlighter.
 - **kompozable keeps the sources in their target**: a kompozable target's sources stay in it, not compiled (their
   translations are), so an IDE that lists a target's files has them there; CLion said of each that it belongs to no
   target. One that another target compiles as it is is left out (not compiling a source holds for its whole

@@ -11,7 +11,12 @@
 //   kompozc --lsp [--clangd PATH] [clangd's arguments...]
 //
 // A language server for editors, in front of clangd (lsp.cpp).
+//
+//   kompozc --kate
+//
+// KDE's Kate set up for Kompoz's sources: their highlighting and this language server (kate.cpp).
 
+#include "kate.hpp"
 #include "lsp.hpp"
 #include "translate.hpp"
 
@@ -36,6 +41,7 @@ int main(int argc, char** argv) {
         all.erase(lsp);
         return runLanguageServer(all);
     }
+    if (all.size() == 1 && all[0] == "--kate") return installKate(argv[0]);
     // (an editor's clangd extension, given kompozc for clangd, asks clangd's version: clangd's)
     if (all.size() == 1 && all[0] == "--version") {
         std::cout << "kompozc (Kompoz's compiler and language server), in front of clangd:\n" << std::flush;

@@ -85,9 +85,10 @@ public:
         if (auto it = o.find(key); it != o.end()) o.erase(it);
     }
 
-    std::string dump() const {
+    // Its text: on one line, or with each member and element on a line of its own, indented by `indent`.
+    std::string dump(int indent = 0) const {
         std::string out;
-        write(out);
+        write(out, indent, 0);
         return out;
     }
     // Throws std::runtime_error on text that isn't JSON.
@@ -268,7 +269,10 @@ private:
         }
         out += '"';
     }
-    void write(std::string& out) const {
+    void write(std::string& out, int indent, int depth) const {
+        auto newline = [&](int level) {
+            if (indent) out += '\n' + std::string(size_t(indent * level), ' ');
+        };
         switch (v_.index()) {
         case 0: out += "null"; break;
         case 1: out += std::get<bool>(v_) ? "true" : "false"; break;
@@ -289,8 +293,10 @@ private:
             bool first = true;
             for (const Json& v : std::get<Array>(v_)) {
                 if (!std::exchange(first, false)) out += ',';
-                v.write(out);
+                newline(depth + 1);
+                v.write(out, indent, depth + 1);
             }
+            if (!first) newline(depth);
             out += ']';
             break;
         }
@@ -299,10 +305,12 @@ private:
             bool first = true;
             for (const auto& [k, v] : std::get<Object>(v_)) {
                 if (!std::exchange(first, false)) out += ',';
+                newline(depth + 1);
                 writeString(out, k);
-                out += ':';
-                v.write(out);
+                out += indent ? ": " : ":";
+                v.write(out, indent, depth + 1);
             }
+            if (!first) newline(depth);
             out += '}';
         }
         }

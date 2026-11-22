@@ -20,15 +20,13 @@ cd editors/vscode && npm ci && npm run package
 
 It finds kompozc as the CLion plugin does (below): the `kompoz.kompozcPath` setting, `KOMPOZC`, built in the workspace, or on `PATH`. `kompoz.clangdPath` and `kompoz.clangdArguments` are for the clangd behind it; **Kompoz: Restart kompozc --lsp** starts it again after a rebuild.
 
-**Kate**: in Settings, LSP Client, User Server Settings (the `c` server is Kate's for C and C++):
+**Kate**: Kate has no extension store; `kompozc --kate` sets it up, once:
 
-```json
-{
-    "servers": {
-        "c": { "command": ["/path/to/build/compiler/kompozc", "--lsp", "--background-index"] }
-    }
-}
+```bash
+build/compiler/kompozc --kate
 ```
+
+It installs Kate's highlighting for "Kompoz C++" (`.cpp`, `.cc` and `.cxx` files: their Kotlin highlighted as Kotlin, their C++ as Kate's C++; a file without Kotlin stays C++) and adds this kompozc's language server to Kate's LSP client settings, for those files, keeping the servers already there. Restart Kate; it asks once whether to start the server. Run it again after kompozc moves.
 
 **CLion**: Kompoz's plugin, in `editors/clion`, starts the language server for the C++ files with Kotlin code and turns CLion's own highlighting off in them (its C++ engine would mark the Kotlin; the server's diagnostics take its place). Install the `.zip` of a [CLion release](https://github.com/kasimtmc/kompoz/releases) from disk (Settings, Plugins, Install Plugin from Disk), or build it against your CLion and install the archive in `build/distributions/`. Gradle needs a JDK; CLion's own, in its `jbr/`, will do:
 

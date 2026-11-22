@@ -1180,6 +1180,9 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Kate**: `kompozc --kate`, Kate'e "Kompoz C++" vurgulamasını kurar (`.cpp` dosyalarının Kotlin'i Kotlin olarak,
+  C++'ı Kate'in C++'ı olarak vurgulanır) ve kompozc'nin dil sunucusunu onlar için Kate'in LSP istemcisi ayarlarına
+  ekler; oradaki sunucular kalır. CI'da KSyntaxHighlighting'in kendi vurgulayıcısıyla sınanır.
 - **kompozable kaynakları hedeflerinde tutar**: bir kompozable hedefin kaynakları onda kalır, derlenmeden (çevirileri
   derlenir); böylece bir hedefin dosyalarını listeleyen IDE onları orada bulur. CLion her biri için hiçbir hedefe ait
   olmadığını söylüyordu. Başka bir hedefin olduğu gibi derlediği kaynak dışarıda bırakılır (bir kaynağın derlenmemesi

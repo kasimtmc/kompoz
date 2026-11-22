@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE language>
+<!--
+  Kompoz C++: a C++ source with @Kompozable functions in Kotlin's syntax (Kompoz's kompozable), its C++
+  highlighted as Kate's C++ and its Kotlin by the rules below (as the VS Code extension's grammar has them:
+  Kate's own Kotlin waits for a class's { over the lines after one without a body). A Kotlin region begins at
+  a line only Kotlin starts (an annotation, fun, val, var, object, data class, a class with a constructor...)
+  and ends before a line at the start that doesn't go on with Kotlin (#include, a C++ declaration), once its
+  braces are closed: the rule kompozc's language server goes by too. A source without Kotlin is C++
+  throughout; headers stay Kate's C++.
+-->
+<language name="Kompoz C++" section="Sources" version="1" kateversion="5.79" extensions="*.cpp;*.cc;*.cxx"
+          mimetype="text/x-c++src" priority="10" indenter="cstyle" style="C++" license="Apache-2.0"
+          author="plyGround">
+  <highlighting>
+    <list name="control">
+      <item>if</item><item>else</item><item>when</item><item>for</item><item>while</item><item>do</item>
+      <item>return</item><item>break</item><item>continue</item><item>throw</item><item>try</item>
+      <item>catch</item><item>finally</item>
+    </list>
+    <list name="keywords">
+      <item>fun</item><item>val</item><item>var</item><item>class</item><item>interface</item><item>object</item>
+      <item>typealias</item><item>constructor</item><item>init</item><item>get</item><item>set</item><item>by</item>
+      <item>companion</item><item>where</item><item>import</item><item>package</item><item>is</item><item>as</item>
+      <item>in</item><item>this</item><item>super</item><item>it</item><item>field</item>
+      <item>private</item><item>protected</item><item>public</item><item>internal</item><item>open</item>
+      <item>abstract</item><item>final</item><item>override</item><item>sealed</item><item>data</item>
+      <item>enum</item><item>inner</item><item>annotation</item><item>value</item><item>suspend</item>
+      <item>inline</item><item>noinline</item><item>crossinline</item><item>reified</item><item>lateinit</item>
+      <item>const</item><item>operator</item><item>infix</item><item>tailrec</item><item>vararg</item>
+      <item>external</item><item>expect</item><item>actual</item><item>out</item>
+    </list>
+    <list name="constants">
+      <item>true</item><item>false</item><item>null</item>
+    </list>
+    <contexts>
+      <context name="C++" attribute="Normal Text" lineEndContext="#stay">
+        <RegExpr context="Kotlin" lookAhead="true" column="0"
+                 String="@[A-Za-z]|(?:(?:private|internal|public|inline|suspend|operator|infix|tailrec|const|lateinit|data|sealed|abstract|open|annotation|value|fun)\s+)*(?:fun|val|var|object|interface|typealias)\b|(?:data|sealed|abstract|open|annotation|value)\s+(?:class|interface)\b|(?:enum\s+)?class\s+[A-Za-z_][A-Za-z0-9_]*\s*(?:&lt;[^&gt;]*&gt;\s*)?\("/>
+        <IncludeRules context="##C++"/>
+      </context>
+
+      <!-- The Kotlin: until a line at the start that doesn't go on with it. -->
+      <context name="Kotlin" attribute="Normal Text" lineEndContext="#stay">
+        <RegExpr context="#pop" lookAhead="true" column="0"
+                 String="(?!(?:(?:private|internal|public|inline|suspend|operator|infix|tailrec|const|lateinit|data|sealed|abstract|open|annotation|value|fun)\s+)*(?:fun|val|var|object|interface|typealias|import)\b|(?:data|sealed|abstract|open|annotation|value)\s+(?:class|interface)\b|(?:enum\s+)?class\s+[A-Za-z_][A-Za-z0-9_]*\s*(?:&lt;[^&gt;]*&gt;\s*)?\()[^\s}/*@]"/>
+        <IncludeRules context="Code"/>
+      </context>
+      <context name="Code" attribute="Normal Text" lineEndContext="#stay">
+        <DetectSpaces/>
+        <Detect2Chars attribute="Comment" context="LineComment" char="/" char1="/"/>
+        <Detect2Chars attribute="Comment" context="BlockComment" char="/" char1="*" beginRegion="Comment"/>
+        <StringDetect attribute="String" context="RawString" String="&quot;&quot;&quot;"/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <RegExpr attribute="Char" String="'(?:\\(?:u[0-9A-Fa-f]{4}|[tbnr'&quot;\\$])|[^'\\])'"/>
+        <RegExpr attribute="Annotation" String="@[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?::[A-Za-z_][A-Za-z0-9_]*)?"/>
+        <!-- fun <T> Receiver.name, class Name, val name -->
+        <WordDetect attribute="Keyword" context="FunctionName" String="fun"/>
+        <WordDetect attribute="Keyword" context="TypeName" String="class"/>
+        <WordDetect attribute="Keyword" context="TypeName" String="interface"/>
+        <WordDetect attribute="Keyword" context="TypeName" String="object"/>
+        <WordDetect attribute="Keyword" context="TypeName" String="typealias"/>
+        <WordDetect attribute="Keyword" context="VariableName" String="val"/>
+        <WordDetect attribute="Keyword" context="VariableName" String="var"/>
+        <!-- return@label, label@ { -->
+        <RegExpr attribute="Control Flow" String="\b(?:return|break|continue|this|super)@[A-Za-z_][A-Za-z0-9_]*"/>
+        <RegExpr attribute="Label" String="\b[A-Za-z_][A-Za-z0-9_]*@(?=\s*[{(]|\s+(?:for|while|do)\b)"/>
+        <keyword attribute="Control Flow" String="control"/>
+        <keyword attribute="Constant" String="constants"/>
+        <RegExpr attribute="Keyword" String="!is\b|!in\b|\bas\?"/>
+        <keyword attribute="Keyword" String="keywords"/>
+        <RegExpr attribute="Number" String="\b0[xX][0-9A-Fa-f_]+[uU]?[lL]?\b|\b0[bB][01_]+[uU]?[lL]?\b"/>
+        <RegExpr attribute="Number" String="(?&lt;![A-Za-z0-9_])(?:[0-9][0-9_]*(?:\.[0-9][0-9_]*)?|\.[0-9][0-9_]*)(?:[eE][+-]?[0-9]+)?(?:[fFdD]|[uU]?[lL]|[uU])?(?![A-Za-z0-9_])"/>
+        <RegExpr attribute="Function" String="\b[A-Za-z_][A-Za-z0-9_]*(?=\s*(?:&lt;[A-Za-z0-9_&lt;&gt;?, .]*&gt;)?\s*[({])"/>
+        <RegExpr attribute="Data Type" String="\b[A-Z][A-Za-z0-9_]*\b"/>
+        <DetectChar attribute="Symbol" char="{" beginRegion="Brace"/>
+        <DetectChar attribute="Symbol" char="}" endRegion="Brace"/>
+        <RegExpr attribute="Operator" String="\?:|\?\.|!!|-&gt;|::|\.\.&lt;?|===?|!==?|&lt;=|&gt;=|[-+*/%]?=|&amp;&amp;|\|\||!|\+\+|--|[-+*/%&lt;&gt;]"/>
+        <AnyChar attribute="Symbol" String="()[],;:.?"/>
+        <DetectIdentifier/>
+      </context>
+
+      <context name="FunctionName" attribute="Normal Text" lineEndContext="#pop" fallthroughContext="#pop">
+        <DetectSpaces/>
+        <RegExpr attribute="Symbol" String="&lt;[^&gt;]*&gt;"/>
+        <RegExpr attribute="Data Type" String="[A-Za-z_][A-Za-z0-9_&lt;&gt;?, ]*(?=\.[A-Za-z_`])"/>
+        <DetectChar attribute="Symbol" char="."/>
+        <RegExpr attribute="Function" context="#pop" String="[A-Za-z_][A-Za-z0-9_]*|`[^`]+`"/>
+      </context>
+      <context name="TypeName" attribute="Normal Text" lineEndContext="#pop" fallthroughContext="#pop">
+        <DetectSpaces/>
+        <RegExpr attribute="Data Type" context="#pop" String="[A-Za-z_][A-Za-z0-9_]*"/>
+      </context>
+      <context name="VariableName" attribute="Normal Text" lineEndContext="#pop" fallthroughContext="#pop">
+        <DetectSpaces/>
+        <RegExpr attribute="Symbol" String="&lt;[^&gt;]*&gt;"/>
+        <RegExpr attribute="Data Type" String="[A-Za-z_][A-Za-z0-9_&lt;&gt;?, ]*(?=\.[A-Za-z_])"/>
+        <DetectChar attribute="Symbol" char="."/>
+        <RegExpr attribute="Variable" context="#pop" String="[A-Za-z_][A-Za-z0-9_]*"/>
+      </context>
+
+      <context name="LineComment" attribute="Comment" lineEndContext="#pop">
+        <IncludeRules context="##Comments"/>
+      </context>
+      <context name="BlockComment" attribute="Comment" lineEndContext="#stay">
+        <Detect2Chars attribute="Comment" context="#pop" char="*" char1="/" endRegion="Comment"/>
+        <IncludeRules context="##Comments"/>
+      </context>
+
+      <context name="String" attribute="String" lineEndContext="#pop">
+        <IncludeRules context="Escape"/>
+        <IncludeRules context="Templates"/>
+        <DetectChar attribute="String" context="#pop" char="&quot;"/>
+      </context>
+      <context name="RawString" attribute="String" lineEndContext="#stay">
+        <IncludeRules context="Templates"/>
+        <RegExpr attribute="String" context="#pop" String="&quot;&quot;&quot;(?!&quot;)"/>
+      </context>
+      <context name="Escape" attribute="String" lineEndContext="#stay">
+        <RegExpr attribute="Escape" String="\\(?:u[0-9A-Fa-f]{4}|[tbnr'&quot;\\$])"/>
+      </context>
+      <context name="Templates" attribute="String" lineEndContext="#stay">
+        <Detect2Chars attribute="Template" context="Template" char="$" char1="{"/>
+        <RegExpr attribute="Template" String="\$[A-Za-z_][A-Za-z0-9_]*"/>
+      </context>
+      <!-- ${…}: code, its braces counted -->
+      <context name="Template" attribute="Normal Text" lineEndContext="#stay">
+        <DetectChar attribute="Template" context="#pop" char="}"/>
+        <DetectChar attribute="Symbol" context="TemplateBraces" char="{"/>
+        <IncludeRules context="Code"/>
+      </context>
+      <context name="TemplateBraces" attribute="Normal Text" lineEndContext="#stay">
+        <DetectChar attribute="Symbol" context="#pop" char="}"/>
+        <DetectChar attribute="Symbol" context="TemplateBraces" char="{"/>
+        <IncludeRules context="Code"/>
+      </context>
+    </contexts>
+    <itemDatas>
+      <itemData name="Normal Text" defStyleNum="dsNormal" spellChecking="false"/>
+      <itemData name="Keyword" defStyleNum="dsKeyword" spellChecking="false"/>
+      <itemData name="Control Flow" defStyleNum="dsControlFlow" spellChecking="false"/>
+      <itemData name="Constant" defStyleNum="dsConstant" spellChecking="false"/>
+      <itemData name="Function" defStyleNum="dsFunction" spellChecking="false"/>
+      <itemData name="Variable" defStyleNum="dsVariable" spellChecking="false"/>
+      <itemData name="Data Type" defStyleNum="dsDataType" spellChecking="false"/>
+      <itemData name="Annotation" defStyleNum="dsAttribute" spellChecking="false"/>
+      <itemData name="Label" defStyleNum="dsOthers" spellChecking="false"/>
+      <itemData name="Number" defStyleNum="dsDecVal" spellChecking="false"/>
+      <itemData name="Char" defStyleNum="dsChar" spellChecking="false"/>
+      <itemData name="String" defStyleNum="dsString"/>
+      <itemData name="Escape" defStyleNum="dsSpecialChar" spellChecking="false"/>
+      <itemData name="Template" defStyleNum="dsSpecialChar" spellChecking="false"/>
+      <itemData name="Operator" defStyleNum="dsOperator" spellChecking="false"/>
+      <itemData name="Symbol" defStyleNum="dsOperator" spellChecking="false"/>
+      <itemData name="Comment" defStyleNum="dsComment"/>
+    </itemDatas>
+  </highlighting>
+  <general>
+    <comments>
+      <comment name="singleLine" start="//" position="afterwhitespace"/>
+      <comment name="multiLine" start="/*" end="*/" region="Comment"/>
+    </comments>
+    <keywords casesensitive="1"/>
+  </general>
+</language>
