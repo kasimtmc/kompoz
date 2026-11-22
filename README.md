@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/kasimtmc/kompoz/actions/workflows/ci.yml/badge.svg)](https://github.com/kasimtmc/kompoz/actions/workflows/ci.yml)
 [![Open VSX](https://img.shields.io/open-vsx/v/plyground/kompoz?label=Open%20VSX)](https://open-vsx.org/extension/plyground/kompoz)
+[![JetBrains Marketplace](https://img.shields.io/jetbrains/plugin/v/36355?label=JetBrains%20Marketplace)](https://plugins.jetbrains.com/plugin/36355-kompoz)
 
 **English** · [Türkçe](README.tr.md)
 
