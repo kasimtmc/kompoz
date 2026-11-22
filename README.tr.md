@@ -1,5 +1,8 @@
 # Kompoz
 
+[![CI](https://github.com/kasimtmc/kompoz/actions/workflows/ci.yml/badge.svg)](https://github.com/kasimtmc/kompoz/actions/workflows/ci.yml)
+[![Open VSX](https://img.shields.io/open-vsx/v/plyground/kompoz?label=Open%20VSX)](https://open-vsx.org/extension/plyground/kompoz)
+
 [English](README.md) · **Türkçe**
 
 C++20 için Jetpack Compose tarzı, deklaratif ve çok platformlu bir arayüz kütüphanesi: aynı düşünme biçimi

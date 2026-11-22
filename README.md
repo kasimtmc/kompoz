@@ -1,5 +1,8 @@
 # Kompoz
 
+[![CI](https://github.com/kasimtmc/kompoz/actions/workflows/ci.yml/badge.svg)](https://github.com/kasimtmc/kompoz/actions/workflows/ci.yml)
+[![Open VSX](https://img.shields.io/open-vsx/v/plyground/kompoz?label=Open%20VSX)](https://open-vsx.org/extension/plyground/kompoz)
+
 **English** · [Türkçe](README.tr.md)
 
 A declarative, cross-platform UI library for C++20 in the style of Jetpack Compose: the same mental
