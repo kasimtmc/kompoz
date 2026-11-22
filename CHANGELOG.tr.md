@@ -1180,6 +1180,10 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **kompozable kaynakları hedeflerinde tutar**: bir kompozable hedefin kaynakları onda kalır, derlenmeden (çevirileri
+  derlenir); böylece bir hedefin dosyalarını listeleyen IDE onları orada bulur. CLion her biri için hiçbir hedefe ait
+  olmadığını söylüyordu. Başka bir hedefin olduğu gibi derlediği kaynak dışarıda bırakılır (bir kaynağın derlenmemesi
+  bütün klasörü için geçerlidir).
 - **CLion eklentisi Kotlin'i renklendirir**: CLion, Kotlin kodu içeren dosyalarda renkleri (anlamsal belirteçleri)
   kompozc --lsp'den ister; bunları yalnızca kendi renklendirmediği dosyalar için isterdi. `@Kompozable` bir açıklama
   (annotation) olarak renklenir (0.2.4).
