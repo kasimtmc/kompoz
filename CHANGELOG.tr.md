@@ -1180,6 +1180,8 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **kompozc --lsp**: Kotlin'in C++'ındaki bir hata yalnızca clangd'nin mesajıdır; clangd'nin ardına eklediği notlar
+  (oraya götüren, çeviride ve Kompoz'un başlıklarındaki şablon örneklemeleri) gösterilmez.
 - **GCC 16 ile kompozc --lsp**: bir derleme komutu dil standardını derleyicinin varsayılanına bırakıyorsa (CMake o
   varsayılan yetiyorsa `-std` yazmaz, GCC 16'nın C++20'si gibi), derleyiciye sorulur ve clangd'ye verilir; clangd kendi
   varsayılanını, C++17'yi alıyor ve her Kotlin dosyasında Kompoz'un başlıklarını (`concept`, `std::format`) işaretliyordu.

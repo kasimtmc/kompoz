@@ -156,6 +156,8 @@ if not args.no_clangd:
     wait_for('the file as it is: no diagnostics', lambda d: len(d) == 0)
     replace_in_line(text_line, 'sticker.label', 'sticker.labell')
     wait_for("an error in the Kotlin's C++: on its Kotlin line", on_line(text_line, 'kompozc (C++)', 'labell'))
+    check("its message without clangd's notes (on the translation, Kompoz's headers)",
+          all('\n\n' not in d['message'] for d in latest['diagnostics'] if d.get('source') == 'kompozc (C++)'))
     replace_in_line(text_line, 'sticker.labell', 'sticker.label')
     wait_for('fixed: no diagnostics', lambda d: len(d) == 0)
     replace_in_line(using_line, 'kompoz;', 'kompozz;')

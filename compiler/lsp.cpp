@@ -1420,12 +1420,16 @@ private:
             if (line < 0 || size_t(line) >= doc.lineMap.size()) continue;
             const auto& [file, sourceLine] = doc.lineMap[size_t(line)];
             if (sourceLine <= 0 || fileKey(file) != fileKey(doc.path) || !doc.kotlinLine(sourceLine - 1)) continue;
-            if (!seen.insert({sourceLine, d["message"].string()}).second) continue;
+            // (without the notes clangd adds after a blank line: they point into the translation and Kompoz's
+            // headers, the template instantiations that led there)
+            std::string message = d["message"].string();
+            message = message.substr(0, message.find("\n\n"));
+            if (!seen.insert({sourceLine, message}).second) continue;
             Json m;
             m["range"] = lines.wholeLine(sourceLine - 1);
             m["severity"] = d["severity"];
             m["source"] = "kompozc (C++)";
-            m["message"] = d["message"];
+            m["message"] = message;
             if (d.has("code")) m["code"] = d["code"];
             out.array().push_back(std::move(m));
         }
