@@ -1143,6 +1143,9 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **kompozc --lsp with GCC 16**: where a compile command leaves the language standard to the compiler's default (CMake
+  writes no `-std` where that default will do, as GCC 16's C++20), the compiler is asked for it and clangd is given it;
+  clangd took its own, C++17, and marked Kompoz's headers (`concept`, `std::format`) in every Kotlin file.
 - **Conan**: the recipe leaves out libjpeg-turbo 3.2.1, whose static TurboJPEG library and the zlib libpng links
   both define `z_errmsg` (3.2.0 and the versions after it are taken).
 - **The CLion plugin's releases**: Kompoz's icon, plyGround as its vendor, and its own `CHANGELOG.md` (each version's

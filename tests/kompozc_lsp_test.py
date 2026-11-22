@@ -6,9 +6,10 @@
 
 With clangd: the file is clean as it is; an error in the Kotlin's C++ comes back on its Kotlin line, one in the
 C++ around it where it is, kompozc's own where it is; inside the Kotlin, clangd's hover and completion are not
-given, and formatting isn't done. Without clangd: kompozc's own errors. Exits 1 on a failed check."""
+given, and formatting isn't done; a compile command that leaves the language standard to the compiler's default
+still gives the compiler's. Without clangd: kompozc's own errors. Exits 1 on a failed check."""
 
-import argparse, json, os, queue, subprocess, sys, threading, time
+import argparse, json, os, queue, shlex, subprocess, sys, tempfile, threading, time
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--kompozc', required=True)
@@ -20,13 +21,10 @@ root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 path = os.path.join(root, 'tests', 'kompozable_tests_other.cpp')
 uri = 'file://' + path
 command = [args.kompozc, '--lsp', '--clangd', '/nonexistent/clangd' if args.no_clangd else args.clangd, '--background-index=false']
-server = subprocess.Popen(command, cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-inbox = queue.Queue()
 failures = 0
 
 
-def reader():
-    f = server.stdout
+def reader(f, inbox):
     while True:
         headers = b''
         while not headers.endswith(b'\r\n\r\n'):
@@ -38,7 +36,29 @@ def reader():
         inbox.put(json.loads(f.read(length)))
 
 
-threading.Thread(target=reader, daemon=True).start()
+def start(extra=()):
+    """A server (the one the checks below talk to), from the initialize request to the file opened."""
+    global server, inbox
+    server = subprocess.Popen(command + list(extra), cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    inbox = queue.Queue()
+    threading.Thread(target=reader, args=(server.stdout, inbox), daemon=True).start()
+    latest['diagnostics'] = None
+    initialized = request('initialize', {'processId': None, 'rootUri': 'file://' + root, 'capabilities': {}})
+    send({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}})
+    send({'jsonrpc': '2.0', 'method': 'textDocument/didOpen', 'params': {'textDocument': {'uri': uri, 'languageId': 'cpp', 'version': 1, 'text': text}}})
+    return initialized
+
+
+def stop():
+    request('shutdown', None)
+    send({'jsonrpc': '2.0', 'method': 'exit'})
+    try:
+        return server.wait(timeout=20)
+    except subprocess.TimeoutExpired:
+        server.kill()
+        return None
+
+
 next_id = [100]
 
 
@@ -111,10 +131,7 @@ lines = text.split('\n')
 line_of = lambda needle: next(i + 1 for i, l in enumerate(lines) if needle in l)
 text_line, fun_line, using_line = line_of('Text("$prefix'), line_of('fun StickerRow('), line_of('using namespace kompoz;')
 
-initialized = request('initialize', {'processId': None, 'rootUri': 'file://' + root, 'capabilities': {}})
-legend = initialized['capabilities']['semanticTokensProvider']['legend']
-send({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}})
-send({'jsonrpc': '2.0', 'method': 'textDocument/didOpen', 'params': {'textDocument': {'uri': uri, 'languageId': 'cpp', 'version': 1, 'text': text}}})
+legend = start()['capabilities']['semanticTokensProvider']['legend']
 version = [1]
 
 
@@ -183,13 +200,27 @@ check('no formatting of a file with Kotlin', formatting is None)
 replace_in_line(fun_line, 'StickerRow(', 'StickerRow((')
 wait_for("kompozc's error in the Kotlin: where it is", on_line(fun_line, 'kompozc'))
 
-request('shutdown', None)
-send({'jsonrpc': '2.0', 'method': 'exit'})
-try:
-    code = server.wait(timeout=20)
-except subprocess.TimeoutExpired:
-    server.kill()
-    code = None
-check('exits after exit', code == 0)
+check('exits after exit', stop() == 0)
+
+# The build's commands with no -std (CMake writes none where the compiler's default will do, as GCC 16's C++20),
+# from a compiler that says it defaults to C++20: kompozc gives clangd that, which would take its own, C++17.
+if not args.no_clangd and os.name != 'nt':
+    build = os.path.dirname(os.path.dirname(os.path.abspath(args.kompozc)))
+    with tempfile.TemporaryDirectory() as tmp:
+        compiler = os.path.join(tmp, 'c++')
+        with open(compiler, 'w') as f:
+            f.write('#!/bin/sh\necho "#define __cplusplus 202002L"\n')
+        os.chmod(compiler, 0o755)
+        entries = json.load(open(os.path.join(build, 'compile_commands.json')))
+        for e in entries:
+            arguments = e.pop('arguments', None) or shlex.split(e.pop('command'))
+            e['arguments'] = [compiler] + [a for a in arguments[1:] if not a.startswith('-std=')]
+        json.dump(entries, open(os.path.join(tmp, 'compile_commands.json'), 'w'))
+        with open(os.path.join(build, 'kompozc_commands.json')) as f, open(os.path.join(tmp, 'kompozc_commands.json'), 'w') as g:
+            g.write(f.read())
+        lines = text.split('\n')
+        start(['--compile-commands-dir=' + tmp])
+        wait_for("no -std in the commands: the compiler's default given to clangd, no diagnostics", lambda d: len(d) == 0)
+        stop()
 print(f'\n{failures} failed checks')
 sys.exit(1 if failures else 0)

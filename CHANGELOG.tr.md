@@ -1180,6 +1180,9 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **GCC 16 ile kompozc --lsp**: bir derleme komutu dil standardını derleyicinin varsayılanına bırakıyorsa (CMake o
+  varsayılan yetiyorsa `-std` yazmaz, GCC 16'nın C++20'si gibi), derleyiciye sorulur ve clangd'ye verilir; clangd kendi
+  varsayılanını, C++17'yi alıyor ve her Kotlin dosyasında Kompoz'un başlıklarını (`concept`, `std::format`) işaretliyordu.
 - **Conan**: tarif libjpeg-turbo 3.2.1'i dışarıda bırakır; onun statik TurboJPEG kitaplığı da libpng'nin bağladığı zlib de
   `z_errmsg`'i tanımlar (3.2.0 ve ondan sonraki sürümler alınır).
 - **CLion eklentisinin sürümleri**: Kompoz'un simgesi, yayıncısı olarak plyGround ve kendi `CHANGELOG.md`'si (her sürümün

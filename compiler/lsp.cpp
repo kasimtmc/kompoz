@@ -23,6 +23,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -1178,25 +1179,64 @@ private:
         if (it == structs_.end()) it = structs_.emplace(key, readStructs(doc.translation->headers, doc.translation->includes)).first;
         return it->second;
     }
-    // clangd's compile command for the masked view: the translation's, of this file.
+    // clangd's compile commands for the masked view (the translation's, of this file) and for the
+    // translation, with the compiler's language standard written out when the command leaves it to
+    // the compiler's default (CMake does where that default will do, as GCC 16's C++20): clangd
+    // would take its own, C++17.
     void configure(Doc& doc) {
         doc.configured = true;
         auto entry = doc.build->compileCommands.find(fileKey(doc.translation->output));
         if (entry == doc.build->compileCommands.end()) return;
         std::vector<std::string> args = argumentsOf(entry->second);
+        if (args.empty()) return;
+        const std::string& directory = entry->second["directory"].string();
+        bool written = std::any_of(args.begin(), args.end(), [](const std::string& a) {
+            return a.starts_with("-std=") || a.starts_with("--std=") || a.starts_with("-std:") || a.starts_with("/std:");
+        });
+        std::string standard = written ? std::string() : defaultStandard(args[0], directory);
         std::string output = fileKey(doc.translation->output);
-        Json command = Json::Array();
+        Json masked = Json::Array(), translated = Json::Array();
         for (size_t i = 0; i < args.size(); ++i) {
             fs::path a = args[i];
-            if (!a.empty() && a.is_relative()) a = fs::path(entry->second["directory"].string()) / a;
-            command.array().push_back(fileKey(a) == output ? doc.path : args[i]);
+            if (!a.empty() && a.is_relative()) a = fs::path(directory) / a;
+            masked.array().push_back(fileKey(a) == output ? doc.path : args[i]);
+            translated.array().push_back(args[i]);
+            if (i == 0 && !standard.empty()) masked.array().push_back(standard), translated.array().push_back(standard);
         }
-        Json change;
-        change["workingDirectory"] = entry->second["directory"].string();
-        change["compilationCommand"] = std::move(command);
         Json p;
-        p["settings"]["compilationDatabaseChanges"][doc.path] = std::move(change);
+        p["settings"]["compilationDatabaseChanges"][doc.path]["workingDirectory"] = directory;
+        p["settings"]["compilationDatabaseChanges"][doc.path]["compilationCommand"] = std::move(masked);
+        if (!standard.empty()) {
+            p["settings"]["compilationDatabaseChanges"][doc.translation->output]["workingDirectory"] = directory;
+            p["settings"]["compilationDatabaseChanges"][doc.translation->output]["compilationCommand"] = std::move(translated);
+        }
         toClangd(notification("workspace/didChangeConfiguration", p));
+    }
+    // The standard a compiler takes by default, as its option (-std=gnu++20), from the __cplusplus it
+    // defines (asked once for each compiler); none for MSVC's cl and clang-cl, or if it can't be asked.
+    std::string defaultStandard(const std::string& compiler, const std::string& directory) {
+        fs::path driver = compiler;
+        if (driver.has_parent_path() && driver.is_relative()) driver = fs::path(directory) / driver;
+        std::string name = driver.stem().string();
+        std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        if (name == "cl" || name == "clang-cl") return {};
+        auto known = defaultStandards_.find(driver.string());
+        if (known != defaultStandards_.end()) return known->second;
+        std::string defines;
+        Child child;
+        if (child.start({driver.string(), "-dM", "-E", "-x", "c++", "-"})) {
+            child.closeInput();
+            char buffer[4096];
+            for (size_t n; (n = child.read(buffer, sizeof buffer)) > 0;) defines.append(buffer, n);
+            child.wait();
+        }
+        std::string standard;
+        if (size_t at = defines.find("#define __cplusplus "); at != std::string::npos) {
+            long value = std::atol(defines.c_str() + at + 20);
+            const char* year = value > 202302 ? "26" : value > 202002 ? "23" : value > 201703 ? "20" : value > 201402 ? "17" : value > 201103 ? "14" : "11";
+            standard = (defines.find("#define __STRICT_ANSI__") != std::string::npos ? "-std=c++" : "-std=gnu++") + std::string(year);
+        }
+        return defaultStandards_[driver.string()] = standard;
     }
 
     // ---- translations, in the background (a moment after the last change)
@@ -1489,6 +1529,7 @@ private:
     std::map<std::string, Doc> docs_;
     std::map<std::string, BuildDir> builds_;
     std::map<std::string, Structs> structs_;
+    std::map<std::string, std::string> defaultStandards_;  // by compiler
     std::set<std::string> virtualUris_;
     std::map<std::string, std::chrono::steady_clock::time_point> due_;
     std::condition_variable wake_;
