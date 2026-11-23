@@ -1143,6 +1143,13 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Kompoz as a subdirectory**: `kompozable` called by a project that has Kompoz as a subdirectory (add_subdirectory)
+  gave kompozc no `--headers` (Kompoz's paths were variables of its own directory): they are global properties now.
+  CI builds the package test app that way too.
+- **kompozc and C++ namespaces**: a C++ `enum class X { A, B };` (ended by its `;`) stays C++, and kotlin.hpp's
+  `#include` goes after the file's own, outside its namespaces (in one, the standard library's headers opened
+  there); kotlin.hpp includes kompoz.hpp itself. The language server gives clangd kotlin.hpp with `-include`, and
+  the file's last one-line Kotlin declaration carries what the ones before it needed.
 - **Kate**: `kompozc --kate` installs Kate's highlighting for "Kompoz C++" (`.cpp` files' Kotlin highlighted as
   Kotlin, their C++ as Kate's C++) and adds kompozc's language server to Kate's LSP client settings for them, the
   servers there kept. Tested in CI with KSyntaxHighlighting's own highlighter.

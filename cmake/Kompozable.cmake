@@ -20,16 +20,20 @@
 # (CMAKE_EXPORT_COMPILE_COMMANDS ON) with the translations' compile commands.
 
 # Kompoz's headers (kompozc reads their structs), and kompozc's sources: beside this file in
-# Kompoz's tree; in an installed Kompoz, its include directory and compiler/ here.
+# Kompoz's tree; in an installed Kompoz, its include directory and compiler/ here. Kept as global
+# properties: kompozable runs in the scope of the directory that calls it, which, in a project with
+# Kompoz as a subdirectory (add_subdirectory), doesn't see Kompoz's variables.
 if(NOT KOMPOZ_HEADERS_DIR)
     set(KOMPOZ_HEADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/../include/kompoz)
     cmake_path(NORMAL_PATH KOMPOZ_HEADERS_DIR)
 endif()
+set_property(GLOBAL PROPERTY KOMPOZ_HEADERS_DIR ${KOMPOZ_HEADERS_DIR})
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/compiler/main.cpp)
-    set(kompoz_compiler_dir ${CMAKE_CURRENT_LIST_DIR}/compiler)
+    set_property(GLOBAL PROPERTY KOMPOZ_COMPILER_DIR ${CMAKE_CURRENT_LIST_DIR}/compiler)
 else()
-    set(kompoz_compiler_dir ${CMAKE_CURRENT_LIST_DIR}/../compiler)
-    cmake_path(NORMAL_PATH kompoz_compiler_dir)
+    cmake_path(SET _kompoz_compiler_dir NORMALIZE ${CMAKE_CURRENT_LIST_DIR}/../compiler)
+    set_property(GLOBAL PROPERTY KOMPOZ_COMPILER_DIR ${_kompoz_compiler_dir})
+    unset(_kompoz_compiler_dir)
 endif()
 set(KOMPOZC "" CACHE FILEPATH "A kompozc for the machine that builds (empty: Kompoz's own, built where needed)")
 
@@ -48,6 +52,7 @@ function(kompoz_kompozc command depends)
         # Built for this machine on its own (not with the toolchain of the one built for).
         if(NOT TARGET kompozc_host)
             include(ExternalProject)
+            get_property(kompoz_compiler_dir GLOBAL PROPERTY KOMPOZ_COMPILER_DIR)
             set(dir ${CMAKE_BINARY_DIR}/kompozc-host)
             set(generator -G ${CMAKE_GENERATOR})
             if(CMAKE_MAKE_PROGRAM)
@@ -125,6 +130,7 @@ endfunction()
 
 function(kompozable target)
     kompoz_kompozc(kompozc kompozc_depends)
+    get_property(headers_dir GLOBAL PROPERTY KOMPOZ_HEADERS_DIR)
     get_target_property(sources ${target} SOURCES)
     get_target_property(source_dir ${target} SOURCE_DIR)
     set(out_dir ${CMAKE_CURRENT_BINARY_DIR}/${target}.kompozc)
@@ -161,7 +167,7 @@ function(kompozable target)
             string(REPLACE "../" "__/" relative "${relative}")  # (sources from outside the target's directory)
             set(output ${out_dir}/${relative})
             add_custom_command(OUTPUT ${output}
-                COMMAND ${kompozc} ${absolute} -o ${output} --headers ${KOMPOZ_HEADERS_DIR} ${module_args} --depfile ${output}.d
+                COMMAND ${kompozc} ${absolute} -o ${output} --headers ${headers_dir} ${module_args} --depfile ${output}.d
                 DEPENDS ${absolute} ${module} ${kompozc_depends}
                 DEPFILE ${output}.d
                 COMMENT "kompozc ${relative}"
@@ -171,7 +177,7 @@ function(kompozable target)
             set_property(GLOBAL APPEND PROPERTY KOMPOZ_KOMPOZABLE_SOURCES ${absolute})
             _kompoz_json_string(source_json "${absolute}")
             _kompoz_json_string(output_json "${output}")
-            _kompoz_json_strings(headers_json "${KOMPOZ_HEADERS_DIR}")
+            _kompoz_json_strings(headers_json "${headers_dir}")
             _kompoz_json_strings(includes_json ${include_list})
             _kompoz_json_strings(modules_json ${module})
             get_property(entries GLOBAL PROPERTY KOMPOZ_KOMPOZABLE_COMMANDS)

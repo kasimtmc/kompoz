@@ -40,9 +40,9 @@ bool startsLine(std::string_view src, size_t at) {
     return at == 0 || src[at - 1] == '\n';
 }
 
-// Whether Kotlin's enum class starts at `at`: enum class Name { A, B } with entries only (C++'s with
-// a base, enum class X : int, or values, A = 1, is C++ and stays as it is; one with entries only is
-// the same in both, so it may be written either way).
+// Whether Kotlin's enum class starts at `at`: enum class Name(…) with a constructor, or enum class Name { A, B }
+// with entries only and no ; after it (C++'s with a base, enum class X : int, values, A = 1, or the ; that ends
+// its declaration is C++ and stays as it is).
 bool startsEnumClass(std::string_view src, size_t at) {
     size_t k = at;
     auto word = [&] {
@@ -57,14 +57,24 @@ bool startsEnumClass(std::string_view src, size_t at) {
     if (k >= src.size() || src[k] != '{') return false;
     // Its entries, to a ; or the }: names, commas and Kotlin's arguments, LOW(1), or bodies (C++'s have values, A = 1).
     int depth = 0;
-    for (size_t i = k + 1; i < src.size(); ++i) {
+    bool entries = false;
+    for (size_t i = k + 1; i < src.size() && !entries; ++i) {
         char c = src[i];
         if (c == '(') ++depth;
         else if (c == ')') --depth;
         else if (depth > 0) continue;
-        else if (c == ';' || c == '}') return true;
-        else if (c == '{') return true;  // PLUS { override fun … }: an entry's body of its own
+        else if (c == ';' || c == '}' || c == '{') entries = true;  // ({: PLUS { override fun … }, an entry's body of its own)
         else if (!identChar(c) && !std::isspace(static_cast<unsigned char>(c)) && c != ',') return false;
+    }
+    if (!entries) return false;
+    // After its body: C++'s ; (Kotlin's has none).
+    depth = 0;
+    for (size_t i = k; i < src.size(); ++i) {
+        if (src[i] == '{') ++depth;
+        else if (src[i] == '}' && --depth == 0) {
+            size_t after = src.find_first_not_of(" \t\r\n", i + 1);
+            return after == std::string_view::npos || src[after] != ';';
+        }
     }
     return false;
 }
@@ -124,19 +134,7 @@ bool startsClass(std::string_view src, size_t at) {
     if (kotlin.contains(first)) return true;
     size_t firstAt = k - first.size();
     if (first == "class") return startsClass(src, firstAt);  // (a nested class: Kotlin's if it is one)
-    if (first == "enum" && startsEnumClass(src, firstAt)) {
-        // Kotlin's nested enum (C++'s ends with };): a constructor, or no ; after its body
-        size_t open = src.find_first_of("({", firstAt);
-        if (open != std::string_view::npos && src[open] == '(') return true;
-        int depth = 0;
-        for (size_t i = open; i < src.size(); ++i) {
-            if (src[i] == '{') ++depth;
-            else if (src[i] == '}' && --depth == 0) {
-                size_t after = src.find_first_not_of(" \t", i + 1);
-                return after == std::string_view::npos || src[after] != ';';
-            }
-        }
-    }
+    if (first == "enum") return startsEnumClass(src, firstAt);  // (a nested enum: Kotlin's if it is one)
     return false;
 }
 
@@ -1064,7 +1062,6 @@ std::string translate(const std::string& src, const fs::path& source, const std:
     bool preludeDone = false;
     auto prelude = [&] {
         if (std::exchange(preludeDone, true)) return;
-        out.text("\n#include <kompoz/kotlin.hpp>\n");
         // Interfaces declared first: a data class or an object implementing one names it (its
         // object's type is made only where one is converted to it, after the interface's definition).
         for (auto [o, g] : imported)
@@ -1155,8 +1152,21 @@ std::string translate(const std::string& src, const fs::path& source, const std:
             }
         }
     }
+    // kotlin.hpp's #include after the file's own (and before its first namespace: a declaration in one has its
+    // prelude there, inside it).
+    size_t includeAt = found.empty() ? std::string::npos : std::min(includesEnd(src), found.front().begin);
     // The C++ up to `to` passed through, the declarations above where they go.
     auto passUntil = [&](size_t to) {
+        if (includeAt != std::string::npos && includeAt >= done && includeAt <= to) {
+            if (includeAt > done) {
+                if (done > 0) out.line(positionOf(src, done).line);
+                out.text(passThrough(std::string_view(src).substr(done, includeAt - done), dir));
+            }
+            out.text("\n#include <kompoz/kotlin.hpp>\n");
+            out.line(positionOf(src, includeAt).line);
+            done = includeAt;
+            includeAt = std::string::npos;
+        }
         if (declareAt != std::string::npos && declareAt >= done && declareAt <= to) {
             if (declareAt > done) {
                 if (done > 0) out.line(positionOf(src, done).line);
@@ -1315,17 +1325,21 @@ std::string maskedView(std::string_view src, const std::vector<Found>& found, co
             if (auto later = sealedAt.find(index); later != sealedAt.end()) deferred[later->second] += std::exchange(cpp, std::string());
         }
         if (auto with = deferred.find(index); with != deferred.end()) cpp += with->second;
-        // On its lines but the last (what follows it there keeps its columns): kotlin.hpp's #include
-        // before the first, as the translation has it, then what C++ needs of it, the rest blank.
+        // On its lines but the last (what follows it there keeps its columns): the interfaces before the
+        // first, then what C++ needs of it, the rest blank. The file's last on one line, with nothing but a
+        // comment after it there, has that line: what the ones before carried goes there.
+        // (kotlin.hpp comes with clangd's command, -include: a declaration's line may be inside a namespace.)
         std::string_view text = src.substr(f.begin, f.end - f.begin);
         size_t lineCount = size_t(std::count(text.begin(), text.end(), '\n'));  // (the lines before its last)
+        size_t rest = src.find_first_not_of(" \t\r", f.end);
+        if (lineCount == 0 && index + 1 == found.size() && (rest == std::string_view::npos || src[rest] == '\n' || src.substr(rest, 2) == "//"))
+            lineCount = 1;
         std::vector<std::string> payloads;
         if (lineCount > 0 && !prelude) {
-            payloads.push_back("#include <kompoz/kotlin.hpp>");
             if (!interfaces.empty()) payloads.push_back(interfaces);
             prelude = true;
         }
-        // (one of a single line has none to spare: it goes with the next that has)
+        // (one with no line to spare: it goes with the next that has)
         if (!cpp.empty()) pending += cpp;
         if (lineCount > 0 && !pending.empty()) payloads.push_back(std::exchange(pending, std::string()));
         while (payloads.size() > lineCount) {  // (more than its lines: the declarations on one)

@@ -1179,10 +1179,10 @@ private:
         if (it == structs_.end()) it = structs_.emplace(key, readStructs(doc.translation->headers, doc.translation->includes)).first;
         return it->second;
     }
-    // clangd's compile commands for the masked view (the translation's, of this file) and for the
-    // translation, with the compiler's language standard written out when the command leaves it to
-    // the compiler's default (CMake does where that default will do, as GCC 16's C++20): clangd
-    // would take its own, C++17.
+    // clangd's compile commands for the masked view (the translation's, of this file, with kotlin.hpp
+    // included first) and for the translation, with the compiler's language standard written out when the
+    // command leaves it to the compiler's default (CMake does where that default will do, as GCC 16's
+    // C++20): clangd would take its own, C++17.
     void configure(Doc& doc) {
         doc.configured = true;
         auto entry = doc.build->compileCommands.find(fileKey(doc.translation->output));
@@ -1195,6 +1195,13 @@ private:
         });
         std::string standard = written ? std::string() : defaultStandard(args[0], directory);
         std::string output = fileKey(doc.translation->output);
+        // The masked view's declarations use kotlin.hpp, which the translation includes after the file's own
+        // #includes; the masked view has no line of its own for it there, so it comes first, as -include.
+        std::string kotlinHpp = doc.translation->headers.empty() ? "kompoz/kotlin.hpp"
+                                                                 : (fs::path(doc.translation->headers.front()) / "kotlin.hpp").generic_string();
+        std::string driver = fs::path(args[0]).stem().string();
+        std::transform(driver.begin(), driver.end(), driver.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        bool clStyle = driver == "cl" || driver == "clang-cl";
         Json masked = Json::Array(), translated = Json::Array();
         for (size_t i = 0; i < args.size(); ++i) {
             fs::path a = args[i];
@@ -1202,10 +1209,14 @@ private:
             masked.array().push_back(fileKey(a) == output ? doc.path : args[i]);
             translated.array().push_back(args[i]);
             if (i == 0 && !standard.empty()) masked.array().push_back(standard), translated.array().push_back(standard);
+            if (i == 0) {
+                if (clStyle) masked.array().push_back("/FI" + kotlinHpp);
+                else masked.array().push_back("-include"), masked.array().push_back(kotlinHpp);
+            }
         }
         Json p;
         p["settings"]["compilationDatabaseChanges"][doc.path]["workingDirectory"] = directory;
-        p["settings"]["compilationDatabaseChanges"][doc.path]["compilationCommand"] = std::move(masked);
+        p["settings"]["compilationDatabaseChanges"][doc.path]["compilationCommand"] = std::move(masked);  // (always: its -include)
         if (!standard.empty()) {
             p["settings"]["compilationDatabaseChanges"][doc.translation->output]["workingDirectory"] = directory;
             p["settings"]["compilationDatabaseChanges"][doc.translation->output]["compilationCommand"] = std::move(translated);

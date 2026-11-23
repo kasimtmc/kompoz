@@ -1180,6 +1180,13 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Alt dizin olarak Kompoz**: Kompoz'u alt dizin olarak (add_subdirectory) kullanan bir projenin çağırdığı
+  `kompozable`, kompozc'ye `--headers` vermiyordu (Kompoz'un yolları kendi dizininin değişkenleriydi): artık genel
+  özelliklerdir. CI paket deneme uygulamasını bu yolla da derler.
+- **kompozc ve C++ ad alanları**: bir C++ `enum class X { A, B };` (`;` ile biten) C++ kalır ve kotlin.hpp'nin
+  `#include`'u dosyanın kendi `#include`'larından sonra, ad alanlarının dışında yer alır (birinin içinde standart
+  kitaplığın başlıkları orada açılıyordu); kotlin.hpp kompoz.hpp'yi kendisi içerir. Dil sunucusu kotlin.hpp'yi clangd'ye
+  `-include` ile verir; dosyanın son tek satırlık Kotlin bildirimi öncekilerin gerektirdiklerini taşır.
 - **Kate**: `kompozc --kate`, Kate'e "Kompoz C++" vurgulamasını kurar (`.cpp` dosyalarının Kotlin'i Kotlin olarak,
   C++'ı Kate'in C++'ı olarak vurgulanır) ve kompozc'nin dil sunucusunu onlar için Kate'in LSP istemcisi ayarlarına
   ekler; oradaki sunucular kalır. CI'da KSyntaxHighlighting'in kendi vurgulayıcısıyla sınanır.

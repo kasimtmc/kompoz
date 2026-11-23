@@ -179,6 +179,15 @@ fun NoteRow(note: Note) {
     Text("${note.id}: ${note.title}${if (note.pinned) " *" else ""}")
 }
 
+// kompozable_tests_namespaces.cpp's: its Kotlin in C++ namespaces, called from its C++.
+namespace shop {
+std::string shopLabel();
+}
+
+TEST(kotlin_in_cpp_namespaces) {
+    CHECK(shop::shopLabel() == "2 ürün, Bottom / 2");
+}
+
 @Kompozable
 fun Notes() {
     val a = Note(title = "alışveriş", id = 1)

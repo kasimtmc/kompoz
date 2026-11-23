@@ -224,5 +224,15 @@ if not args.no_clangd and os.name != 'nt':
         start(['--compile-commands-dir=' + tmp])
         wait_for("no -std in the commands: the compiler's default given to clangd, no diagnostics", lambda d: len(d) == 0)
         stop()
+
+# Kotlin in C++ namespaces (tests/kompozable_tests_namespaces.cpp): kotlin.hpp comes to the masked view first, by
+# clangd's command, not on a line inside the namespace (where the standard library's headers it brings would open).
+if not args.no_clangd:
+    path = os.path.join(root, 'tests', 'kompozable_tests_namespaces.cpp')
+    uri = 'file://' + path
+    text = open(path, encoding='utf-8').read()
+    start()
+    wait_for('Kotlin in C++ namespaces: no diagnostics', lambda d: len(d) == 0)
+    stop()
 print(f'\n{failures} failed checks')
 sys.exit(1 if failures else 0)

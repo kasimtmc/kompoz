@@ -126,6 +126,18 @@ jobs:
         run: |
           export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
           KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
+      # The README's other way: Kompoz a subdirectory of the app's project (add_subdirectory, from outside
+      # Kompoz's tree), kompozable called in the app's scope. (Once: Clang's job builds Kompoz again faster.)
+      - name: Build the app with Kompoz as a subdirectory, and run it
+        if: matrix.cxx == 'clang++-19'
+        env:
+          KOMPOZ_HEADLESS: 1
+        run: |
+          cmake -S tests/package -B "$RUNNER_TEMP/subdirectory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_SOURCE_DIR="$PWD"
+          cmake --build "$RUNNER_TEMP/subdirectory" --target demo
+          cd "$RUNNER_TEMP/subdirectory"
+          export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
+          KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
 
   windows:
     name: Windows (MinGW-w64)

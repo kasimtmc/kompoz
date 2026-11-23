@@ -4,6 +4,8 @@
 // templates, null, ranges, `in`, `?:`, `!!`, a state's value. Code written by hand has no need
 // of it.
 
+#include "kompoz.hpp"  // (all it builds on: the translation has it first, before the file's own namespaces)
+
 #include "coroutines.hpp"
 #include "named_members.hpp"
 #include "runtime.hpp"
