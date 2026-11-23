@@ -1185,8 +1185,9 @@
   bir pencere; içeriği, çağıranın kompozisyon yerelleri ve uygulamanın durumuyla kendi kompozisyonunda; kullanıcının
   kapatması `onCloseRequest`'idir. Uygulama çekirdeği her biri için bir çekirdek çalıştırır (AppWindows); başsız
   platform onları açar (CI birinin görüntüsünü alır, betikler birine `@Başlık: komut` ile ulaşır), Wayland da her
-  birini kendi bağlantısında (xdg-activation birini, en son girdi alan pencerenin belirteciyle öne getirir), X11 de her
-  birini kendi ekran bağlantısında (_NET_ACTIVE_WINDOW, son girdinin zamanıyla); sırada Windows ve macOS var.
+  birini kendi bağlantısında (xdg-activation birini, en son girdi alan pencerenin belirteciyle öne getirir), X11 her
+  birini kendi ekran bağlantısında (_NET_ACTIVE_WINDOW, son girdinin zamanıyla), Windows ve macOS da uygulamanın
+  penceresiyle bir döngüde (CI ikisinde de gerçek bir pencerede birinin görüntüsünü alır).
 - **Alan almayan yazılan metin**: bir tuşun yazdığı, `KeyDown`'ından sonra `text` ve `utf16CodePoint` taşıyan bir
   `KeyEventType.Unknown` tuş olayı olarak (Compose Desktop'un yazılan tuşları), içinde metin alanı olmayan odaklı bir
   düğüme gelir; her tuş olayında `nativeKeyCode` vardır. X11'de ve Wayland'de ölü tuşlar ve Compose tuşu masaüstünün

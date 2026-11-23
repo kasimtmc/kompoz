@@ -406,7 +406,9 @@ constexpr GUID kVideoCameras = {0xe5323777, 0xf976, 0x4f5b, {0x9b, 0x55, 0xb9, 0
 
 class Win32Platform final : public Platform {
 public:
-    Win32Platform() {
+    // `secondary`: a window of the app's own (Window), driven by the app's loop (the thread's
+    // messages reach every window's).
+    explicit Win32Platform(bool secondary = false) : secondary_(secondary) {
         wakeEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         // A timer of a millisecond's resolution where Windows has one (10 1803+), for frames on time.
         timer_ = CreateWaitableTimerExW(nullptr, nullptr, 0x2 /* CREATE_WAITABLE_TIMER_HIGH_RESOLUTION */, TIMER_ALL_ACCESS);
@@ -426,11 +428,12 @@ public:
     // The process aware of each monitor's DPI, the window class and OLE; false where the app
     // can't run here.
     bool connect() {
+        oleStarted_ = SUCCEEDED(OleInitialize(nullptr));  // (counted: each window's, as its drops need it)
+        if (secondary_) return wakeEvent_ && timer_;  // (the process's DPI awareness, Ctrl+C and the class: the app's)
         if (auto set = reinterpret_cast<BOOL(WINAPI*)(HANDLE)>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDpiAwarenessContext")))
             set(reinterpret_cast<HANDLE>(-4) /* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 */);
         else
             SetProcessDPIAware();
-        oleStarted_ = SUCCEEDED(OleInitialize(nullptr));
         gQuitWake = wakeEvent_;
         SetConsoleCtrlHandler(
             [](DWORD type) -> BOOL {
@@ -452,19 +455,40 @@ public:
         AppCore core{*this};
         core_ = &core;
         if (!core.start(argc, argv)) return 1;
-        while (!quit_) {
-            MSG m;
-            while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
-                if (m.message == WM_QUIT) quit_ = true;
-                TranslateMessage(&m);
-                DispatchMessageW(&m);
+        {
+            // The app's windows (Window): each a Win32Platform of its own, its steps after the app's.
+            AppWindows windows(core, [] {
+                auto window = std::make_unique<Win32Platform>(true);
+                return window->connect() ? std::unique_ptr<Platform>(std::move(window)) : nullptr;
+            });
+            while (!quit_) {
+                MSG m;
+                while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+                    if (m.message == WM_QUIT) quit_ = true;
+                    TranslateMessage(&m);
+                    DispatchMessageW(&m);
+                }
+                if (quit_ || !step()) break;
+                for (AppWindows::Open& w : windows.open()) {
+                    auto& window = static_cast<Win32Platform&>(*w.platform);
+                    window.core_ = w.core.get();
+                    window.step();
+                }
+                windows.sync();  // (windows closed: gone from here on)
+                // Until a message, a wake, or a timer (a frame due, or a coroutine's delay) of any of them.
+                std::vector<Win32Platform*> all{this};
+                for (AppWindows::Open& w : windows.open()) all.push_back(static_cast<Win32Platform*>(w.platform.get()));
+                std::vector<HANDLE> handles;
+                bool wait = true;
+                for (Win32Platform* p : all) {
+                    if (p->needFrame_ && !p->waitingForDue_) wait = false;
+                    handles.push_back(p->wakeEvent_), handles.push_back(p->timer_);
+                }
+                if (!wait) continue;
+                DWORD woken = MsgWaitForMultipleObjectsEx(DWORD(handles.size()), handles.data(), INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                if (woken >= WAIT_OBJECT_0 && woken < WAIT_OBJECT_0 + handles.size())
+                    all[(woken - WAIT_OBJECT_0) / 2]->events_.push_back({.type = EventType::Wake});
             }
-            if (quit_ || !step()) break;
-            // Until a message, a wake, or the timer (the frame due, or a coroutine's delay).
-            HANDLE handles[] = {wakeEvent_, timer_};
-            if (!needFrame_ || waitingForDue_)
-                if (DWORD woken = MsgWaitForMultipleObjectsEx(2, handles, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE); woken < WAIT_OBJECT_0 + 2)
-                    events_.push_back({.type = EventType::Wake});
         }
         core.quit();
         core_ = nullptr;
@@ -582,6 +606,20 @@ public:
         RECT r{0, 0, width, height};
         AdjustWindowRectExForDpi(&r, DWORD(GetWindowLongPtrW(hwnd_, GWL_STYLE)), FALSE, 0, dpi_);
         SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    void setTitle(const std::string& title) override {
+        title_ = title;
+        if (hwnd_) SetWindowTextW(hwnd_, wide(title).c_str());
+    }
+    void setMinimized(bool minimized) override {
+        if (hwnd_) ShowWindow(hwnd_, minimized ? SW_MINIMIZE : SW_RESTORE);
+    }
+    // Restored if minimized, and to the foreground (which Windows allows while the app is in it: the
+    // user's last input was in one of its windows).
+    void raise() override {
+        if (!hwnd_) return;
+        if (IsIconic(hwnd_)) ShowWindow(hwnd_, SW_RESTORE);
+        SetForegroundWindow(hwnd_);
     }
 
     // A mouse is a fine pointer, a touch screen alone a coarse one, a keyboard the system has a
@@ -713,6 +751,7 @@ private:
     DropTarget* dropTarget_ = nullptr;
 
     AppCore* core_ = nullptr;
+    bool secondary_ = false;  // a window of the app's own (Window)
     std::deque<Event> events_;
     HANDLE wakeEvent_ = nullptr, timer_ = nullptr;
     bool quit_ = false, busy_ = false, needFrame_ = true, waitingForDue_ = false, inModalLoop_ = false, stepping_ = false;
@@ -756,14 +795,14 @@ private:
     // What came handed to the core, and a frame if one is due: false once the app is done. The
     // main loop's, and the window's while Windows resizes or moves it in a loop of its own.
     bool step() {
-        if (stepping_) return true;
+        if (stepping_ || !core_) return true;
         stepping_ = true;
         if (accentChanged_.exchange(false)) events_.push_back({.type = EventType::AccentChanged});
         if (wallpaperChanged_.exchange(false)) events_.push_back({.type = EventType::WallpaperChanged});
         if (a11yRequested_.exchange(false)) events_.push_back({.type = EventType::AccessibilityRequest});
-        if (gQuitAsked.exchange(false)) events_.push_back({.type = EventType::Quit});
+        if (!secondary_ && gQuitAsked.exchange(false)) events_.push_back({.type = EventType::Quit});
         for (const Event& e : std::exchange(events_, {})) {
-            if (e.type == EventType::Quit) quit_ = true;
+            if (e.type == EventType::Quit && !secondary_) quit_ = true;  // (a window's: its onCloseRequest, AppCore's)
             core_->handle(e);
             needFrame_ = true;
         }

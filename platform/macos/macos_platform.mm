@@ -169,6 +169,8 @@ KeyModifiers heldKeys(NSEventModifierFlags flags) {
 
 class MacPlatform final : public Platform {
 public:
+    // `secondary`: a window of the app's own (Window), driven by the app's loop.
+    explicit MacPlatform(bool secondary = false) : secondary_(secondary) {}
     ~MacPlatform() override {
         closeWindow();
         if (keptOn_) IOPMAssertionRelease(assertion_);
@@ -180,6 +182,7 @@ public:
         [NSApplication sharedApplication];
         delegate_ = [[KompozDelegate alloc] init];
         delegate_->platform = this;
+        if (secondary_) return true;  // (its window's delegate; the application, its menu and signals: the app's)
         NSApp.delegate = delegate_;
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp finishLaunching];
@@ -204,18 +207,39 @@ public:
         core_ = &core;
         if (!core.start(argc, argv)) return 1;
         [NSApp activateIgnoringOtherApps:YES];
-        while (!quit_) {
-            @autoreleasepool {
-                // What came, each to AppKit (and so to the view); a step; then until an event, a
-                // wake, the frame due or a coroutine's delay.
-                while (NSEvent* e = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES])
-                    dispatch(e);
-                if (!step()) break;
-                if (needFrame_ && !waitingForDue_) continue;
-                int64_t until = waitingForDue_ ? dueAt_ : wakeAt_;
-                NSDate* deadline = until >= 0 ? [NSDate dateWithTimeIntervalSinceNow:double(std::max<int64_t>(0, until - now())) / 1e9] : [NSDate distantFuture];
-                if (NSEvent* e = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:deadline inMode:NSDefaultRunLoopMode dequeue:YES]) dispatch(e);
-                events_.push_back({.type = EventType::Wake});  // (a delay may be due)
+        {
+            // The app's windows (Window): each a MacPlatform of its own, its steps after the app's.
+            AppWindows windows(core, [] {
+                auto window = std::make_unique<MacPlatform>(true);
+                return window->connect() ? std::unique_ptr<Platform>(std::move(window)) : nullptr;
+            });
+            while (!quit_) {
+                @autoreleasepool {
+                    // What came, each to AppKit (and so to its window's view); a step of each; then
+                    // until an event, a wake, a frame due or a coroutine's delay of any of them.
+                    while (NSEvent* e = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES])
+                        dispatch(e);
+                    if (!step()) break;
+                    for (AppWindows::Open& w : windows.open()) {
+                        auto& window = static_cast<MacPlatform&>(*w.platform);
+                        window.core_ = w.core.get();
+                        window.step();
+                    }
+                    windows.sync();  // (windows closed: gone from here on)
+                    std::vector<MacPlatform*> all{this};
+                    for (AppWindows::Open& w : windows.open()) all.push_back(static_cast<MacPlatform*>(w.platform.get()));
+                    bool frameNow = false;
+                    int64_t until = -1;
+                    for (MacPlatform* p : all) {
+                        if (p->needFrame_ && !p->waitingForDue_) frameNow = true;
+                        int64_t at = p->waitingForDue_ ? p->dueAt_ : p->wakeAt_;
+                        if (at >= 0) until = until < 0 ? at : std::min(until, at);
+                    }
+                    if (frameNow) continue;
+                    NSDate* deadline = until >= 0 ? [NSDate dateWithTimeIntervalSinceNow:double(std::max<int64_t>(0, until - now())) / 1e9] : [NSDate distantFuture];
+                    if (NSEvent* e = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:deadline inMode:NSDefaultRunLoopMode dequeue:YES]) dispatch(e);
+                    for (MacPlatform* p : all) p->events_.push_back({.type = EventType::Wake});  // (a delay may be due)
+                }
             }
         }
         core.quit();
@@ -226,10 +250,10 @@ public:
     // What came handed to the core, and a frame if one is due: false once the app is done. The
     // loop's, and the window's while AppKit resizes it in a loop of its own.
     bool step() {
-        if (stepping_) return true;
+        if (stepping_ || !core_) return true;
         stepping_ = true;
         for (const Event& e : std::exchange(events_, {})) {
-            if (e.type == EventType::Quit) quit_ = true;
+            if (e.type == EventType::Quit && !secondary_) quit_ = true;  // (a window's: its onCloseRequest, AppCore's)
             core_->handle(e);
             needFrame_ = true;
         }
@@ -335,6 +359,21 @@ public:
     void setWindowSize(int width, int height) override {
         if (window_) [window_ setContentSize:NSMakeSize(width, height)];
     }
+    void setTitle(const std::string& title) override {
+        title_ = title;
+        if (window_) window_.title = nsString(title);
+    }
+    void setMinimized(bool minimized) override {
+        if (!window_) return;
+        if (minimized) [window_ miniaturize:nil];
+        else [window_ deminiaturize:nil];
+    }
+    void raise() override {
+        if (!window_) return;
+        if (window_.miniaturized) [window_ deminiaturize:nil];
+        [window_ makeKeyAndOrderFront:nil];
+        [NSApp activateIgnoringOtherApps:YES];
+    }
 
     // A Mac has a mouse or a trackpad, and a keyboard; a microphone and a camera if the system
     // has a default one (asked without asking the user).
@@ -433,6 +472,7 @@ private:
     int pixelWidth_ = 1, pixelHeight_ = 1;
 
     AppCore* core_ = nullptr;
+    bool secondary_ = false;  // a window of the app's own (Window)
     std::deque<Event> events_;
     bool quit_ = false, busy_ = false, needFrame_ = true, waitingForDue_ = false, stepping_ = false;
     int64_t dueAt_ = -1, wakeAt_ = -1;
