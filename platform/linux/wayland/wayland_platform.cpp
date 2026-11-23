@@ -121,14 +121,14 @@ public:
             });
             for (;;) {
                 if (!turn(core)) break;
-                std::vector<WaylandPlatform*> all{this};
                 for (AppWindows::Open& w : windows.open()) {
                     auto& window = static_cast<WaylandPlatform&>(*w.platform);
                     window.core_ = w.core.get();
                     window.turn(*w.core);
-                    all.push_back(&window);
                 }
-                windows.sync();
+                windows.sync();  // (windows closed: gone from here on)
+                std::vector<WaylandPlatform*> all{this};
+                for (AppWindows::Open& w : windows.open()) all.push_back(static_cast<WaylandPlatform*>(w.platform.get()));
                 if (!waitForEvents(all)) break;  // (the compositor went away)
             }
         }

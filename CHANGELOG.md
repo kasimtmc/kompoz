@@ -1148,8 +1148,8 @@
   composed, its content in a composition of its own with the caller's composition locals and the app's state, the
   user closing it its `onCloseRequest`. The app core runs a core for each (AppWindows); the headless platform
   opens them (CI shoots one, scripts reach one by `@Title: command`), and Wayland, each on a connection of its own
-  (xdg-activation brings one to the front with the token of the window last given input); X11, Windows and macOS
-  next.
+  (xdg-activation brings one to the front with the token of the window last given input), and X11, each on a display
+  connection of its own (_NET_ACTIVE_WINDOW at the time of the last input); Windows and macOS next.
 - **Typed text where no field takes it**: what a key types comes, after its `KeyDown`, as a `KeyEventType.Unknown`
   key event (Compose Desktop's typed keys) with `text` and `utf16CodePoint`, to a focused node with no text field;
   every key event has `nativeKeyCode`. On X11 and Wayland dead keys and the Compose key compose through the

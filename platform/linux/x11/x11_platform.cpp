@@ -47,13 +47,14 @@ namespace {
 struct Atoms {
     Atom WM_PROTOCOLS, WM_DELETE_WINDOW, _NET_WM_PING, _NET_WM_NAME, _NET_WM_PID, _NET_WM_WINDOW_TYPE, _NET_WM_WINDOW_TYPE_NORMAL,
         UTF8_STRING, CLIPBOARD, TARGETS, INCR, TEXT, RESOURCE_MANAGER, KOMPOZ_SELECTION,
-        XdndAware, XdndEnter, XdndPosition, XdndStatus, XdndLeave, XdndDrop, XdndFinished, XdndSelection, XdndTypeList, XdndActionCopy;
+        XdndAware, XdndEnter, XdndPosition, XdndStatus, XdndLeave, XdndDrop, XdndFinished, XdndSelection, XdndTypeList, XdndActionCopy,
+        _NET_ACTIVE_WINDOW;
 };
 constexpr const char* kAtomNames[] = {
     "WM_PROTOCOLS", "WM_DELETE_WINDOW", "_NET_WM_PING", "_NET_WM_NAME", "_NET_WM_PID", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
     "UTF8_STRING", "CLIPBOARD", "TARGETS", "INCR", "TEXT", "RESOURCE_MANAGER",
     "KOMPOZ_SELECTION", "XdndAware", "XdndEnter", "XdndPosition", "XdndStatus", "XdndLeave", "XdndDrop", "XdndFinished", "XdndSelection",
-    "XdndTypeList", "XdndActionCopy"};
+    "XdndTypeList", "XdndActionCopy", "_NET_ACTIVE_WINDOW"};
 static_assert(sizeof(Atoms) == sizeof(kAtomNames) / sizeof(*kAtomNames) * sizeof(Atom));
 
 // A scroll valuator of a device (XInput 2's smooth scrolling): its axis, how much is a notch, and
@@ -68,9 +69,15 @@ struct ScrollAxis {
 // where it is checked: not the process's end, as Xlib's default handler would make it.
 int ignoreError(Display*, XErrorEvent*) { return 0; }
 
+class X11Platform;
+std::vector<X11Platform*> gPlatforms;  // the app's window's and its windows' (Window), each on a connection of its own
+
 class X11Platform final : public Platform {
 public:
+    // `secondary`: a window of the app's own (Window), on a connection of its own, driven by the app's loop.
+    explicit X11Platform(bool secondary = false) : secondary_(secondary) { gPlatforms.push_back(this); }
     ~X11Platform() override {
+        std::erase(gPlatforms, this);
         desktop_.stop();
         closeWindow();
         if (im_) XCloseIM(im_);
@@ -111,44 +118,62 @@ public:
         dpiScale_ = desktopScale();
         wakeFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         timerFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-        if (wakeFd_ >= 0) quitOnSignals(wakeFd_);
+        if (wakeFd_ >= 0 && !secondary_) quitOnSignals(wakeFd_);
         return wakeFd_ >= 0 && timerFd_ >= 0;
     }
 
     int run(int argc, char* argv[]) {
         AppCore core{*this};
         if (!core.start(argc, argv)) return 1;
-        bool needFrame = true;
-        for (;;) {
-            pump();
-            desktop_.takeNotifications(events_);
-            for (const Event& e : std::exchange(events_, {})) {
-                if (e.type == EventType::Quit) quit_ = true;
-                core.handle(e);
-                needFrame = true;
+        {
+            // The app's windows (Window): each an X11Platform of its own, its turns after the app's.
+            AppWindows windows(core, [] {
+                auto window = std::make_unique<X11Platform>(true);
+                return window->connect() ? std::unique_ptr<Platform>(std::move(window)) : nullptr;
+            });
+            for (;;) {
+                int timeout = -1;
+                if (!turn(core, timeout)) break;
+                for (AppWindows::Open& w : windows.open()) static_cast<X11Platform&>(*w.platform).turn(*w.core, timeout);
+                windows.sync();  // (windows closed: gone from here on)
+                std::vector<X11Platform*> all{this};
+                for (AppWindows::Open& w : windows.open()) all.push_back(static_cast<X11Platform*>(w.platform.get()));
+                if (!waitForEvents(all, timeout)) break;  // (the X server went away)
             }
-            if (quit_) break;
-            if (needFrame || busy_) {
-                // The pause until the frame is due is the host's for work between frames (a lazy
-                // list's next item), and what comes meanwhile is handled before it.
-                if (int64_t due = core.frameDue(), at = now(); due >= 0 && at < due) {
-                    core.idle(due - at);
-                    if (at = now(); at < due) {
-                        if (!waitForEvents(int((due - at + 999'999) / 1'000'000))) break;
-                        continue;
-                    }
-                }
-                needFrame = false;
-                Next next = core.frame();
-                if (next.quit) break;
-                busy_ = next.busy;
-                armTimer(next.busy ? -1 : next.wakeAt);
-                continue;
-            }
-            if (!waitForEvents(-1)) break;  // (the X server went away)
         }
         core.quit();
         return 0;
+    }
+
+    // A turn of the window's loop: what came to it to its core, and a frame when one is due; `timeout`
+    // lowered to when it wants the next turn (ms; 0: at once). False when the app quits.
+    bool turn(AppCore& core, int& timeout) {
+        pump();
+        desktop_.takeNotifications(events_);
+        for (const Event& e : std::exchange(events_, {})) {
+            if (e.type == EventType::Quit && !secondary_) quit_ = true;  // (a window's: its onCloseRequest, AppCore's)
+            core.handle(e);
+            needFrame_ = true;
+        }
+        if (quit_) return false;
+        if (!needFrame_ && !busy_) return true;
+        // The pause until the frame is due is the host's for work between frames (a lazy list's next
+        // item), and what comes meanwhile is handled before it.
+        if (int64_t due = core.frameDue(), at = now(); due >= 0 && at < due) {
+            core.idle(due - at);
+            if (at = now(); at < due) {
+                int ms = int((due - at + 999'999) / 1'000'000);
+                timeout = timeout < 0 ? ms : std::min(timeout, ms);
+                return true;
+            }
+        }
+        needFrame_ = false;
+        Next next = core.frame();
+        if (next.quit) return false;
+        busy_ = next.busy;
+        armTimer(next.busy ? -1 : next.wakeAt);
+        timeout = 0;  // (the next turn at once: a busy frame's next is paced by frameDue)
+        return true;
     }
 
     // ---- Platform ------------------------------------------------------------------------
@@ -273,6 +298,38 @@ public:
     void setWindowSize(int width, int height) override {
         if (window_) XResizeWindow(display_, window_, unsigned(std::max(1, width)), unsigned(std::max(1, height)));
     }
+    void setTitle(const std::string& title) override {
+        title_ = title;
+        if (!window_) return;
+        XChangeProperty(display_, window_, atoms_._NET_WM_NAME, atoms_.UTF8_STRING, 8, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(title.data()), int(title.size()));
+        bool ascii = std::all_of(title.begin(), title.end(), [](char c) { return uint8_t(c) < 0x80; });
+        XChangeProperty(display_, window_, XA_WM_NAME, ascii ? Atom(XA_STRING) : atoms_.UTF8_STRING, 8, PropModeReplace,
+                        reinterpret_cast<const unsigned char*>(title.data()), int(title.size()));
+    }
+    void setMinimized(bool minimized) override {
+        if (!window_) return;
+        if (minimized) XIconifyWindow(display_, window_, screen_);
+        else raise();
+    }
+    // Asked of the window manager (_NET_ACTIVE_WINDOW, as an application, at the time of the user's
+    // last input in any of the app's windows: what focus stealing prevention goes by), and mapped raised.
+    void raise() override {
+        if (!window_) return;
+        Time at = CurrentTime;
+        for (X11Platform* p : gPlatforms)
+            if (p->lastTime_ != CurrentTime && (at == CurrentTime || p->lastTime_ > at)) at = p->lastTime_;
+        XEvent e{};
+        e.xclient.type = ClientMessage;
+        e.xclient.window = window_;
+        e.xclient.message_type = atoms_._NET_ACTIVE_WINDOW;
+        e.xclient.format = 32;
+        e.xclient.data.l[0] = 1;  // (an application)
+        e.xclient.data.l[1] = long(at);
+        XSendEvent(display_, root_, False, SubstructureRedirectMask | SubstructureNotifyMask, &e);
+        XMapRaised(display_, window_);
+        XFlush(display_);
+    }
 
     // A mouse is a fine pointer, a touch screen alone a coarse one; the microphone and camera as
     // probed (media_devices.hpp).
@@ -346,6 +403,8 @@ private:
     bool hasMouse_ = true, hasTouch_ = false;
     double pinchScale_ = 1;
     Time lastTime_ = CurrentTime;  // the last input event's (what selections are owned and asked for at)
+    bool secondary_ = false;       // a window of the app's own (Window)
+    bool needFrame_ = true;        // something to show
     Cursor cursor_ = Cursor::Default;
     std::array<::Cursor, 9> cursors_{};  // X's, as made for each of Kompoz's
     XIM im_ = nullptr;
@@ -420,20 +479,27 @@ private:
         }
     }
 
-    // Up to `timeout` ms (-1: until one) for an X event, a wake or a timer. False if the
-    // connection broke.
-    bool waitForEvents(int timeout) {
-        XFlush(display_);
-        if (XPending(display_)) return true;
-        pollfd fds[] = {{ConnectionNumber(display_), POLLIN, 0}, {wakeFd_, POLLIN, 0}, {timerFd_, POLLIN, 0}};
-        poll(fds, 3, timeout);
-        if (fds[0].revents & (POLLERR | POLLHUP)) return false;
-        uint64_t count = 0;
-        for (int i : {1, 2})
-            if (fds[i].revents & POLLIN) {
-                (void)!read(fds[i].fd, &count, sizeof count);
-                events_.push_back({.type = EventType::Wake});
-            }
+    // Up to `timeout` ms (-1: until one) for an X event, a wake or a timer on any of the windows'
+    // connections. False if the app's connection broke (a window's breaking: that window shows nothing more).
+    static bool waitForEvents(const std::vector<X11Platform*>& all, int timeout) {
+        std::vector<pollfd> fds;
+        for (X11Platform* p : all) {
+            XFlush(p->display_);
+            if (XPending(p->display_)) timeout = 0;
+            for (int fd : {ConnectionNumber(p->display_), p->wakeFd_, p->timerFd_}) fds.push_back({fd, POLLIN, 0});
+        }
+        poll(fds.data(), nfds_t(fds.size()), timeout);
+        for (size_t i = 0; i < all.size(); ++i) {
+            const pollfd* mine = &fds[i * 3];
+            if (mine[0].revents & (POLLERR | POLLHUP))
+                if (i == 0) return false;
+            uint64_t count = 0;
+            for (int k : {1, 2})
+                if (mine[k].revents & POLLIN) {
+                    (void)!read(mine[k].fd, &count, sizeof count);
+                    all[i]->events_.push_back({.type = EventType::Wake});
+                }
+        }
         return true;
     }
 
