@@ -133,7 +133,8 @@ jobs:
         env:
           KOMPOZ_HEADLESS: 1
         run: |
-          cmake -S tests/package -B "$RUNNER_TEMP/subdirectory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_SOURCE_DIR="$PWD"
+          cmake -S tests/package -B "$RUNNER_TEMP/subdirectory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_SOURCE_DIR="$PWD" \
+            -DKOMPOZ_VENDORED_DEPS=ON
           cmake --build "$RUNNER_TEMP/subdirectory" --target demo
           cd "$RUNNER_TEMP/subdirectory"
           export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
