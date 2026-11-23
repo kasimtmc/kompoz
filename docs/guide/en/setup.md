@@ -129,6 +129,26 @@ kompozc runs on the machine that builds. Built for that machine, Kompoz builds i
 
 On the desktop the command line can carry a deep link that the app opens with, such as `./myapp kompoz://item/42` (see [Navigation](navigation.md)).
 
+### More windows
+
+On the desktop an app opens more windows as Compose Desktop does: `Window` opens one while it is composed, and closes it as it leaves the composition. Its content is a composition of its own that sees the app's state and the composition locals where `Window` is called (the theme); the user closing it calls `onCloseRequest`, which decides (usually by no longer composing it).
+
+```kotlin
+@Kompozable
+fun Phones(apps: List<String>) {
+    var shown by remember { mutableStateOf(true) }
+    val state = rememberWindowState(size = DpSize(400.dp, 860.dp))
+    Button(onClick = { state.toFront() }) { Text("Bring it to the front") }
+    if (shown) {
+        Window(onCloseRequest = { shown = false }, title = "Messages", state = state) {
+            Text("${apps.size} apps")
+        }
+    }
+}
+```
+
+`WindowState` holds its size (dp) and whether it is minimized, both set from code (the window follows) and read back as the user changes them; `toFront()` restores it and brings it to the front with the keyboard's focus. `visible = false` keeps it composed but not shown. Closing the app's window closes them all. On Android and the web, which give an app one window, a `Window` isn't shown. A script reaches one by its title: `@Messages: shot messages.png` (see [Tools](tools.md)).
+
 ## Platforms
 
 ### Linux

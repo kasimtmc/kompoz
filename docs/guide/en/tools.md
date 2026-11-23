@@ -103,6 +103,8 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 KOMPOZ_HEADLESS=1 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
+A command after `@Title:` runs in the app's window of that title (a `Window`, see [Setup](setup.md)), at its next frame: `@Messages: shot messages.png`, `@Messages: click 20 40`.
+
 `KOMPOZ_HEADLESS=1` runs the app on Kompoz's headless platform, without a window, which is useful on a build server: the GPU renderer draws only into its kept frame (a computer without a GPU has a software one: lavapipe or llvmpipe on Linux, WARP through ANGLE on Windows). Its window is the app's size until the script's `resize`; it has no pointer, keyboard or microphone, and reads neither the desktop's accent color nor the wallpaper's, so the screenshots are the same on every machine. A preview becomes a picture the same way:
 
 ```bash

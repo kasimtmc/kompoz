@@ -1143,7 +1143,7 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
-- **Window (in progress)**: Compose Desktop's `Window(onCloseRequest, title, state) { … }`, `WindowState` (its size,
+- **Window**: Compose Desktop's `Window(onCloseRequest, title, state) { … }`, `WindowState` (its size,
   minimized or not, `toFront()`) and `rememberWindowState(size = DpSize(…))`: a window of its own while it is
   composed, its content in a composition of its own with the caller's composition locals and the app's state, the
   user closing it its `onCloseRequest`. The app core runs a core for each (AppWindows); the headless platform

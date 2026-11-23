@@ -129,6 +129,26 @@ kompozc derlemeyi yapan makinede çalışır. Kompoz o makine için derlenirken 
 
 Masaüstünde komut satırı, uygulamanın açılışta açacağı bir derin bağlantı taşıyabilir, örneğin `./myapp kompoz://item/42` ([Gezinme](navigation.md) sayfasına bakın).
 
+### Başka pencereler
+
+Masaüstünde bir uygulama, Compose Desktop'taki gibi başka pencereler açar: `Window` oluşturulduğu sürece bir pencere açar, kompozisyondan çıkınca da kapatır. İçeriği, uygulamanın durumunu ve `Window`'un çağrıldığı yerin kompozisyon yerellerini (temayı) gören kendi kompozisyonudur; kullanıcının onu kapatması `onCloseRequest`'i çağırır, karar onundur (çoğunlukla onu artık oluşturmayarak).
+
+```kotlin
+@Kompozable
+fun Phones(apps: List<String>) {
+    var shown by remember { mutableStateOf(true) }
+    val state = rememberWindowState(size = DpSize(400.dp, 860.dp))
+    Button(onClick = { state.toFront() }) { Text("Öne getir") }
+    if (shown) {
+        Window(onCloseRequest = { shown = false }, title = "Mesajlar", state = state) {
+            Text("${apps.size} uygulama")
+        }
+    }
+}
+```
+
+`WindowState` pencerenin boyutunu (dp) ve küçültülmüş olup olmadığını tutar; ikisi de koddan ayarlanır (pencere ona uyar) ve kullanıcı değiştirdikçe geri okunur. `toFront()` pencereyi geri getirip klavye odağıyla öne çıkarır. `visible = false` onu oluşturulmuş ama gösterilmemiş tutar. Uygulamanın penceresini kapatmak hepsini kapatır. Bir uygulamaya tek pencere veren Android'de ve web'de bir `Window` gösterilmez. Bir betik birine başlığıyla ulaşır: `@Mesajlar: shot mesajlar.png` ([Araçlar](tools.md) sayfasına bakın).
+
 ## Platformlar
 
 ### Linux

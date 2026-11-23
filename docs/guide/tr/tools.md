@@ -103,6 +103,8 @@ KOMPOZ_PREVIEW=CounterCardPreview scripts/dev.sh
 KOMPOZ_HEADLESS=1 KOMPOZ_SCRIPT="click 160 263; wait 30; shot out.png; quit" ./build/showcase
 ```
 
+`@Başlık:`'tan sonraki bir komut, uygulamanın o başlıklı penceresinde (bir `Window`, [Kurulum](setup.md) sayfasına bakın) onun bir sonraki karesinde çalışır: `@Mesajlar: shot mesajlar.png`, `@Mesajlar: click 20 40`.
+
 `KOMPOZ_HEADLESS=1` uygulamayı Kompoz'un ekransız platformunda, pencere olmadan çalıştırır; bu, bir derleme sunucusunda işe yarar: GPU renderer'ı yalnızca sakladığı kareye çizer (GPU'su olmayan bir bilgisayarın yazılımla çalışan bir GPU'su vardır: Linux'ta lavapipe ya da llvmpipe, Windows'ta ANGLE üzerinden WARP). Penceresi, betikteki `resize`'a kadar uygulamanın boyutundadır; işaretçisi, klavyesi, mikrofonu yoktur, masaüstünün vurgu rengini de duvar kâğıdınınkini de okumaz; böylece ekran görüntüleri her makinede aynıdır. Bir önizleme de aynı yolla resme dönüşür:
 
 ```bash
