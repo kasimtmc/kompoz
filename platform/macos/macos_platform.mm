@@ -167,11 +167,14 @@ KeyModifiers heldKeys(NSEventModifierFlags flags) {
             (flags & NSEventModifierFlagOption) != 0};
 }
 
+std::vector<MacPlatform*> gPlatforms;  // the app's window's and its windows' (Window): whom a wake is for
+
 class MacPlatform final : public Platform {
 public:
     // `secondary`: a window of the app's own (Window), driven by the app's loop.
-    explicit MacPlatform(bool secondary = false) : secondary_(secondary) {}
+    explicit MacPlatform(bool secondary = false) : secondary_(secondary) { gPlatforms.push_back(this); }
     ~MacPlatform() override {
+        std::erase(gPlatforms, this);
         closeWindow();
         if (keptOn_) IOPMAssertionRelease(assertion_);
     }
@@ -485,17 +488,23 @@ private:
     std::vector<dispatch_source_t> signalSources_;
 
     // An event to AppKit (and so to the view), or the loop's own wake.
-    void dispatch(NSEvent* e) {
-        if (e.type == NSEventTypeApplicationDefined) woken_ = false;
-        else [NSApp sendEvent:e];
+    // An event of the app's own is a wake for the window it names (data1), whichever loop takes it.
+    static void dispatch(NSEvent* e) {
+        if (e.type != NSEventTypeApplicationDefined) return [NSApp sendEvent:e];
+        auto* to = reinterpret_cast<MacPlatform*>(e.data1);
+        if (std::find(gPlatforms.begin(), gPlatforms.end(), to) == gPlatforms.end()) return;  // (gone since)
+        to->woken_ = false;
+        to->events_.push_back({.type = EventType::Wake});
     }
 
-    // From another thread too: an event of the app's own ends the loop's wait.
+    // From another thread too: an event of the app's own ends the loop's wait, and asks this
+    // window's frame.
     void wake() {
         if (woken_.exchange(true)) return;
+        MacPlatform* self = this;
         dispatch_async(dispatch_get_main_queue(), ^{
             NSEvent* e = [NSEvent otherEventWithType:NSEventTypeApplicationDefined location:NSZeroPoint modifierFlags:0 timestamp:0
-                                        windowNumber:0 context:nil subtype:0 data1:0 data2:0];
+                                        windowNumber:0 context:nil subtype:0 data1:NSInteger(reinterpret_cast<intptr_t>(self)) data2:0];
             [NSApp postEvent:e atStart:NO];
         });
     }

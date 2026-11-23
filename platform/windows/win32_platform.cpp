@@ -482,6 +482,9 @@ public:
                 bool wait = true;
                 for (Win32Platform* p : all) {
                     if (p->needFrame_ && !p->waitingForDue_) wait = false;
+                    // (each one's wake and timer taken as they are, while another's frames keep the loop from waiting)
+                    for (HANDLE h : {p->wakeEvent_, p->timer_})
+                        if (WaitForSingleObject(h, 0) == WAIT_OBJECT_0) p->events_.push_back({.type = EventType::Wake}), wait = false;
                     handles.push_back(p->wakeEvent_), handles.push_back(p->timer_);
                 }
                 if (!wait) continue;
