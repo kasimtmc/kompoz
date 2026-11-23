@@ -811,7 +811,7 @@ JNIEXPORT void JNICALL Java_dev_kompoz_KompozView_nativeMotion(JNIEnv* e, jclass
 }
 
 JNIEXPORT jboolean JNICALL Java_dev_kompoz_KompozView_nativeKey(JNIEnv* e, jclass, jint code, jboolean down, jint meta, jstring typed) {
-    return gApp && gApp->key(code, down, meta, typed ? fromString(e, typed) : std::string());
+    return gApp && gApp->key(code, down, meta, typed ? kompoz::platform::fromString(e, typed) : std::string());
 }
 
 JNIEXPORT void JNICALL Java_dev_kompoz_KompozView_nativeDrag(JNIEnv* e, jclass, jint kind, jfloat x, jfloat y, jbyteArray types) {
