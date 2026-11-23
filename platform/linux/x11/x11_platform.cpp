@@ -5,6 +5,7 @@
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
 #include "../../common/egl_window.hpp"
+#include "../key_text.hpp"
 #include "../media_devices.hpp"
 
 namespace kompoz::platform {
@@ -350,6 +351,7 @@ private:
     XIM im_ = nullptr;
     XIC ic_ = nullptr;
     bool textActive_ = false, focused_ = false, spotStyle_ = false;
+    KeyText keyText_;  // what keys type where no field takes typing (dead keys composed)
     XPoint textSpot_{};  // where the input method shows what is being composed: under the field's start
 
     ClipEntry ours_;                   // on the clipboard from us
@@ -456,6 +458,7 @@ private:
             if (e.xfocus.mode == NotifyGrab || e.xfocus.mode == NotifyUngrab || e.xfocus.detail == NotifyInferior || e.xfocus.detail == NotifyPointer)
                 break;
             focused_ = e.type == FocusIn;
+            keyText_.reset();  // (a dead key pressed before it went away is forgotten)
             tellInputMethod();
             events_.push_back({.type = focused_ ? EventType::FocusGained : EventType::FocusLost});
             break;
@@ -672,11 +675,19 @@ private:
         lastTime_ = k.time;
         KeyModifiers mods = modifiersOf(k.state);
         bool down = k.type == KeyPress;
-        if (k.keycode != 0) events_.push_back(Event{.type = down ? EventType::KeyDown : EventType::KeyUp, .key = keyOf(uint32_t(XLookupKeysym(&k, 0))), .modifiers = mods});
-        if (!down || !textActive_ || mods.ctrl) return;
+        if (k.keycode != 0)
+            events_.push_back(Event{.type = down ? EventType::KeyDown : EventType::KeyUp, .key = keyOf(uint32_t(XLookupKeysym(&k, 0))),
+                                    .modifiers = mods, .nativeKeyCode = int(k.keycode)});
+        if (!down || mods.ctrl) return;
         std::string text(64, '\0');
         KeySym sym = 0;
         Status status = XLookupNone;
+        if (!textActive_) {  // no field takes it: what the key types, as a key event's (the input method isn't asked)
+            int n = XLookupString(&k, text.data(), int(text.size()), &sym, nullptr);  // (its keysym at Shift's and AltGr's level)
+            std::string typed = keyText_.typed(uint32_t(sym), latin1(std::string_view(text.data(), size_t(std::max(n, 0)))));
+            if (!typed.empty()) events_.push_back({.type = EventType::Text, .text = typed});
+            return;
+        }
         if (ic_) {
             int n = Xutf8LookupString(ic_, &k, text.data(), int(text.size()), &sym, &status);
             if (status == XBufferOverflow) {
@@ -686,15 +697,19 @@ private:
             text.resize(status == XLookupChars || status == XLookupBoth ? size_t(std::max(n, 0)) : 0);
         } else {  // (no input method: Latin-1)
             int n = XLookupString(&k, text.data(), int(text.size()), &sym, nullptr);
-            std::string utf8;
-            for (int i = 0; i < n; ++i) {
-                auto c = uint8_t(text[size_t(i)]);
-                if (c < 0x80) utf8 += char(c);
-                else utf8 += char(0xc0 | (c >> 6)), utf8 += char(0x80 | (c & 0x3f));
-            }
-            text = utf8;
+            text = latin1(std::string_view(text.data(), size_t(std::max(n, 0))));
         }
         if (!text.empty() && uint8_t(text[0]) >= 0x20 && text[0] != 0x7f) events_.push_back({.type = EventType::Text, .text = text});
+    }
+
+    static std::string latin1(std::string_view bytes) {  // (XLookupString's text, as UTF-8)
+        std::string utf8;
+        for (char b : bytes) {
+            auto c = uint8_t(b);
+            if (c < 0x80) utf8 += char(c);
+            else utf8 += char(0xc0 | (c >> 6)), utf8 += char(0x80 | (c & 0x3f));
+        }
+        return utf8;
     }
 
     // The input method (XIM), as the desktop's locale has it (else X's own, for compose keys):

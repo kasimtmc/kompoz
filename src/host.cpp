@@ -2883,7 +2883,14 @@ void KompozHost::setHoveredTrigger(LayoutNode* trigger) {
 // Desktop keyboards deliver typed text; turn it into a full edit at the caret so every
 // platform goes through the same textEdit() path.
 void KompozHost::textInput(std::string_view text) {
-    if (!isTextField(focused_)) return;
+    if (!isTextField(focused_)) {
+        if (text.empty()) return;
+        KeyEvent typed{.key = Key::Unknown, .type = KeyEventType::Unknown, .modifiers = keyboardModifiers_, .text = std::string(text)};
+        size_t at = 0;
+        typed.utf16CodePoint = int(utf8::next(text, at));
+        dispatchKey(typed);
+        return;
+    }
     TextEditState s = imeState_;
     int from = std::min(s.selectionStart, s.selectionEnd), to = std::max(s.selectionStart, s.selectionEnd);
     s.text.replace(size_t(from), size_t(to - from), text);
@@ -2923,14 +2930,18 @@ void KompozHost::textEdit(const TextEditState& proposed) {
     requestRedraw();
 }
 
-bool KompozHost::keyDown(Key key, KeyModifiers modifiers) { return dispatchKey({key, KeyEventType::KeyDown, modifiers}); }
+bool KompozHost::keyDown(Key key, KeyModifiers modifiers, int nativeKeyCode) {
+    return dispatchKey({.key = key, .type = KeyEventType::KeyDown, .modifiers = modifiers, .nativeKeyCode = nativeKeyCode});
+}
 
 std::shared_ptr<void> KompozHost::addKeyHandler(std::function<bool(const KeyEvent&)> handler) {
     auto h = std::make_shared<std::function<bool(const KeyEvent&)>>(std::move(handler));
     keyHandlers_.push_back(h);
     return h;
 }
-bool KompozHost::keyUp(Key key, KeyModifiers modifiers) { return dispatchKey({key, KeyEventType::KeyUp, modifiers}); }
+bool KompozHost::keyUp(Key key, KeyModifiers modifiers, int nativeKeyCode) {
+    return dispatchKey({.key = key, .type = KeyEventType::KeyUp, .modifiers = modifiers, .nativeKeyCode = nativeKeyCode});
+}
 
 bool KompozHost::dispatchKey(const KeyEvent& event) {
     if (dnd_ && event.key == Key::Escape) {  // the drag is called off

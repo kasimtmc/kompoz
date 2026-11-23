@@ -135,6 +135,22 @@ Box(modifier = Modifier
         .focusable())
 ```
 
+What a key types where no text field takes it comes after its `KeyDown` as an event of its own, as Compose Desktop's typed keys do: `type` is `KeyEventType.Unknown`, `text` what it typed (UTF-8, as the keyboard's layout makes it: `ğ`, AltGr's `@`, a dead key's accent put on the next letter) and `utf16CodePoint` its first character. A focused node reads typing so, with no field in it; a field takes the typing itself, and its handlers don't hear of it. Every key event has `nativeKeyCode`, the platform's code of the key, for keys Kompoz's `Key` doesn't name (media keys, a keyboard's own).
+
+```kotlin body
+#! var typed by remember { mutableStateOf("") }
+Box(modifier = Modifier
+        .onKeyEvent { e ->
+            if (e.type == KeyEventType.Unknown) {
+                typed += e.text
+                true
+            } else {
+                false
+            }
+        }
+        .focusable())
+```
+
 ## Focus
 
 Tab and Shift+Tab move keyboard focus between focusable nodes, and the arrow keys move it in a direction. Clickable components and text fields are focusable already; `Modifier.focusable()` makes any node so.

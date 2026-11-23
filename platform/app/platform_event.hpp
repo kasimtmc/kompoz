@@ -53,7 +53,8 @@ struct Event {
     MouseButton button = MouseButton::Left;
     Key key = Key::Unknown;
     KeyModifiers modifiers;  // held down (pointer and key events)
-    std::string text;        // Text
+    int nativeKeyCode = 0;   // KeyDown, KeyUp: the platform's code of the key (KeyEvent's)
+    std::string text;        // Text: typed, whether a text field takes it or not (KeyEventType::Unknown then)
     std::vector<std::string> mimeTypes;      // DropBegin
     std::shared_ptr<const ClipEntry> clip;  // DropData
 };

@@ -135,6 +135,22 @@ Box(modifier = Modifier
         .focusable())
 ```
 
+Bir tuşun yazdığı, onu alan bir metin alanı yoksa, Compose Desktop'un yazılan tuşları gibi `KeyDown`'ından sonra kendi olayı olarak gelir: `type` `KeyEventType.Unknown`'dır, `text` yazılandır (UTF-8, klavyenin düzeninin yaptığı gibi: `ğ`, AltGr'nin `@`'si, ölü bir tuşun sonraki harfe konan aksanı) ve `utf16CodePoint` ilk karakteridir. İçinde alan olmayan odaklı bir düğüm yazılanı böyle okur; bir alan yazılanı kendisi alır, işleyicileri onu duymaz. Her tuş olayında `nativeKeyCode`, tuşun platformdaki kodu vardır; Kompoz'un `Key`'inin adlandırmadığı tuşlar için (medya tuşları, bir klavyenin kendi tuşları).
+
+```kotlin body
+#! var typed by remember { mutableStateOf("") }
+Box(modifier = Modifier
+        .onKeyEvent { e ->
+            if (e.type == KeyEventType.Unknown) {
+                typed += e.text
+                true
+            } else {
+                false
+            }
+        }
+        .focusable())
+```
+
 ## Odak
 
 Tab ve Shift+Tab klavye odağını odaklanabilir düğümler arasında taşır, ok tuşları da bir yöne taşır. Tıklanabilir bileşenler ve metin alanları zaten odaklanabilirdir; `Modifier.focusable()` herhangi bir düğümü odaklanabilir yapar.

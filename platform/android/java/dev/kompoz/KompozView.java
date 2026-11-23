@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import android.view.Choreographer;
 import android.view.DragAndDropPermissions;
 import android.view.DragEvent;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
@@ -157,24 +158,49 @@ final class KompozView extends SurfaceView implements SurfaceHolder.Callback, Ch
                      event.getMetaState());
     }
 
-    // Keys when no text field has the keyboard (KompozInput's view gives those that aren't
-    // typing to keyEvent too). Back is the activity's (onBackPressed).
+    // Keys when no text field has the keyboard, with what they type (KompozInput's view gives those that
+    // aren't typing to keyEvent too, without it: the field takes the typing). Back is the activity's
+    // (onBackPressed).
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        return keyEvent(event) || super.onKeyDown(keyCode, event);
+        return keyEvent(event, typed(event)) || super.onKeyDown(keyCode, event);
     }
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
-        return keyEvent(event) || super.onKeyUp(keyCode, event);
+        return keyEvent(event, null) || super.onKeyUp(keyCode, event);
     }
 
     static boolean keyEvent(KeyEvent event) {
+        return keyEvent(event, null);
+    }
+
+    private static boolean keyEvent(KeyEvent event, String typed) {
         int code = event.getKeyCode();
         if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_VOLUME_UP || code == KeyEvent.KEYCODE_VOLUME_DOWN ||
             code == KeyEvent.KEYCODE_VOLUME_MUTE || code == KeyEvent.KEYCODE_POWER || code == KeyEvent.KEYCODE_HOME)
             return false;  // (the system's)
-        return nativeKey(code, event.getAction() == KeyEvent.ACTION_DOWN, event.getMetaState());
+        return nativeKey(code, event.getAction() == KeyEvent.ACTION_DOWN, event.getMetaState(), typed);
+    }
+
+    // What a hardware keyboard's key types (its layout's character at the meta state, a dead key's accent put
+    // on the next): null for none (a control character, a shortcut, the accent itself).
+    private static int deadAccent;
+    private static String typed(KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN || event.isCtrlPressed() || event.isMetaPressed()) return null;
+        int c = event.getUnicodeChar(event.getMetaState());
+        if (c == 0) return null;
+        if ((c & KeyCharacterMap.COMBINING_ACCENT) != 0) {
+            deadAccent = c & KeyCharacterMap.COMBINING_ACCENT_MASK;
+            return null;
+        }
+        if (deadAccent != 0) {
+            int composed = KeyEvent.getDeadChar(deadAccent, c);
+            deadAccent = 0;
+            if (composed != 0) c = composed;
+        }
+        if (c < 0x20 || c == 0x7f) return null;
+        return new String(Character.toChars(c));
     }
 
     // From native code: the mouse pointer's look (kompoz::Cursor's order).
@@ -216,7 +242,7 @@ final class KompozView extends SurfaceView implements SurfaceHolder.Callback, Ch
     private static native void nativeFrame(long frameTimeNanos);
     private static native void nativeMotion(int action, int index, int count, int[] ids, float[] xy, long timeNanos, int toolType,
                                             int actionButton, float scrollX, float scrollY, int metaState);
-    private static native boolean nativeKey(int keyCode, boolean down, int metaState);
+    private static native boolean nativeKey(int keyCode, boolean down, int metaState, String typed);
     private static native void nativeDrag(int kind, float x, float y, byte[] mimeTypes);  // 0 begun, 1 moved, 2 gone
     private static native void nativeDrop(float x, float y, byte[][] clip);  // as KompozActivity.clipParts gives it
 }

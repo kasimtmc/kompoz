@@ -17292,6 +17292,37 @@ TEST(key_events_preview_down_then_field_then_bubble_up) {
     CHECK(log->size() == 4 && log->back() == "outer up");
 }
 
+// Text typed where no field takes it: a KeyEventType::Unknown event with it (Compose Desktop's KEY_TYPED), to the
+// focused node and those around it; with a field focused, the field takes it and no handler hears of it.
+TEST(typed_text_without_a_field_is_a_key_event) {
+    auto events = std::make_shared<std::vector<KeyEvent>>();
+    auto text = mutableStateOf(std::string());
+    FocusRequester box, field;
+    KompozTestRule rule([&] {
+        Column(Modifier().onKeyEvent([events](const KeyEvent& e) { events->push_back(e); return e.type == KeyEventType::Unknown; }), [&] {
+            Box(Modifier().size(40).focusRequester(box).focusable());
+            TextField(text.get(), [text](std::string v) { text.set(std::move(v)); }, Modifier().focusRequester(field));
+        });
+    });
+    box.requestFocus();
+    rule.waitForIdle();
+    rule.host().keyDown(Key::Unknown, {}, 34);  // the key's platform code (X's for ğ on a Turkish layout)
+    rule.host().textInput("ğ");
+    rule.host().textInput("@");
+    CHECK(events->size() == 3);
+    if (events->size() == 3) {
+        CHECK((*events)[0].type == KeyEventType::KeyDown && (*events)[0].nativeKeyCode == 34);
+        CHECK((*events)[1].type == KeyEventType::Unknown && (*events)[1].text == "ğ" && (*events)[1].utf16CodePoint == 0x11F);
+        CHECK((*events)[2].text == "@" && (*events)[2].utf16CodePoint == '@' && (*events)[2].key == Key::Unknown);
+    }
+    events->clear();
+    field.requestFocus();
+    rule.waitForIdle();
+    rule.host().textInput("şı");
+    rule.waitForIdle();
+    CHECK(text.get() == "şı" && events->empty());
+}
+
 TEST(arrow_keys_move_focus_to_the_nearest_one_that_way) {
     KompozTestRule rule([] {
         Column([] {

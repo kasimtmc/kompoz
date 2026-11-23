@@ -182,7 +182,9 @@ public:
     // Zooms what is under `position` by `factor` and turns it by `rotation` degrees clockwise
     // (transformable): Ctrl+wheel, a touchpad pinch, Ctrl+Shift+wheel. Returns whether something took it.
     bool zoom(Offset position, float factor, float rotation = 0);
-    void textInput(std::string_view text);  // typed text, inserted at the caret (desktop keyboards)
+    // Typed text (desktop keyboards, a hardware keyboard): inserted at the focused text field's caret;
+    // where no field takes it, a KeyEventType::Unknown KeyEvent with it to the focused node's handlers.
+    void textInput(std::string_view text);
     // Content the soft keyboard sent the focused field (Android's commitContent: an image, a GIF),
     // for the contentReceivers around it: true if one took any of it (ImeOptions::acceptsContent).
     bool commitContent(TransferableContent content);
@@ -191,11 +193,11 @@ public:
     // field and onKeyEvent handlers (see KeyEventElement), then: Tab and the arrow keys move focus,
     // Enter and Space click a focused clickable, Escape (and Android's back button) closes the top
     // popup, clears focus or runs a BackHandler; unused, the platform does its default (leave the app).
-    bool keyDown(Key key, KeyModifiers modifiers = {});
+    bool keyDown(Key key, KeyModifiers modifiers = {}, int nativeKeyCode = 0);
     // Keys the focused node and those around it left alone go to these, the latest first (a
     // window's menu shortcuts, MenuBar); each stays while the returned token is held.
     std::shared_ptr<void> addKeyHandler(std::function<bool(const KeyEvent&)> handler);
-    bool keyUp(Key key, KeyModifiers modifiers = {});
+    bool keyUp(Key key, KeyModifiers modifiers = {}, int nativeKeyCode = 0);
     // Touch text selection: a long press on a text field selects the word under it and shows
     // the field's handles and toolbar, until the text changes, the focus moves, a key is
     // pressed or the user presses elsewhere. The handles and the toolbar use these.

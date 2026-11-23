@@ -883,9 +883,9 @@ void handleEvent(App& app, const platform::Event& e) {
         break;
     case EventType::KeyDown:
     case EventType::KeyUp:
-        if (e.key == Key::Unknown) break;
-        if (e.type == EventType::KeyDown) host.keyDown(e.key, e.modifiers);
-        else host.keyUp(e.key, e.modifiers);
+        if (e.key == Key::Unknown && e.nativeKeyCode == 0) break;
+        if (e.type == EventType::KeyDown) host.keyDown(e.key, e.modifiers, e.nativeKeyCode);
+        else host.keyUp(e.key, e.modifiers, e.nativeKeyCode);
         break;
     default: break;
     }

@@ -5,6 +5,7 @@
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
 #include "../../common/egl_window.hpp"
+#include "../key_text.hpp"
 #include "../media_devices.hpp"
 #include "wayland_dynamic.hpp"
 // (after wayland_dynamic.hpp: their inline functions call through its pointers)
@@ -429,6 +430,7 @@ private:
     uint32_t repeatKey_ = 0;
     zwp_text_input_v3* textInput_ = nullptr;
     bool textActive_ = false, textEntered_ = false;  // a field takes typing; the input method is on the window
+    KeyText keyText_;  // what keys type (dead keys composed), where no input method commits it
     std::array<int, 4> textArea_{};                   // the field, in points
     ImeOptions textOptions_;
     std::string pendingCommit_;
@@ -556,15 +558,18 @@ private:
         wp_cursor_shape_device_v1_set_shape(cursorDevice_, pointerSerial_, shapes[i < std::size(shapes) ? i : 0]);
     }
 
-    // A key pressed (or repeated) or let go: the key, and the text it types while a field takes it.
+    // A key pressed (or repeated) or let go: the key, and the text it types (dead keys composed), to the
+    // field that takes typing or, where none does, as a key event's.
     void key(uint32_t code, bool down) {
         if (!xkbState_) return;
         xkb_keysym_t sym = xkb_state_key_get_one_sym(xkbState_, code);
-        events_.push_back(Event{.type = down ? EventType::KeyDown : EventType::KeyUp, .key = keyOf(sym), .modifiers = modifiers_});
-        if (!down || !textActive_ || modifiers_.ctrl) return;
+        events_.push_back(Event{.type = down ? EventType::KeyDown : EventType::KeyUp, .key = keyOf(sym), .modifiers = modifiers_,
+                                .nativeKeyCode = int(code)});
+        if (!down || modifiers_.ctrl) return;
         char utf8[64] = {};
-        if (xkb_state_key_get_utf8(xkbState_, code, utf8, sizeof utf8) > 0 && uint8_t(utf8[0]) >= 0x20 && utf8[0] != 0x7f)
-            events_.push_back({.type = EventType::Text, .text = utf8});
+        int n = xkb_state_key_get_utf8(xkbState_, code, utf8, sizeof utf8);
+        std::string typed = keyText_.typed(sym, n > 0 ? std::string_view(utf8) : std::string_view());
+        if (!typed.empty()) events_.push_back({.type = EventType::Text, .text = typed});
     }
 
     // The input method told whether a field takes typing, where it is and what it takes (the
@@ -1153,6 +1158,7 @@ const wl_keyboard_listener WaylandPlatform::kKeyboard = {
         WaylandPlatform& p = self(data);
         p.stopRepeat();
         p.modifiers_ = {};
+        p.keyText_.reset();
         p.events_.push_back({.type = EventType::FocusLost});
     },
     .key = [](void* data, wl_keyboard*, uint32_t serial, uint32_t, uint32_t key, uint32_t state) {

@@ -356,7 +356,6 @@ public:
         callbacks.wake = [self] { self->wake(); };
         callbacks.textInput = [self](bool active, Rect area, const TextEditState&, const ImeOptions&) {
             float k = 1 / self->pointToDp();  // dp -> points
-            self->textActive_ = active;
             self->textArea_ = NSMakeRect(area.x * k, area.y * k, area.width * k, area.height * k);
             if (!active && self->view_) [self->view_.inputContext discardMarkedText];
         };
@@ -410,7 +409,6 @@ public:
         if (auto v = option("KOMPOZ_SCALE"); v && std::atof(v->c_str()) > 0) return float(backing / std::atof(v->c_str()));
         return 1;
     }
-    bool textActive() const { return textActive_; }
     NSRect textArea() const { return textArea_; }
     NSCursor* cursor() const {
         switch (cursor_) {
@@ -440,7 +438,6 @@ private:
     int64_t dueAt_ = -1, wakeAt_ = -1;
     std::atomic<bool> woken_{false};
 
-    bool textActive_ = false;
     NSRect textArea_ = NSZeroRect;  // the field, in the view's points
     Cursor cursor_ = Cursor::Default;
     bool keptOn_ = false, probed_ = false, hasMicrophone_ = false, hasCamera_ = false;
@@ -667,12 +664,16 @@ using kompoz::platform::MouseButton;
 
 - (void)keyDown:(NSEvent*)e {
     if (!platform) return;
-    platform->push(Event{.type = EventType::KeyDown, .key = kompoz::platform::keyOf(e), .modifiers = kompoz::platform::heldKeys(e.modifierFlags)});
-    // What it types, through the input method, while a field takes typing (not a shortcut's).
-    if (platform->textActive() && !(e.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl))) [self interpretKeyEvents:@[e]];
+    platform->push(Event{.type = EventType::KeyDown, .key = kompoz::platform::keyOf(e), .modifiers = kompoz::platform::heldKeys(e.modifierFlags),
+                         .nativeKeyCode = int(e.keyCode)});
+    // What it types (not a shortcut's), through the input method (dead keys composed): to the field that
+    // takes typing or, where none does, as a key event's (KeyEventType::Unknown).
+    if (!(e.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl))) [self interpretKeyEvents:@[e]];
 }
 - (void)keyUp:(NSEvent*)e {
-    if (platform) platform->push(Event{.type = EventType::KeyUp, .key = kompoz::platform::keyOf(e), .modifiers = kompoz::platform::heldKeys(e.modifierFlags)});
+    if (platform)
+        platform->push(Event{.type = EventType::KeyUp, .key = kompoz::platform::keyOf(e), .modifiers = kompoz::platform::heldKeys(e.modifierFlags),
+                             .nativeKeyCode = int(e.keyCode)});
 }
 - (void)insertText:(id)string replacementRange:(NSRange)range {
     NSString* text = [string isKindOfClass:NSAttributedString.class] ? [(NSAttributedString*)string string] : (NSString*)string;

@@ -1143,6 +1143,12 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Typed text where no field takes it**: what a key types comes, after its `KeyDown`, as a `KeyEventType.Unknown`
+  key event (Compose Desktop's typed keys) with `text` and `utf16CodePoint`, to a focused node with no text field;
+  every key event has `nativeKeyCode`. On X11 and Wayland dead keys and the Compose key compose through the
+  desktop's compose table (libxkbcommon, loaded at run time; Wayland's fields compose so too now), on Windows and
+  macOS through the system's, on Android a hardware keyboard's dead keys through its key character map, on the
+  web as the browser's keys have it.
 - **items(list) keeps the list**: a lazy list's items (LazyColumn, LazyRow, grids) keep a copy of a list given by
   name, as Kotlin's garbage collector keeps it: one the content block made itself (`val shown = …; items(shown)`)
   was read after the block had returned, gone (a crash).

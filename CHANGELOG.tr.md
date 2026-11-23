@@ -1180,6 +1180,12 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Alan almayan yazılan metin**: bir tuşun yazdığı, `KeyDown`'ından sonra `text` ve `utf16CodePoint` taşıyan bir
+  `KeyEventType.Unknown` tuş olayı olarak (Compose Desktop'un yazılan tuşları), içinde metin alanı olmayan odaklı bir
+  düğüme gelir; her tuş olayında `nativeKeyCode` vardır. X11'de ve Wayland'de ölü tuşlar ve Compose tuşu masaüstünün
+  bileşim tablosuyla birleşir (libxkbcommon, çalışma anında yüklenir; Wayland'in alanları da artık böyle birleştirir),
+  Windows'ta ve macOS'ta sistemin, Android'de bir donanım klavyesinin ölü tuşları tuş karakter haritasıyla, web'de
+  tarayıcının tuşlarının verdiği gibi.
 - **items(list) listeyi tutar**: tembel bir listenin öğeleri (LazyColumn, LazyRow, ızgaralar), adıyla verilen bir
   listenin kopyasını tutar (Kotlin'in çöp toplayıcısının tuttuğu gibi): içerik bloğunun kendi yaptığı bir liste
   (`val shown = …; items(shown)`) blok döndükten sonra, yok olmuşken okunuyordu (bir çökme).

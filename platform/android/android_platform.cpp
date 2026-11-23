@@ -299,10 +299,13 @@ public:
         }
     }
 
-    bool key(int code, bool down, int meta) {
-        Event ev{.type = down ? EventType::KeyDown : EventType::KeyUp, .key = keyOf(code), .modifiers = modifiersOf(meta)};
+    // A key, and what it typed where no text field takes typing (a hardware keyboard's: KeyEventType::Unknown).
+    bool key(int code, bool down, int meta, std::string typed) {
+        Event ev{.type = down ? EventType::KeyDown : EventType::KeyUp, .key = keyOf(code), .modifiers = modifiersOf(meta), .nativeKeyCode = code};
         deliver(ev);  // (Unknown too: the keys it holds down, a Shift, still count)
-        return ev.key != Key::Unknown;
+        bool types = !typed.empty();
+        if (types) deliver({.type = EventType::Text, .text = std::move(typed)});
+        return ev.key != Key::Unknown || types;
     }
 
     // The display's beat: a frame, unless there is nothing to show it on.
@@ -807,8 +810,8 @@ JNIEXPORT void JNICALL Java_dev_kompoz_KompozView_nativeMotion(JNIEnv* e, jclass
     gApp->motion(action, index, count, pointerIds.data(), positions.data(), time, tool, button, scrollX, scrollY, meta);
 }
 
-JNIEXPORT jboolean JNICALL Java_dev_kompoz_KompozView_nativeKey(JNIEnv*, jclass, jint code, jboolean down, jint meta) {
-    return gApp && gApp->key(code, down, meta);
+JNIEXPORT jboolean JNICALL Java_dev_kompoz_KompozView_nativeKey(JNIEnv* e, jclass, jint code, jboolean down, jint meta, jstring typed) {
+    return gApp && gApp->key(code, down, meta, typed ? fromString(e, typed) : std::string());
 }
 
 JNIEXPORT void JNICALL Java_dev_kompoz_KompozView_nativeDrag(JNIEnv* e, jclass, jint kind, jfloat x, jfloat y, jbyteArray types) {

@@ -894,7 +894,8 @@ private:
         case WM_KEYUP:
         case WM_SYSKEYUP: {
             bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-            events_.push_back(Event{.type = down ? EventType::KeyDown : EventType::KeyUp, .time = now(), .key = keyOf(w), .modifiers = heldKeys()});
+            events_.push_back(Event{.type = down ? EventType::KeyDown : EventType::KeyUp, .time = now(), .key = keyOf(w), .modifiers = heldKeys(),
+                                    .nativeKeyCode = int(w)});
             // Alt+F4 and Alt+Space are Windows' (closing, the window's menu); the other Alt keys
             // and F10 aren't (they would open a menu the window hasn't).
             if (message == WM_SYSKEYDOWN && (w == VK_F4 || w == VK_SPACE)) break;
@@ -904,13 +905,15 @@ private:
         case WM_SYSCHAR:
             if (w == VK_SPACE) break;
             return 0;
-        case WM_CHAR: {  // a character typed (the input method's too), in UTF-16 halves
+        // A character typed (the input method's too, a dead key's with the next), in UTF-16 halves: to the
+        // field that takes typing or, where none does, as a key event's (KeyEventType::Unknown).
+        case WM_CHAR: {
             auto c = wchar_t(w);
             if (c >= 0xD800 && c < 0xDC00) {
                 highSurrogate_ = c;
                 return 0;
             }
-            if (!textActive_ || c < 0x20 || c == 0x7f) return 0;
+            if (c < 0x20 || c == 0x7f) return 0;
             wchar_t text[2] = {highSurrogate_, c};
             bool pair = c >= 0xDC00 && c < 0xE000 && highSurrogate_;
             highSurrogate_ = 0;

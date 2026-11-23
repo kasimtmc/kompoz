@@ -621,6 +621,7 @@ private:
         bool shortcut = k.ctrlKey || k.metaKey;
         Event e{.type = type == EMSCRIPTEN_EVENT_KEYDOWN ? EventType::KeyDown : EventType::KeyUp, .time = now(), .key = keyOf(name)};
         e.modifiers = held(k.shiftKey, k.ctrlKey, k.altKey, k.metaKey);
+        e.nativeKeyCode = int(k.keyCode);
         if (type != EMSCRIPTEN_EVENT_KEYDOWN) {
             deliver(e);
             return true;
@@ -633,7 +634,12 @@ private:
         deliver(e);
         if (shortcut) return !(name == "c" || name == "C" || name == "x" || name == "X");  // (the copy event follows)
         if (e.key != Key::Unknown && e.key != Key::Space && !isCharacter(name)) return true;  // Enter, Tab, the arrows...
-        if (isCharacter(name)) return !textActive_;
+        if (isCharacter(name)) {
+            // Where no field takes typing (the textarea isn't focused): what it types (the browser's key, a dead
+            // key's composed with it), as a key event's (KeyEventType::Unknown).
+            if (!textActive_) deliver({.type = EventType::Text, .time = now(), .text = std::string(name)});
+            return !textActive_;
+        }
         return false;  // (an input method's, a dead key, a phone keyboard's "Unidentified")
     }
 };

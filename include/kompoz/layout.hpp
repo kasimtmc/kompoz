@@ -197,11 +197,16 @@ struct KeyModifiers {
     constexpr bool isShiftPressed() const { return shift; }
     constexpr bool isAltPressed() const { return alt; }
 };
-enum class KeyEventType { KeyDown, KeyUp };
+// Unknown: text typed where no text field takes it (Compose Desktop's from a KEY_TYPED event): after
+// its key's KeyDown, `text` what it typed, as the keyboard's layout and dead keys make it.
+enum class KeyEventType { KeyDown, KeyUp, Unknown };
 struct KeyEvent {
     Key key = Key::Unknown;
     KeyEventType type = KeyEventType::KeyDown;
     KeyModifiers modifiers;
+    int utf16CodePoint = 0;  // the first character typed (Unknown), as Compose names it: a code point
+    std::string text;        // all it typed, UTF-8 (Unknown; an input method's commit may be more than one)
+    int nativeKeyCode = 0;   // the platform's code of the key (KeyDown, KeyUp): X's keycode, Windows' virtual key...
     bool isShiftPressed() const { return modifiers.shift; }
     bool isCtrlPressed() const { return modifiers.ctrl; }
     bool isAltPressed() const { return modifiers.alt; }
