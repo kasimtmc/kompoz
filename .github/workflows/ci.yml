@@ -25,11 +25,16 @@ env:
   # The same, and the window of its own the click opens (Window, 240 x 120 dp), shot too: headless, where the
   # platform opens more than one window.
   KOMPOZ_SCRIPT_WINDOWS: "wait 30;click 70 70;wait 30;shot shot.png;@Merhaba: shot window.png;wait 5;quit"
+  # (window.png's width and height, from its PNG header: od, which every runner has)
   KOMPOZ_WINDOW_SIZE: >-
-    "$(command -v python3 || command -v python)" -c "import struct,sys; d = open('window.png', 'rb').read(24); sys.exit(struct.unpack('>II', d[16:24]) != (240, 120))"
+    read -r a b c d e f g h <<< "$(od -An -tu1 -j16 -N8 window.png)";
+    w=$(((a << 24) | (b << 16) | (c << 8) | d)); h=$(((e << 24) | (f << 16) | (g << 8) | h)); echo "window $w x $h";
+    [ "$w" -eq 240 ] && [ "$h" -eq 120 ]
   # In a window on a screen (Windows, macOS): its size at the screen's scale, 2 by 1.
   KOMPOZ_WINDOW_RATIO: >-
-    "$(command -v python3 || command -v python)" -c "import struct,sys; d = open('window.png', 'rb').read(24); w, h = struct.unpack('>II', d[16:24]); print('window', w, 'x', h); sys.exit(w < 240 or w != 2 * h)"
+    read -r a b c d e f g h <<< "$(od -An -tu1 -j16 -N8 window.png)";
+    w=$(((a << 24) | (b << 16) | (c << 8) | d)); h=$(((e << 24) | (f << 16) | (g << 8) | h)); echo "window $w x $h";
+    [ "$w" -ge 240 ] && [ "$w" -eq $((2 * h)) ]
 
 jobs:
   linux:

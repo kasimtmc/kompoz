@@ -1215,7 +1215,13 @@ void AppCore::syncWindow() {
 }
 
 void AppCore::setWindowFinder(std::function<AppCore*(std::string_view)> find) { app_->findWindow = std::move(find); }
-void AppCore::runScript(std::string command) { app_->script.commands.push_back(std::move(command)); }
+void AppCore::runScript(std::string command) {
+    app_->script.commands.push_back(std::move(command));
+    if (app_->host) {  // (a frame for it: a platform frames a window only when something asks)
+        app_->host->requestRedraw();
+        app_->host->wake();
+    }
+}
 std::string_view AppCore::title() const { return app_->config.title; }
 
 AppWindows::AppWindows(AppCore& app, MakeWindow make) : app_(app), make_(std::move(make)) {
