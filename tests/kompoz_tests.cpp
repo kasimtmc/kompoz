@@ -6501,6 +6501,9 @@ TEST(text_that_gives_way_to_the_width_takes_all_of_it) {
             centered += near(canvas.baselines[i].x + w / 2, 100, 1);
         }
     CHECK(centered == 1);
+    // The ellipsized line goes on past its words, cut where the room ends, as Compose's (Android's StaticLayout):
+    // 24 code points and the ellipsis, 200 dp; not "tek satırda kesilecek…".
+    CHECK(std::count(canvas.texts.begin(), canvas.texts.end(), std::string("tek satırda kesilecek ka…")) == 1);
 }
 
 TEST(basic_text_takes_nothing_from_around_it) {

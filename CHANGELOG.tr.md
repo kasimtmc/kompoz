@@ -1180,6 +1180,10 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Compose'unki gibi üç nokta**: `TextOverflow.Ellipsis` ile son satır paragrafının geri kalanıyla sürer ve yerin
+  bittiği yerde, gerekirse bir sözcüğün ortasında kesilir (Android'in StaticLayout'unun Compose için yaptığı gibi);
+  önceden kendi sözcükleriyle bitiyordu ve ilk sözcüklerden sonra gelen bölünmez uzun bir sözcük (bir yol) yalnızca
+  `Gelen dosyalar:…` bırakıyordu.
 - **Alt dizin olarak Kompoz**: Kompoz'u alt dizin olarak (add_subdirectory) kullanan bir projenin çağırdığı
   `kompozable`, kompozc'ye `--headers` vermiyordu (Kompoz'un yolları kendi dizininin değişkenleriydi): artık genel
   özelliklerdir. CI paket deneme uygulamasını bu yolla da derler.

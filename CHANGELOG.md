@@ -1143,6 +1143,9 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **An ellipsis as Compose's**: with `TextOverflow.Ellipsis`, the last line goes on with the rest of its paragraph
+  and is cut where the room ends, mid-word too, as Android's StaticLayout does for Compose; it ended with its own
+  words before, and a long unbreakable one (a path) after the first words left only `Gelen dosyalar:…`.
 - **Kompoz as a subdirectory**: `kompozable` called by a project that has Kompoz as a subdirectory (add_subdirectory)
   gave kompozc no `--headers` (Kompoz's paths were variables of its own directory): they are global properties now.
   CI builds the package test app that way too.

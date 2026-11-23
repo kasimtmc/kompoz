@@ -615,6 +615,17 @@ StyledTextLayout layoutStyledText(TextMeasurer& measurer, const std::string& tex
             spread = false;
             const Font& font = layout.runs[size_t(line.pieces.back().run)].font;
             float ellipsis = measurer.measureWidth(kEllipsis, font);
+            if (truncated && li + 1 == ranges.size()) {
+                // The last line goes on with the rest of its paragraph, cut where the room ends, mid-word too
+                // (as Android's StaticLayout does for Compose): not only its own words, then the ellipsis.
+                size_t newline = text.find('\n', size_t(from));
+                int paragraphEnd = newline == std::string::npos ? length : int(newline);
+                while (to < paragraphEnd) {
+                    int next = int(utf8::nextCluster(text, size_t(to)));
+                    if (m.width(from, next) + ellipsis > room) break;
+                    to = next;
+                }
+            }
             while (to > from && m.width(from, to) + ellipsis > room) to = int(utf8::previousCluster(text, size_t(to)));
             line.pieces.clear();
             m.pieces(line.pieces, from, to);
