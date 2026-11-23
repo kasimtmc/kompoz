@@ -1180,6 +1180,11 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Android: etkinlik kendi sürecinde yeniden oluşturulur**: uygulama, süreç bitmek yerine (`System.exit`, bir ön
+  plan servisini de götürerek) çalışan süreçte yeniden başlar (Compose'un yeni bir etkinlikteki setContent'i gibi);
+  statikleri ve servisleri kalır. Hâlâ duran etkinlik devreder: bitirilir, görünümünün ve yaşam döngüsünün çağrıları
+  hiçbir yere gitmez; klavyenin görünümü ve erişilebilirlik yenisine geçer, resim yükleyici bir uygulama bittikten
+  sonra yeniden başlar. Bir Xiaomi 14 Ultra'da, bir süreçte üç açılışla denendi.
 - **Compose'unki gibi üç nokta**: `TextOverflow.Ellipsis` ile son satır paragrafının geri kalanıyla sürer ve yerin
   bittiği yerde, gerekirse bir sözcüğün ortasında kesilir (Android'in StaticLayout'unun Compose için yaptığı gibi);
   önceden kendi sözcükleriyle bitiyordu ve ilk sözcüklerden sonra gelen bölünmez uzun bir sözcük (bir yol) yalnızca

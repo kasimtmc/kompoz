@@ -357,6 +357,7 @@ public:
         wake_.notify_all();
         for (auto& t : threads_) t.join();
         threads_.clear();
+        gStopping = false;  // (an app started again in the process, as Android's activity can be: it loads its own)
     }
 
 private:

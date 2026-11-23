@@ -425,9 +425,13 @@ public final class KompozInput {
     }
 
     private static boolean ensureView() {
-        if (view != null && view.getParent() != null) return true;
         Activity activity = KompozActivity.current;
+        if (view != null && view.getParent() != null && view.getContext() == activity) return true;
         if (activity == null) return false;
+        if (view != null && view.getContext() != activity) {  // (an activity's that another replaced: a new one in this)
+            if (view.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup) view.getParent()).removeView(view);
+            view = null;
+        }
         if (view == null) {
             view = new InputView(activity);
             view.setOnApplyWindowInsetsListener((v, insets) -> {
@@ -685,7 +689,7 @@ public final class KompozInput {
     private static long lastContentChange;
 
     private static void attachAccessibility(Activity activity) {
-        if (surface != null) return;
+        if (surface != null && surface == drawSurface) return;  // (another activity's view: this one's now)
         surface = drawSurface;
         if (surface == null) return;
         final SemanticsProvider provider = new SemanticsProvider(surface);

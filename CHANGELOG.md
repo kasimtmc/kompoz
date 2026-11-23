@@ -1143,6 +1143,11 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Android: the activity created again in its process**: the app starts again in the running process (as
+  Compose's setContent in a new activity), its statics and services kept, instead of the process ending
+  (`System.exit`) and taking a foreground service with it. One activity still there hands over: it is finished,
+  and its view's and lifecycle's calls go nowhere; the keyboard's view and accessibility follow the new one, and the
+  image loader starts again after an app ended. Tried on a Xiaomi 14 Ultra, three starts in one process.
 - **An ellipsis as Compose's**: with `TextOverflow.Ellipsis`, the last line goes on with the rest of its paragraph
   and is cut where the room ends, mid-word too, as Android's StaticLayout does for Compose; it ended with its own
   words before, and a long unbreakable one (a path) after the first words left only `Gelen dosyalar:…`.

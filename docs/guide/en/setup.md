@@ -160,7 +160,7 @@ cd examples/showcase/android && ./gradlew installDebug
 
 `fetch-deps.sh` downloads FreeType, HarfBuzz, zlib and libpng into `third_party/` at pinned versions and checks their SHA-256 sums. Gradle builds Kompoz's CMake project with the NDK into your app's `libmain.so`, and kompozc for your computer on the way (see [kompozc](#kompozc)).
 
-To make your own app, start from the showcase's `android/` folder: it has only the manifest, a theme and a `MainActivity` that extends Kompoz's `KompozActivity` (which loads `libmain.so`, runs your app on its UI thread and draws each frame on the display's beat). The fonts go into the APK from Kompoz's `assets/` folder. On Android, Kompoz supports the soft keyboard with suggestions, edge-to-edge insets, the back gesture and predictive back, the system's dark mode and font size, dynamic color on Android 12+ and TalkBack.
+To make your own app, start from the showcase's `android/` folder: it has only the manifest, a theme and a `MainActivity` that extends Kompoz's `KompozActivity` (which loads `libmain.so`, runs your app on its UI thread and draws each frame on the display's beat). The fonts go into the APK from Kompoz's `assets/` folder. On Android, Kompoz supports the soft keyboard with suggestions, edge-to-edge insets, the back gesture and predictive back, the system's dark mode and font size, dynamic color on Android 12+ and TalkBack. When Android creates the activity again in a process that is still running (it was swiped away from the recent apps while a foreground service kept the process), the app starts again in it, as Compose's `setContent` in a new activity: its composition is new, and what the process holds (statics, singletons, what its services run) is kept.
 
 ### Web
 

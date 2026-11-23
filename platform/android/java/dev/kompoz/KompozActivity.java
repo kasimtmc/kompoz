@@ -24,7 +24,7 @@ import java.util.Locale;
  * extends it (and names another library in {@link #library()} if its own isn't libmain.so).
  */
 public class KompozActivity extends Activity {
-    static KompozActivity current;  // the one shown (an app has one: singleInstance)
+    static KompozActivity current;  // the app's: the last created (an app has one: singleInstance)
     KompozView view;
 
     /** The native library with the app (Kompoz's createApplication) in it. */
@@ -37,19 +37,19 @@ public class KompozActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         System.loadLibrary(library());
+        // Created again in a process that ran one (swiped away from the recent apps while a service kept the
+        // process, or started anew in its task): the app starts again in it, its composition new and the
+        // process's state (statics, what the services hold) kept, as Compose's setContent in a new activity.
+        // One still there (Android ends it after creating this one) hands over: it is finished.
+        KompozActivity previous = current;
         current = this;
         KompozInput.onCreate(savedInstanceState);
         super.onCreate(savedInstanceState);
         view = new KompozView(this);
         setContentView(view);
         view.requestFocus();
-        // A second in a process that ran one (Android created the activity again without
-        // ending the process): the process ends, and the system starts the app in a new one,
-        // as SDL's activity did (Kompoz's native state is made for one app a process).
-        if (!nativeCreate(this, getAssets(), getFilesDir().getAbsolutePath(), dir(getExternalFilesDir(null)), getCacheDir().getAbsolutePath())) {
-            System.exit(0);
-            return;
-        }
+        nativeCreate(this, getAssets(), getFilesDir().getAbsolutePath(), dir(getExternalFilesDir(null)), getCacheDir().getAbsolutePath());
+        if (previous != null && previous != this) previous.finish();
         DisplayManager displays = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
         if (displays != null) displays.registerDisplayListener(displayListener, null);
     }
@@ -69,7 +69,7 @@ public class KompozActivity extends Activity {
         @Override
         public void onDisplayChanged(int displayId) {
             Display display = view != null ? view.getDisplay() : null;
-            if (display != null && display.getDisplayId() == displayId) nativeLifecycle(EVENT_METRICS);
+            if (display != null && display.getDisplayId() == displayId) lifecycle(EVENT_METRICS);
         }
     };
 
@@ -82,25 +82,25 @@ public class KompozActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
-        nativeLifecycle(EVENT_WILL_ENTER_FOREGROUND);
+        lifecycle(EVENT_WILL_ENTER_FOREGROUND);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        nativeLifecycle(EVENT_DID_ENTER_FOREGROUND);
+        lifecycle(EVENT_DID_ENTER_FOREGROUND);
     }
 
     // The native side keeps the app's saved state as it pauses (KompozInput.stateSaved).
     @Override
     protected void onPause() {
-        nativeLifecycle(EVENT_WILL_ENTER_BACKGROUND);
+        lifecycle(EVENT_WILL_ENTER_BACKGROUND);
         super.onPause();
     }
 
     @Override
     protected void onStop() {
-        nativeLifecycle(EVENT_DID_ENTER_BACKGROUND);
+        lifecycle(EVENT_DID_ENTER_BACKGROUND);
         super.onStop();
     }
 
@@ -108,8 +108,10 @@ public class KompozActivity extends Activity {
     protected void onDestroy() {
         DisplayManager displays = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
         if (displays != null) displays.unregisterDisplayListener(displayListener);
-        nativeDestroy();
-        if (current == this) current = null;
+        if (current == this) {  // (one another replaced has no app of its own)
+            nativeDestroy();
+            current = null;
+        }
         super.onDestroy();
     }
 
@@ -130,13 +132,13 @@ public class KompozActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        nativeLifecycle(hasFocus ? EVENT_FOCUS_GAINED : EVENT_FOCUS_LOST);
+        lifecycle(hasFocus ? EVENT_FOCUS_GAINED : EVENT_FOCUS_LOST);
     }
 
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);
-        if (level >= TRIM_MEMORY_RUNNING_LOW) nativeLifecycle(EVENT_LOW_MEMORY);
+        if (level >= TRIM_MEMORY_RUNNING_LOW) lifecycle(EVENT_LOW_MEMORY);
     }
 
     // Dark mode, the language, the font size, the screen turned: the manifest keeps the activity
@@ -144,7 +146,7 @@ public class KompozActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
-        nativeLifecycle(EVENT_METRICS);
+        lifecycle(EVENT_METRICS);
     }
 
     // ---- Called from native code, on the UI thread ----------------------------------------
@@ -262,10 +264,15 @@ public class KompozActivity extends Activity {
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
         if (Build.VERSION.SDK_INT >= 33) super.onBackPressed();
-        else nativeLifecycle(EVENT_BACK);
+        else lifecycle(EVENT_BACK);
     }
 
-    private static native boolean nativeCreate(KompozActivity activity, android.content.res.AssetManager assets, String files,
+    // What happens to it, to the app's native side while it is the app's.
+    private void lifecycle(int event) {
+        if (current == this) nativeLifecycle(event);
+    }
+
+    private static native void nativeCreate(KompozActivity activity, android.content.res.AssetManager assets, String files,
                                             String externalFiles, String cache);
     private static native void nativeDestroy();
     static native void nativeLifecycle(int event);

@@ -47,6 +47,7 @@ final class KompozView extends SurfaceView implements SurfaceHolder.Callback, Ch
     // Over the view: begun (its MIME types told), moved, dropped (all it carries) or gone. Any
     // drag is taken part in: what it carries, the app's dragAndDropTargets and contentReceivers decide.
     private boolean drag(DragEvent event) {
+        if (!live()) return false;
         switch (event.getAction()) {
         case DragEvent.ACTION_DRAG_STARTED:
             return true;
@@ -83,13 +84,19 @@ final class KompozView extends SurfaceView implements SurfaceHolder.Callback, Ch
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        nativeSurface(holder.getSurface(), width, height);
+        if (live()) nativeSurface(holder.getSurface(), width, height);
     }
 
     // Native code lets go of the surface before this returns, as it must.
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        nativeSurface(null, 0, 0);
+        if (live()) nativeSurface(null, 0, 0);
+    }
+
+    // Whether its activity is the app's (KompozActivity.current): one that another has replaced in the
+    // process, until it ends, tells native code nothing (its app is the other's now).
+    private boolean live() {
+        return getContext() == KompozActivity.current;
     }
 
     // ---- Frames ---------------------------------------------------------------------------
@@ -104,7 +111,7 @@ final class KompozView extends SurfaceView implements SurfaceHolder.Callback, Ch
     @Override
     public void doFrame(long frameTimeNanos) {
         framePosted = false;
-        nativeFrame(frameTimeNanos);
+        if (live()) nativeFrame(frameTimeNanos);
     }
 
     // ---- Input ----------------------------------------------------------------------------
@@ -131,6 +138,7 @@ final class KompozView extends SurfaceView implements SurfaceHolder.Callback, Ch
     // clock, the tool of the pointer it is about, the button it pressed or let go of, and the
     // wheel's turn.
     private void motion(MotionEvent event) {
+        if (!live()) return;
         int count = event.getPointerCount();
         if (ids.length < count) {
             ids = new int[count];

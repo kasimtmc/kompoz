@@ -764,7 +764,6 @@ private:
 };
 
 std::unique_ptr<AndroidPlatform> gApp;  // the app, once its activity is created
-bool gRan = false;                      // (one a process: Kompoz's statics aren't made for a second)
 
 } // namespace
 } // namespace kompoz::platform
@@ -773,13 +772,14 @@ using kompoz::platform::gApp;
 
 extern "C" {
 
-JNIEXPORT jboolean JNICALL Java_dev_kompoz_KompozActivity_nativeCreate(JNIEnv* e, jclass, jobject activity, jobject assets, jstring files,
-                                                                     jstring externalFiles, jstring cache) {
+// An activity created: the app starts in it. In a process that ran one before (Android created the
+// activity again), the app starts again: one still running (its activity not yet ended) ends first,
+// before the new one sets the process's statics (the asset reader, the IME's handlers) up again.
+JNIEXPORT void JNICALL Java_dev_kompoz_KompozActivity_nativeCreate(JNIEnv* e, jclass, jobject activity, jobject assets, jstring files,
+                                                                 jstring externalFiles, jstring cache) {
     using namespace kompoz::platform;
-    if (gRan) return JNI_FALSE;
-    gRan = true;
+    gApp.reset();
     gApp = std::make_unique<AndroidPlatform>(e, activity, assets, fromString(e, files), fromString(e, externalFiles), fromString(e, cache));
-    return JNI_TRUE;
 }
 
 JNIEXPORT void JNICALL Java_dev_kompoz_KompozActivity_nativeDestroy(JNIEnv*, jclass) { gApp.reset(); }
