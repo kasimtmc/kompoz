@@ -15,6 +15,7 @@
 #include "generated/pointer-gestures-unstable-v1-client-protocol.h"
 #include "generated/text-input-unstable-v3-client-protocol.h"
 #include "generated/viewporter-client-protocol.h"
+#include "generated/xdg-activation-v1-client-protocol.h"
 #include "generated/wayland-client-protocol.h"
 #include "generated/xdg-decoration-unstable-v1-client-protocol.h"
 #include "generated/xdg-shell-client-protocol.h"
@@ -60,9 +61,16 @@ struct Output {
     bool entered = false;
 };
 
+class WaylandPlatform;
+std::vector<WaylandPlatform*> gPlatforms;  // the app's window's and its windows' (Window), each on a connection of its own
+
 class WaylandPlatform final : public Platform {
 public:
+    // `secondary`: a window of the app's own (Window), on a connection of its own (a Wayland client may
+    // have more than one), driven by the app's loop.
+    explicit WaylandPlatform(bool secondary = false) : secondary_(secondary) { gPlatforms.push_back(this); }
     ~WaylandPlatform() override {
+        std::erase(gPlatforms, this);
         desktop_.stop();
         closeWindow();
         auto destroy = [](auto* proxy) {
@@ -74,7 +82,7 @@ public:
         for (Output& o : outputs_) destroy(o.output);
         destroy(compositor_), destroy(wmBase_), destroy(decorations_), destroy(fractionalManager_), destroy(viewporter_);
         destroy(shm_), destroy(subcompositor_);
-        destroy(cursorShapes_), destroy(textInputs_), destroy(dataDevices_), destroy(idleInhibits_), destroy(registry_);
+        destroy(cursorShapes_), destroy(textInputs_), destroy(dataDevices_), destroy(idleInhibits_), destroy(activation_), destroy(registry_);
         if (xkbState_) xkb_state_unref(xkbState_);
         if (keymap_) xkb_keymap_unref(keymap_);
         if (xkb_) xkb_context_unref(xkb_);
@@ -97,7 +105,7 @@ public:
         wakeFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         timerFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
         repeatFd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-        if (wakeFd_ >= 0) quitOnSignals(wakeFd_);
+        if (wakeFd_ >= 0 && !secondary_) quitOnSignals(wakeFd_);
         return xkb_ && wakeFd_ >= 0 && timerFd_ >= 0 && repeatFd_ >= 0;
     }
 
@@ -105,40 +113,61 @@ public:
         AppCore core{*this};
         core_ = &core;
         if (!core.start(argc, argv)) return 1;
-        bool needFrame = true;
-        for (;;) {
-            wl_display_dispatch_pending(display_);
-            desktop_.takeNotifications(events_);
-            for (const Event& e : std::exchange(events_, {})) {
-                if (e.type == EventType::Quit) quit_ = true;
-                core.handle(e);
-                needFrame = true;
+        {
+            // The app's windows (Window): each a WaylandPlatform of its own, its turns after the app's.
+            AppWindows windows(core, [] {
+                auto window = std::make_unique<WaylandPlatform>(true);
+                return window->connect() ? std::unique_ptr<Platform>(std::move(window)) : nullptr;
+            });
+            for (;;) {
+                if (!turn(core)) break;
+                std::vector<WaylandPlatform*> all{this};
+                for (AppWindows::Open& w : windows.open()) {
+                    auto& window = static_cast<WaylandPlatform&>(*w.platform);
+                    window.core_ = w.core.get();
+                    window.turn(*w.core);
+                    all.push_back(&window);
+                }
+                windows.sync();
+                if (!waitForEvents(all)) break;  // (the compositor went away)
             }
-            if (quit_) break;
-            if (callbackDone_) {
-                callbackDone_ = false;
-                needFrame = needFrame || busy_;
-            }
-            if (needFrame && !awaitingCallback_ && configured_) {
-                needFrame = false;
-                // Asked for before the frame: it goes with the commit the frame presents with, else
-                // with the one after it (a frame that showed nothing still hears when the next is due).
-                frameCallback_ = wl_surface_frame(surface_);
-                wl_callback_add_listener(frameCallback_, &kFrameCallback, this);
-                awaitingCallback_ = true;
-                Next next = core.frame();
-                wl_surface_commit(surface_);
-                if (next.quit) break;
-                busy_ = next.busy;
-                armTimer(next.busy ? -1 : next.wakeAt);
-            }
-            int timeout = needFrame && !awaitingCallback_ && configured_ ? 0 : -1;
-            if (!waitForEvents(timeout)) break;  // (the compositor went away)
         }
         core.quit();
         core_ = nullptr;
         return 0;
     }
+
+    // A turn of the window's loop: what came to it to its core, and a frame when one is due (on the
+    // compositor's frame callback). False when the app quits (its window closed, its last frame).
+    bool turn(AppCore& core) {
+        wl_display_dispatch_pending(display_);
+        desktop_.takeNotifications(events_);
+        for (const Event& e : std::exchange(events_, {})) {
+            if (e.type == EventType::Quit && !secondary_) quit_ = true;  // (a window's: its onCloseRequest, AppCore's)
+            core.handle(e);
+            needFrame_ = true;
+        }
+        if (quit_) return false;
+        if (callbackDone_) {
+            callbackDone_ = false;
+            needFrame_ = needFrame_ || busy_;
+        }
+        if (needFrame_ && !awaitingCallback_ && configured_) {
+            needFrame_ = false;
+            // Asked for before the frame: it goes with the commit the frame presents with, else
+            // with the one after it (a frame that showed nothing still hears when the next is due).
+            frameCallback_ = wl_surface_frame(surface_);
+            wl_callback_add_listener(frameCallback_, &kFrameCallback, this);
+            awaitingCallback_ = true;
+            Next next = core.frame();
+            wl_surface_commit(surface_);
+            if (next.quit) return false;
+            busy_ = next.busy;
+            armTimer(next.busy ? -1 : next.wakeAt);
+        }
+        return true;
+    }
+    bool frameDueNow() const { return needFrame_ && !awaitingCallback_ && configured_; }
 
     // ---- Platform ------------------------------------------------------------------------
 
@@ -257,6 +286,36 @@ public:
         updateEdges();
         events_.push_back({.type = EventType::Resized});
     }
+    void setTitle(const std::string& title) override {
+        title_ = title;
+        if (toplevel_) xdg_toplevel_set_title(toplevel_, title.c_str());
+    }
+    // Wayland's windows are restored by activating them (xdg-activation), as raise does.
+    void setMinimized(bool minimized) override {
+        if (minimized && toplevel_) xdg_toplevel_set_minimized(toplevel_);
+        else if (!minimized) raise();
+    }
+    // Activated with a token from the connection the user last gave input to (with that input's
+    // serial: the compositor activates for what the user did, not for any client's asking), which
+    // may be another window's.
+    void raise() override {
+        if (!activation_ || !surface_) return;
+        WaylandPlatform* by = this;
+        for (WaylandPlatform* p : gPlatforms)
+            if (p->lastInputAt_ > by->lastInputAt_ && p->activation_ && p->surface_) by = p;
+        xdg_activation_token_v1* token = xdg_activation_v1_get_activation_token(by->activation_);
+        static const xdg_activation_token_v1_listener done = {
+            .done = [](void* data, xdg_activation_token_v1* token, const char* name) {
+                auto* self = static_cast<WaylandPlatform*>(data);
+                if (std::find(gPlatforms.begin(), gPlatforms.end(), self) != gPlatforms.end() && self->activation_ && self->surface_)
+                    xdg_activation_v1_activate(self->activation_, name, self->surface_);
+                xdg_activation_token_v1_destroy(token);
+            }};
+        xdg_activation_token_v1_add_listener(token, &done, this);
+        if (by->seat_ && by->lastSerial_) xdg_activation_token_v1_set_serial(token, by->lastSerial_, by->seat_);
+        xdg_activation_token_v1_set_surface(token, by->surface_);
+        xdg_activation_token_v1_commit(token);
+    }
 
     void windowAction(WindowAction action, float x, float y) override {
         if (!toplevel_) return;
@@ -347,6 +406,10 @@ private:
     zwp_text_input_manager_v3* textInputs_ = nullptr;
     wl_data_device_manager* dataDevices_ = nullptr;
     zwp_idle_inhibit_manager_v1* idleInhibits_ = nullptr;
+    xdg_activation_v1* activation_ = nullptr;
+    bool secondary_ = false;    // a window of the app's own (Window)
+    bool needFrame_ = true;     // something to show (a frame on the next callback)
+    int64_t lastInputAt_ = -1;  // when the user last pressed a key, a button or the screen in it (raise's)
     zwp_pointer_gestures_v1* gestures_ = nullptr;
     wl_shm* shm_ = nullptr;
     wl_subcompositor* subcompositor_ = nullptr;
@@ -507,18 +570,44 @@ private:
         timerfd_settime(timerFd_, TFD_TIMER_ABSTIME, &spec, nullptr);
     }
 
-    // The display's events read and dispatched as they come, a wake, a timer or a key's repeat; up
-    // to `timeout` ms (-1: until one). False if the connection broke.
-    bool waitForEvents(int timeout) {
+    // The windows' displays' events read and dispatched as they come, a wake, a timer or a key's
+    // repeat; none waited for where a frame is due now. False if the app's connection broke (a
+    // window's breaking: that window shows nothing more).
+    static bool waitForEvents(const std::vector<WaylandPlatform*>& all) {
+        std::vector<pollfd> fds;
+        std::vector<WaylandPlatform*> waiting;
+        int timeout = -1;
+        for (WaylandPlatform* p : all) {
+            if (p->frameDueNow()) timeout = 0;
+            if (!p->beginWait(fds)) {
+                if (p == all.front()) {
+                    for (WaylandPlatform* w : waiting) wl_display_cancel_read(w->display_);
+                    return false;
+                }
+                continue;
+            }
+            waiting.push_back(p);
+        }
+        poll(fds.data(), nfds_t(fds.size()), timeout);
+        bool ok = true;
+        for (size_t i = 0; i < waiting.size(); ++i)
+            if (!waiting[i]->endWait(&fds[i * 4]) && waiting[i] == all.front()) ok = false;
+        return ok;
+    }
+    // Its display read from (prepared: its events dispatched first, its requests sent), its four
+    // descriptors waited on; false if the connection broke.
+    bool beginWait(std::vector<pollfd>& fds) {
         while (wl_display_prepare_read(display_) != 0)
             if (wl_display_dispatch_pending(display_) < 0) return false;
         if (wl_display_flush(display_) < 0 && errno != EAGAIN) {
             wl_display_cancel_read(display_);
             return false;
         }
-        pollfd fds[] = {{wl_display_get_fd(display_), POLLIN, 0}, {wakeFd_, POLLIN, 0}, {timerFd_, POLLIN, 0}, {repeatFd_, POLLIN, 0}};
-        int n = poll(fds, 4, timeout);
-        if (n > 0 && (fds[0].revents & POLLIN)) {
+        for (int fd : {wl_display_get_fd(display_), wakeFd_, timerFd_, repeatFd_}) fds.push_back({fd, POLLIN, 0});
+        return true;
+    }
+    bool endWait(const pollfd* fds) {
+        if (fds[0].revents & POLLIN) {
             if (wl_display_read_events(display_) < 0) return false;
         } else {
             wl_display_cancel_read(display_);
@@ -1083,6 +1172,7 @@ const wl_pointer_listener WaylandPlatform::kPointer = {
     .button = [](void* data, wl_pointer*, uint32_t serial, uint32_t, uint32_t button, uint32_t state) {
         WaylandPlatform& p = self(data);
         p.lastSerial_ = serial;
+        p.lastInputAt_ = monotonicNow();
         if (state == WL_POINTER_BUTTON_STATE_PRESSED) p.pressSerial_ = serial, p.pressTouch_ = -1;
         if (p.edgeOf(p.pointerOn_) >= 0) {  // (an edge: the left button resizes the window by it)
             if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == 0x110 && p.seat_)
@@ -1152,6 +1242,7 @@ const wl_keyboard_listener WaylandPlatform::kKeyboard = {
     .enter = [](void* data, wl_keyboard*, uint32_t serial, wl_surface*, wl_array*) {
         WaylandPlatform& p = self(data);
         p.lastSerial_ = serial;
+        p.lastInputAt_ = monotonicNow();
         p.events_.push_back({.type = EventType::FocusGained});
     },
     .leave = [](void* data, wl_keyboard*, uint32_t, wl_surface*) {
@@ -1164,6 +1255,7 @@ const wl_keyboard_listener WaylandPlatform::kKeyboard = {
     .key = [](void* data, wl_keyboard*, uint32_t serial, uint32_t, uint32_t key, uint32_t state) {
         WaylandPlatform& p = self(data);
         p.lastSerial_ = serial;
+        p.lastInputAt_ = monotonicNow();
         uint32_t code = key + 8;  // (evdev's codes are 8 below X's, which xkbcommon takes)
         bool down = state == WL_KEYBOARD_KEY_STATE_PRESSED;
         p.key(code, down);
@@ -1187,6 +1279,7 @@ const wl_touch_listener WaylandPlatform::kTouch = {
     .down = [](void* data, wl_touch*, uint32_t serial, uint32_t, wl_surface* surface, int32_t id, wl_fixed_t x, wl_fixed_t y) {
         WaylandPlatform& p = self(data);
         p.lastSerial_ = serial;
+        p.lastInputAt_ = monotonicNow();
         if (int edge = p.edgeOf(surface); edge >= 0) {  // (an edge: the finger resizes the window by it)
             p.edgeTouches_.insert(id);
             if (p.seat_) {
@@ -1423,6 +1516,8 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
             p.gestures_ = bind<zwp_pointer_gestures_v1>(registry, name, &zwp_pointer_gestures_v1_interface, version, 1);
         else if (i == zwp_idle_inhibit_manager_v1_interface.name)
             p.idleInhibits_ = bind<zwp_idle_inhibit_manager_v1>(registry, name, &zwp_idle_inhibit_manager_v1_interface, version, 1);
+        else if (i == xdg_activation_v1_interface.name)
+            p.activation_ = bind<xdg_activation_v1>(registry, name, &xdg_activation_v1_interface, version, 1);
         else if (i == wl_seat_interface.name && !p.seat_) {
             p.seat_ = bind<wl_seat>(registry, name, &wl_seat_interface, version, 8);
             wl_seat_add_listener(p.seat_, &kSeat, &p);
