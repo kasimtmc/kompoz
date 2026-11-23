@@ -219,8 +219,9 @@ public:
     void countItems(int count, const std::function<size_t(int)>& key, const std::function<size_t(int)>& contentType,
                     const std::function<void(int)>& content);
 
-    // The list the items read later: one given by name is read where it is (it lives on: a
-    // parameter, a state's value); a temporary (items(listOf("a", "b"))) is kept here.
+    // The list the items read later, as they are composed (after the content block has returned): kept
+    // here, as Kotlin's garbage collector keeps it. One given by name is copied: it may be the block's own
+    // (val shown = app.notifications(); items(shown) { … }), gone by then; a temporary is moved in.
     template <class L>
     static auto held(L&& list) {
         using V = std::remove_cvref_t<L>;
@@ -228,7 +229,7 @@ public:
             using Items = std::remove_cvref_t<decltype(list.items())>;
             return std::make_shared<const Items>(list.items());
         } else if constexpr (std::is_lvalue_reference_v<L>) {
-            return std::shared_ptr<const V>(std::shared_ptr<const V>(), &list);
+            return std::make_shared<const V>(list);
         } else {
             return std::make_shared<const V>(std::move(list));
         }

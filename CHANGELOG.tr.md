@@ -1180,6 +1180,9 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **items(list) listeyi tutar**: tembel bir listenin öğeleri (LazyColumn, LazyRow, ızgaralar), adıyla verilen bir
+  listenin kopyasını tutar (Kotlin'in çöp toplayıcısının tuttuğu gibi): içerik bloğunun kendi yaptığı bir liste
+  (`val shown = …; items(shown)`) blok döndükten sonra, yok olmuşken okunuyordu (bir çökme).
 - **Android: etkinlik kendi sürecinde yeniden oluşturulur**: uygulama, süreç bitmek yerine (`System.exit`, bir ön
   plan servisini de götürerek) çalışan süreçte yeniden başlar (Compose'un yeni bir etkinlikteki setContent'i gibi);
   statikleri ve servisleri kalır. Hâlâ duran etkinlik devreder: bitirilir, görünümünün ve yaşam döngüsünün çağrıları

@@ -110,7 +110,7 @@ void LikeButton() {
 }
 ```
 
-Tembel bir düzenin bloğunda, Compose'un alıcısındaki gibi, `item`, `items`, `itemsIndexed` ve `stickyHeader` öğelerini ekler: `LazyColumn(modifier) { items(list, [=](const T& x) { … }); };`. Bu blok hemen, çağrının içinde çalışır ve saklanmaz; bu yüzden referansla yakalar (`items`'a verilen liste kopyalanmaz). Bir öğenin lambdası ise sonra, öğe görünür oldukça çalışır ve değerle yakalar. Sizin `items` adlı bir değişkeniniz işlevi gizler: orada `kompoz::items(items, …)` yazın.
+Tembel bir düzenin bloğunda, Compose'un alıcısındaki gibi, `item`, `items`, `itemsIndexed` ve `stickyHeader` öğelerini ekler: `LazyColumn(modifier) { items(list, [=](const T& x) { … }); };`. Bu blok hemen, çağrının içinde çalışır ve saklanmaz; bu yüzden referansla yakalar. `items`'a verilen liste ise tutulur (kopyalanır), çünkü öğeleri onu sonra okur; bloğun kendi yaptığı bir liste de. Bir öğenin lambdası ise sonra, öğe görünür oldukça çalışır ve değerle yakalar. Sizin `items` adlı bir değişkeniniz işlevi gizler: orada `kompoz::items(items, …)` yazın.
 
 ## Durum
 

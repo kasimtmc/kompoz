@@ -705,6 +705,30 @@ TEST(lazy_keys_by_name) {
     CHECK(rule.onNodeWithText("iki:1").exists() && rule.onNodeWithText("true").exists());
 }
 
+// A list the content block makes itself, read by its items as they are composed (after the block has
+// returned): kept, as Kotlin's garbage collector keeps it (its strings long enough to be on the heap).
+data class Notice(val title: String, val body: String)
+
+fun notices(): List<Notice> = listOf(Notice("bildirim başlığı, uzunca bir metin", "gövde"), Notice("ikinci bildirimin başlığı", "gövde"))
+
+@Kompozable
+fun NoticeList() {
+    LazyColumn(modifier = Modifier.height(300.dp)) {
+        item { Text("Bildirimler") }
+        val shown = notices()
+        if (shown.isNotEmpty()) {
+            items(shown) { n -> Text(n.title) }
+            itemsIndexed(shown) { i, n -> Text("$i ${n.body}") }
+        }
+    }
+}
+
+TEST(lazy_items_of_a_list_the_block_makes) {
+    KompozTestRule rule([] { NoticeList(); });
+    CHECK(rule.onNodeWithText("bildirim başlığı, uzunca bir metin").exists() && rule.onNodeWithText("ikinci bildirimin başlığı").exists());
+    CHECK(rule.onNodeWithText("1 gövde").exists());
+}
+
 // Compose's state forms: a getter read as a property, update { it.add(…) } in place, a list made
 // item by item, a policy without a type, a saver by name.
 struct Town {

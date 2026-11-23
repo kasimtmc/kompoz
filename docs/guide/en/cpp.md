@@ -110,7 +110,7 @@ void LikeButton() {
 }
 ```
 
-In a lazy layout's block, as with Compose's receiver, `item`, `items`, `itemsIndexed` and `stickyHeader` add its items: `LazyColumn(modifier) { items(list, [=](const T& x) { … }); };`. That block runs right away, in the call, and isn't kept, so it captures by reference (a list given to `items` isn't copied); an item's lambda runs later, as the item comes into view, and captures by value. A variable of yours called `items` hides the function: write `kompoz::items(items, …)` there.
+In a lazy layout's block, as with Compose's receiver, `item`, `items`, `itemsIndexed` and `stickyHeader` add its items: `LazyColumn(modifier) { items(list, [=](const T& x) { … }); };`. That block runs right away, in the call, and isn't kept, so it captures by reference; a list given to `items` is kept (copied), as its items read it later, even one the block made itself. An item's lambda runs later, as the item comes into view, and captures by value. A variable of yours called `items` hides the function: write `kompoz::items(items, …)` there.
 
 ## State
 
