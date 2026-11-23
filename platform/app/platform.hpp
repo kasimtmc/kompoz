@@ -73,6 +73,11 @@ public:
     virtual Metrics metrics() const = 0;
     virtual void pixelSize(int* width, int* height) const = 0;  // the drawable's, as metrics() has it (cheaper: each frame)
     virtual void setWindowSize(int width, int height) = 0;  // in points
+    // A window of the app's (Window): its title, minimized or restored, brought to the front (and
+    // given the keyboard). Where the platform has one window, nothing.
+    virtual void setTitle(const std::string& title) { (void)title; }
+    virtual void setMinimized(bool minimized) { (void)minimized; }
+    virtual void raise() {}
     // What Kompoz's title bar asks (Metrics::titleBar); (x, y): where, in points.
     virtual void windowAction(WindowAction action, float x, float y) { (void)action, (void)x, (void)y; }
     // The pointer and the keyboard; with `probe` (after the first frame: what tells may take a

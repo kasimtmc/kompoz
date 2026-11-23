@@ -7,6 +7,7 @@
 #include <kompoz/display_list.hpp>
 #include <kompoz/host.hpp>
 #include <kompoz/preview.hpp>
+#include <kompoz/window.hpp>
 
 #include "../common/clip_formats.hpp"
 #include "../common/system.hpp"
@@ -61,6 +62,16 @@ struct AppState {
     explicit AppState(Platform& p) : platform(p) {}
     Platform& platform;
     Application config;
+    // A window of its own the app's composition asked for (Window), this core its; none: the app's.
+    std::shared_ptr<kompoz::detail::WindowRequest> window;
+    std::string appTitle;  // the app's (its cache directory's name), a window's too
+    std::function<AppCore*(std::string_view)> findWindow;  // a script's "@Title: command" (the app's core's)
+    struct Applied {       // what the window was last given, or told of (WindowState's, as the platform has it)
+        std::string title;
+        Size size;
+        bool minimized = false;
+        int front = 0;
+    } applied;
     bool mediaProbed = false;  // a microphone and a camera looked for (after the first frame)
     std::unique_ptr<FontSystem> fonts;
     // Kompoz's GPU renderer (gpu/renderer.hpp) on the device KOMPOZ_GPU chose, with the kept frame
@@ -131,11 +142,11 @@ struct AppState {
     kompoz::detail::RekompozitionStats traced;
 
     ~AppState() {
-        stopImageLoader();  // its threads end before the rest goes
+        if (!window) stopImageLoader();  // its threads end before the rest goes
         if (damageCheck) logf("kompoz: damage check: %d of %d frames differed", damageWrong, damageFrames);
         if (keepCheck) logf("kompoz: keep check: %d of %d frames recorded otherwise", keepWrong, keepFrames);
         host.reset();  // runs effect cleanups while the window still exists
-        kompoz::detail::setBitmapRenderer(nullptr);
+        if (!window) kompoz::detail::setBitmapRenderer(nullptr);  // (the app's: a window's draws with it too)
         if (gpuCanvas) {  // what only it has of bitmaps still about: back into them
             gpu->beginFrame();
             gpuCanvas->releaseBitmaps();
@@ -180,6 +191,11 @@ void updateMetrics(App& app) {
     float scale = m.scale > 0 ? m.scale : 1;
     app.scale = scale;
     app.pointToDp = m.pointToDp > 0 ? m.pointToDp : 1;
+    if (app.window) {  // its WindowState's size, as the user left it (dp)
+        Size size{float(m.pointWidth) * app.pointToDp, float(m.pointHeight) * app.pointToDp};
+        if (std::abs(size.width - app.applied.size.width) >= 0.5f || std::abs(size.height - app.applied.size.height) >= 0.5f)
+            app.window->state.setSize(app.applied.size = size);
+    }
     app.fonts->setScale(scale);
     if (app.gpuCanvas) app.gpuCanvas->scale = scale;
     app.fonts->setFontScale(m.fontScale);
@@ -550,6 +566,18 @@ std::string stepScript(App& app) {
         s.sleepUntilNs = 0;
     }
     while (s.next < s.commands.size()) {
+        // "@Title: command": the command in the app's window of that title (Window), at its next frame.
+        if (std::string_view line = s.commands[s.next]; line.find_first_not_of(" \t") != std::string_view::npos &&
+                                                        line[line.find_first_not_of(" \t")] == '@') {
+            ++s.next;
+            line.remove_prefix(line.find('@') + 1);
+            size_t colon = line.find(':');
+            std::string title(line.substr(0, colon));
+            AppCore* window = colon != std::string_view::npos && app.findWindow ? app.findWindow(title) : nullptr;
+            if (window) window->runScript(std::string(line.substr(colon + 1)));
+            else app.logf("kompoz: script: no window titled '%s'", title.c_str());
+            continue;
+        }
         std::istringstream in(s.commands[s.next++]);
         std::string command;
         in >> command;
@@ -741,7 +769,10 @@ void handleEvent(App& app, const platform::Event& e) {
     Offset at = app.toDp(e.x, e.y);
     switch (e.type) {
     // (AccentChanged, WallpaperChanged, AccessibilityRequest, Wake: the platform's own, Platform::handled.)
-    case EventType::Quit: app.quit = true; break;
+    case EventType::Quit:  // (a window of the app's: the app asked, Window's onCloseRequest)
+        if (!app.window) app.quit = true;
+        else if (app.window->onCloseRequest) app.window->onCloseRequest();
+        break;
     case EventType::FocusGained:
     case EventType::FocusLost:
         app.focused = e.type == EventType::FocusGained;
@@ -751,6 +782,7 @@ void handleEvent(App& app, const platform::Event& e) {
     case EventType::Minimized:
     case EventType::Maximized:
         app.minimized = e.type == EventType::Minimized;
+        if (app.window && app.applied.minimized != app.minimized) app.window->state.setIsMinimized(app.applied.minimized = app.minimized);
         updateLifecycle(app);
         break;
     case EventType::Hidden:
@@ -785,6 +817,7 @@ void handleEvent(App& app, const platform::Event& e) {
     case EventType::Restored:
         if (e.type == EventType::Shown) app.hidden = false;
         if (e.type == EventType::Restored) app.minimized = false;
+        if (app.window && app.applied.minimized != app.minimized) app.window->state.setIsMinimized(app.applied.minimized = app.minimized);
         updateLifecycle(app);
         // Back on the screen: Android gives the window a new, empty surface, which shows nothing
         // until a frame is put in it, and with nothing changed none would be (black until a tap).
@@ -917,7 +950,7 @@ bool startGpu(App& app, gpu::Backend backend) {
     // The compiled pipelines beside the downloaded images, a file for each backend and build of the
     // shaders; another's goes (a driver keeps what it was given: an older build's pipelines would
     // stay in it, read at every start, the file growing with each update).
-    if (std::filesystem::path dir = platform::appCacheDirectory(app.config.title); !dir.empty()) {
+    if (std::filesystem::path dir = platform::appCacheDirectory(app.appTitle); !dir.empty()) {
         std::string prefix = std::string("pipelines-") + gpu::backendName(backend);
         std::string name = std::format("{}-{:016x}", prefix, gpu::Renderer::shadersVersion());
         std::error_code ec;
@@ -946,18 +979,37 @@ bool startGpu(App& app, gpu::Backend backend) {
 } // namespace
 
 AppCore::AppCore(Platform& platform) : app_(std::make_unique<AppState>(platform)) {}
+AppCore::AppCore(Platform& platform, std::shared_ptr<kompoz::detail::WindowRequest> window, std::string appTitle)
+    : app_(std::make_unique<AppState>(platform)) {
+    app_->window = std::move(window);
+    app_->appTitle = std::move(appTitle);
+}
+const std::string& AppCore::appTitle() const { return app_->appTitle; }
 AppCore::~AppCore() = default;
 KompozHost& AppCore::host() { return *app_->host; }
 
 bool AppCore::start(int argc, char** argv) {
     App& app = *app_;
     Platform& platform = app.platform;
-    static App* logged = nullptr;  // (the GPU layer's messages into the platform's log)
-    logged = &app;
-    gpu::setLogger([](const char* message) { logged->platform.log(message); });
-    app.config = kompoz::createApplication(argc, argv);
-    if (auto preview = platform.option("KOMPOZ_PREVIEW")) kompoz::detail::showPreview(app.config, preview->c_str());  // a preview instead of the app
-    startImageDiskCache(app.config.title, app.config.imageDiskCacheBytes);
+    if (app.window) {  // a window of the app's: its title and size, its content (recomposed as its caller is)
+        auto w = app.window;
+        app.config.title = w->title;
+        Size size = w->state.size();
+        app.config.width = int(std::lround(size.width)), app.config.height = int(std::lround(size.height));
+        app.config.content = [w] {
+            (void)w->contentChanges.get();
+            w->content();
+        };
+        app.applied = {w->title, size, false, 0};
+    } else {
+        static App* logged = nullptr;  // (the GPU layer's messages into the platform's log)
+        logged = &app;
+        gpu::setLogger([](const char* message) { logged->platform.log(message); });
+        app.config = kompoz::createApplication(argc, argv);
+        if (auto preview = platform.option("KOMPOZ_PREVIEW")) kompoz::detail::showPreview(app.config, preview->c_str());  // a preview instead of the app
+        app.appTitle = app.config.title;
+        startImageDiskCache(app.config.title, app.config.imageDiskCacheBytes);
+    }
     // On Android, where an app has no environment, each a file in its files (Platform::option):
     //   adb shell run-as <package> touch files/kompoz-profile
     // or, where run-as is refused (SELinux), in its external storage, which the app creates:
@@ -1000,7 +1052,7 @@ bool AppCore::start(int argc, char** argv) {
     app.fonts->load(kompoz::FontWeight::Medium, app.config.mediumFontPath);  // optional
     app.gpuCanvas = std::make_unique<gpu::Renderer>(*app.gpu, *app.fonts);
     // The pipelines it made in earlier runs, made again ahead of the frames that need them.
-    if (std::filesystem::path dir = platform::appCacheDirectory(app.config.title); !dir.empty()) {
+    if (std::filesystem::path dir = platform::appCacheDirectory(app.appTitle); !dir.empty()) {
         std::u8string file = (dir / (std::string("pipelines-") + gpu::backendName(app.gpu->backend()) + ".list")).u8string();
         app.gpuCanvas->warmPipelines(std::string(file.begin(), file.end()));
     }
@@ -1008,7 +1060,7 @@ bool AppCore::start(int argc, char** argv) {
     app.display->allowMoves(true);  // (the kept frame moves its pixels)
     app.display->keepNodes(true);  // (nodes that didn't change aren't drawn again)
     app.bitmaps = std::make_unique<AppBitmaps>(app);
-    kompoz::detail::setBitmapRenderer(app.bitmaps.get());
+    if (!app.window) kompoz::detail::setBitmapRenderer(app.bitmaps.get());
     App* raw = &app;
     app.host = std::make_unique<kompoz::KompozHost>(*app.fonts, [raw] {
         WindowFrame(raw->titleBar.get(), raw->config.title,
@@ -1031,11 +1083,11 @@ bool AppCore::start(int argc, char** argv) {
     // #fragment, an Android VIEW intent).
     for (int i = 1; i < argc; ++i)
         if (std::string_view(argv[i]).find("://") != std::string_view::npos) app.host->openDeepLink(argv[i]);
-    if (auto path = platform.option("KOMPOZ_STATE_FILE"))
+    if (auto path = platform.option("KOMPOZ_STATE_FILE"); path && !app.window)
         if (std::vector<uint8_t> state = platform::readFile(*path); !state.empty()) app.host->restoreState(state);
     platform.started(*app.host);
 
-    std::stringstream in(platform.option("KOMPOZ_SCRIPT").value_or(""));
+    std::stringstream in(app.window ? std::string() : platform.option("KOMPOZ_SCRIPT").value_or(""));
     for (std::string command; std::getline(in, command, ';');)
         if (command.find_first_not_of(" \t\r\n") != std::string::npos) app.script.commands.push_back(command);
     updateMetrics(app);
@@ -1136,6 +1188,93 @@ Next AppCore::frame(int64_t displayTime) {
 
 void AppCore::surfaceChanged() {
     if (app_->gpu) app_->gpu->surfaceChanged();
+}
+
+void AppCore::syncWindow() {
+    App& app = *app_;
+    if (!app.window) return;
+    const kompoz::detail::WindowRequest& w = *app.window;
+    if (w.title != app.applied.title) {
+        app.applied.title = app.config.title = w.title;
+        app.platform.setTitle(w.title);
+        if (app.host) app.host->requestRedraw();  // (Kompoz's own title bar shows it)
+    }
+    Size size = w.state.size();
+    if (std::abs(size.width - app.applied.size.width) >= 0.5f || std::abs(size.height - app.applied.size.height) >= 0.5f) {
+        app.applied.size = size;
+        app.platform.setWindowSize(int(std::lround(size.width / app.pointToDp)), int(std::lround(size.height / app.pointToDp)));
+    }
+    if (bool minimized = w.state.isMinimized(); minimized != app.applied.minimized) {
+        app.applied.minimized = minimized;
+        app.platform.setMinimized(minimized);
+    }
+    if (int front = w.state.toFrontRequests(); front != app.applied.front) {
+        app.applied.front = front;
+        app.platform.raise();
+    }
+}
+
+void AppCore::setWindowFinder(std::function<AppCore*(std::string_view)> find) { app_->findWindow = std::move(find); }
+void AppCore::runScript(std::string command) { app_->script.commands.push_back(std::move(command)); }
+std::string_view AppCore::title() const { return app_->config.title; }
+
+AppWindows::AppWindows(AppCore& app, MakeWindow make) : app_(app), make_(std::move(make)) {
+    app_.setWindowFinder([this](std::string_view title) -> AppCore* {
+        for (Open& w : open_)
+            if (w.core && w.core->title() == title) return w.core.get();
+        return nullptr;
+    });
+}
+AppWindows::~AppWindows() {
+    app_.setWindowFinder(nullptr);
+    while (!open_.empty()) close(open_.size() - 1);
+}
+
+void AppWindows::close(size_t index) {
+    Open& w = open_[index];
+    if (w.core) w.core->quit();
+    w.core.reset();      // (its device and host before its window)
+    w.platform.reset();
+    open_.erase(open_.begin() + std::ptrdiff_t(index));
+}
+
+AppCore* AppWindows::coreOf(const Platform* platform) {
+    for (Open& w : open_)
+        if (w.platform.get() == platform) return w.core.get();
+    return nullptr;
+}
+
+void AppWindows::sync() {
+    // Asked for now: the app's composition's, and each open window's (in the order they came).
+    std::vector<std::shared_ptr<kompoz::detail::WindowRequest>> wanted;
+    auto add = [&](KompozHost& host) {
+        for (const auto& r : host.windowRequests())
+            if (r->visible) wanted.push_back(r);
+    };
+    add(app_.host());
+    for (size_t i = 0; i < open_.size(); ++i)
+        if (open_[i].core) add(open_[i].core->host());
+    auto isWanted = [&](const kompoz::detail::WindowRequest* r) {
+        return std::any_of(wanted.begin(), wanted.end(), [r](const auto& w) { return w.get() == r; });
+    };
+    for (size_t i = open_.size(); i-- > 0;)
+        if (!isWanted(open_[i].request.get())) close(i);
+    std::erase_if(failed_, [&](const kompoz::detail::WindowRequest* r) { return !isWanted(r); });
+    for (const auto& r : wanted) {
+        bool isOpen = std::any_of(open_.begin(), open_.end(), [&](const Open& w) { return w.request == r; });
+        if (isOpen || std::find(failed_.begin(), failed_.end(), r.get()) != failed_.end()) continue;
+        Open w{r, make_(), nullptr};
+        if (w.platform) {
+            w.core = std::make_unique<AppCore>(*w.platform, r, app_.appTitle());
+            if (!w.core->start(0, nullptr)) w.core.reset();
+        }
+        if (!w.core) {
+            failed_.push_back(r.get());
+            continue;
+        }
+        open_.push_back(std::move(w));
+    }
+    for (Open& w : open_) w.core->syncWindow();
 }
 
 void AppCore::quit() {

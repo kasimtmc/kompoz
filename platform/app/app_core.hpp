@@ -7,7 +7,11 @@
 #include "platform.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace kompoz::platform {
 
@@ -23,6 +27,10 @@ struct Next {
 class AppCore {
 public:
     explicit AppCore(Platform& platform);
+    // A window of its own the app's composition asked for (Window), on a platform window of its own:
+    // its request's content composed, its title and WindowState kept (syncWindow), the user closing
+    // it its onCloseRequest. `appTitle`: the app's (its cache directory's name).
+    AppCore(Platform& platform, std::shared_ptr<kompoz::detail::WindowRequest> window, std::string appTitle);
     ~AppCore();
     AppCore(const AppCore&) = delete;
     AppCore& operator=(const AppCore&) = delete;
@@ -47,9 +55,45 @@ public:
     // Before the platform goes: KOMPOZ_STATE_FILE written.
     void quit();
     KompozHost& host();
+    const std::string& appTitle() const;
+    // A window's: its title, size, minimized or not and toFront, as its request has them now, given to
+    // the platform where they changed (between frames).
+    void syncWindow();
+    // A script's "@Title: command": the app's windows by title (AppWindows'), and a command for one.
+    void setWindowFinder(std::function<AppCore*(std::string_view title)> find);
+    void runScript(std::string command);
+    std::string_view title() const;
 
 private:
     std::unique_ptr<AppState> app_;
+};
+
+// The windows of their own the app's composition asks for (Window), where the platform opens more
+// than one: each a platform window (made by `make`) with a core of its own, opened as its request
+// comes (and is shown), kept up to date, closed as it goes; those its windows' compositions ask for
+// too. Closed before the app's core goes (the platform's loop owns this after it).
+class AppWindows {
+public:
+    using MakeWindow = std::function<std::unique_ptr<Platform>()>;
+    AppWindows(AppCore& app, MakeWindow make);
+    ~AppWindows();
+    // Between frames: the requests as they are now (after the app's or a window's frame).
+    void sync();
+    struct Open {
+        std::shared_ptr<kompoz::detail::WindowRequest> request;
+        std::unique_ptr<Platform> platform;
+        std::unique_ptr<AppCore> core;
+    };
+    std::vector<Open>& open() { return open_; }
+    // The one whose platform window this is, or nullptr.
+    AppCore* coreOf(const Platform* platform);
+
+private:
+    void close(size_t index);
+    AppCore& app_;
+    MakeWindow make_;
+    std::vector<Open> open_;
+    std::vector<const kompoz::detail::WindowRequest*> failed_;  // (not tried again while they last)
 };
 
 } // namespace kompoz::platform

@@ -39,3 +39,4 @@
 #include "text_measure.hpp"
 #include "viewmodel.hpp"
 #include "widgets.hpp"
+#include "window.hpp"

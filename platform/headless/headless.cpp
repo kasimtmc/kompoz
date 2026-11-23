@@ -19,8 +19,19 @@ namespace kompoz::platform {
 
 namespace {
 
+// What the app's windows share: the clipboard, and the wait for events (any window's).
+struct Shared {
+    std::optional<ClipEntry> clipboard;
+    std::mutex mutex;
+    std::condition_variable posted;
+    int pending = 0;  // events posted to any window, not yet taken
+};
+
+// A window (the app's, or one of its own: Window), its events its own.
 class HeadlessPlatform final : public Platform {
 public:
+    explicit HeadlessPlatform(std::shared_ptr<Shared> shared) : shared_(std::move(shared)) {}
+
     std::optional<std::string> option(std::string_view name) const override {
         if (const char* v = std::getenv(std::string(name).c_str())) return std::string(v);
         return std::nullopt;
@@ -49,7 +60,8 @@ public:
     }
     void closeWindow() override {
         gpu_.close();
-        std::lock_guard lock(mutex_);
+        std::lock_guard lock(shared_->mutex);
+        shared_->pending -= int(events_.size());
         events_.clear();
     }
     void showError(const std::string& message) override { platform::log(message); }
@@ -71,46 +83,50 @@ public:
         width_ = width, height_ = height;
         post({.type = EventType::Resized});
     }
+    void setMinimized(bool minimized) override { post({.type = minimized ? EventType::Minimized : EventType::Restored}); }
+    void raise() override { post({.type = EventType::FocusGained}); }
     MediaInfo media(bool) override { return {}; }  // (no pointer, keyboard, microphone or camera)
 
     void attach(KompozHost&, KompozHost::Callbacks& callbacks) override {
         callbacks.wake = [this] { post({.type = EventType::Wake}); };
-        // (The app's own, all it holds.)
-        callbacks.getClipboard = [this] { return clipboard_ ? clipboard_->getPlainText() : std::string(); };
-        callbacks.setClipboard = [this](const std::string& text) { clipboard_ = ClipEntry::withPlainText(text); };
-        callbacks.getClipEntry = [this] { return clipboard_; };
-        callbacks.setClipEntry = [this](const std::optional<ClipEntry>& entry) { clipboard_ = entry; };
+        // (The app's own, all it holds; its windows'.)
+        Shared* s = shared_.get();
+        callbacks.getClipboard = [s] { return s->clipboard ? s->clipboard->getPlainText() : std::string(); };
+        callbacks.setClipboard = [s](const std::string& text) { s->clipboard = ClipEntry::withPlainText(text); };
+        callbacks.getClipEntry = [s] { return s->clipboard; };
+        callbacks.setClipEntry = [s](const std::optional<ClipEntry>& entry) { s->clipboard = entry; };
     }
     void composed(KompozHost&, bool, int64_t) override {}
 
     // From any thread: to the core before its next frame, waking the loop.
     void post(const Event& event) {
         {
-            std::lock_guard lock(mutex_);
+            std::lock_guard lock(shared_->mutex);
             events_.push_back(event);
+            ++shared_->pending;
         }
-        posted_.notify_one();
+        shared_->posted.notify_one();
     }
     std::deque<Event> take() {
-        std::lock_guard lock(mutex_);
+        std::lock_guard lock(shared_->mutex);
+        shared_->pending -= int(events_.size());
         return std::exchange(events_, {});
-    }
-    // Until something is posted, or until `wakeAt` (the platform's clock; none: < 0).
-    void wait(int64_t wakeAt) {
-        std::unique_lock lock(mutex_);
-        auto ready = [this] { return !events_.empty(); };
-        if (wakeAt < 0) posted_.wait(lock, ready);
-        else posted_.wait_for(lock, std::chrono::nanoseconds(std::max<int64_t>(wakeAt - now(), 0)), ready);
     }
 
 private:
+    std::shared_ptr<Shared> shared_;
     HeadlessGpu gpu_;
     int width_ = 1, height_ = 1;
-    std::optional<ClipEntry> clipboard_;
-    std::mutex mutex_;
-    std::condition_variable posted_;
-    std::deque<Event> events_;
+    std::deque<Event> events_;  // (guarded by the shared mutex)
 };
+
+// Until something is posted to any window, or until `wakeAt` (the platform's clock; none: < 0).
+void wait(Shared& shared, int64_t wakeAt, int64_t now) {
+    std::unique_lock lock(shared.mutex);
+    auto ready = [&] { return shared.pending > 0; };
+    if (wakeAt < 0) shared.posted.wait(lock, ready);
+    else shared.posted.wait_for(lock, std::chrono::nanoseconds(std::max<int64_t>(wakeAt - now, 0)), ready);
+}
 
 } // namespace
 
@@ -120,9 +136,11 @@ bool headlessRequested() {
 }
 
 int runHeadless(int argc, char* argv[]) {
-    HeadlessPlatform platform;
+    auto shared = std::make_shared<Shared>();
+    HeadlessPlatform platform(shared);
     AppCore core{platform};
     if (!core.start(argc, argv)) return 1;
+    AppWindows windows(core, [shared] { return std::make_unique<HeadlessPlatform>(shared); });
     for (;;) {
         for (const Event& e : platform.take())
             if (e.type != EventType::Wake) core.handle(e);  // (a wake only ends the wait)
@@ -133,7 +151,18 @@ int runHeadless(int argc, char* argv[]) {
         }
         Next next = core.frame();
         if (next.quit) break;
-        if (!next.busy) platform.wait(next.wakeAt);  // until an event, a wake, or the next coroutine delay
+        // The app's windows (Window): their events and frames after the app's, then opened, kept and closed as asked.
+        bool busy = next.busy;
+        int64_t wakeAt = next.wakeAt;
+        for (AppWindows::Open& w : windows.open()) {
+            for (const Event& e : static_cast<HeadlessPlatform&>(*w.platform).take())
+                if (e.type != EventType::Wake) w.core->handle(e);
+            Next n = w.core->frame();
+            busy = busy || n.busy;
+            if (n.wakeAt >= 0) wakeAt = wakeAt < 0 ? n.wakeAt : std::min(wakeAt, n.wakeAt);
+        }
+        windows.sync();
+        if (!busy) wait(*shared, wakeAt, platform.now());  // until an event, a wake, or the next coroutine delay
     }
     core.quit();
     return 0;

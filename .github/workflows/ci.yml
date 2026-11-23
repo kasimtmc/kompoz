@@ -22,6 +22,11 @@ concurrency:
 env:
   # What the app does when it runs: waits for its first frames, clicks its button, photographs the result.
   KOMPOZ_SCRIPT_RUN: wait 30;click 70 70;wait 30;shot shot.png;quit
+  # The same, and the window of its own the click opens (Window, 240 x 120 dp), shot too: headless, where the
+  # platform opens more than one window.
+  KOMPOZ_SCRIPT_WINDOWS: "wait 30;click 70 70;wait 30;shot shot.png;@Merhaba: shot window.png;wait 5;quit"
+  KOMPOZ_WINDOW_SIZE: >-
+    python3 -c "import struct,sys; d = open('window.png', 'rb').read(24); sys.exit(struct.unpack('>II', d[16:24]) != (240, 120))"
 
 jobs:
   linux:
@@ -125,7 +130,7 @@ jobs:
           ASAN_OPTIONS: detect_leaks=0
         run: |
           export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
-          KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_RUN" ./demo && test -s shot.png
+          KOMPOZ_SCRIPT="$KOMPOZ_SCRIPT_WINDOWS" ./demo && test -s shot.png && eval "$KOMPOZ_WINDOW_SIZE"
       # The README's other way: Kompoz a subdirectory of the app's project (add_subdirectory, from outside
       # Kompoz's tree), kompozable called in the app's scope. (Once: Clang's job builds Kompoz again faster.)
       - name: Build the app with Kompoz as a subdirectory, and run it
@@ -256,7 +261,7 @@ jobs:
         working-directory: build-package
         env:
           KOMPOZ_HEADLESS: 1
-        run: KOMPOZ_SCRIPT="${KOMPOZ_SCRIPT_RUN/shot.png/shot-headless.png}" ./demo && test -s shot-headless.png
+        run: KOMPOZ_SCRIPT="${KOMPOZ_SCRIPT_WINDOWS/shot.png/shot-headless.png}" ./demo && test -s shot-headless.png && eval "$KOMPOZ_WINDOW_SIZE"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

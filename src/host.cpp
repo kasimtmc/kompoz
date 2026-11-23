@@ -258,6 +258,19 @@ void KompozHost::removeDeepLinkHandler(const void* owner) {
     std::erase_if(deepLinkHandlers_, [owner](const auto& h) { return h.first == owner; });
 }
 
+void KompozHost::addWindowRequest(std::shared_ptr<detail::WindowRequest> request) {
+    windowRequests_.push_back(std::move(request));
+    windowRequestChanged();
+}
+void KompozHost::removeWindowRequest(const detail::WindowRequest* request) {
+    std::erase_if(windowRequests_, [request](const auto& r) { return r.get() == request; });
+    windowRequestChanged();
+}
+void KompozHost::windowRequestChanged() {
+    ++windowRequestsVersion_;
+    requestRedraw();  // (a frame: the app core opens, changes or closes the window after it)
+}
+
 void KompozHost::openUri(const std::string& uri) {
     for (const auto& [owner, accepts] : deepLinkHandlers_)
         if (accepts(uri)) return openDeepLink(uri);

@@ -1,4 +1,5 @@
-// The README's first example, built against the installed package.
+// The README's first example, built against the installed package, and a window of its own (Window) that the
+// click opens, where the platform opens more than one (CI's headless runs shoot it: "@Merhaba: shot window.png").
 #include <kompoz/kompoz.hpp>
 #include <kompoz/blocks.hpp>
 using namespace kompoz;
@@ -14,6 +15,10 @@ void Counter() {
         Button([count] { count.set(count.get() + 1); }) { Text("Increment"); };
         Greeting("Kompoz", count.get() > 0);
     };
+    if (count.get() > 0)
+        Window(onCloseRequest = [count] { count.set(0); }, title = "Merhaba", kompoz::state = rememberWindowState(arg::size = DpSize(240, 120))) {
+            Greeting("pencere", true);
+        };
 }
 
 kompoz::Application kompoz::createApplication(int, char**) {

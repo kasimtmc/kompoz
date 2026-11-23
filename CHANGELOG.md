@@ -1143,6 +1143,11 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Window (in progress)**: Compose Desktop's `Window(onCloseRequest, title, state) { … }`, `WindowState` (its size,
+  minimized or not, `toFront()`) and `rememberWindowState(size = DpSize(…))`: a window of its own while it is
+  composed, its content in a composition of its own with the caller's composition locals and the app's state, the
+  user closing it its `onCloseRequest`. The app core runs a core for each (AppWindows); so far the headless
+  platform opens them (CI shoots one, scripts reach one by `@Title: command`); Wayland, X11, Windows and macOS next.
 - **Typed text where no field takes it**: what a key types comes, after its `KeyDown`, as a `KeyEventType.Unknown`
   key event (Compose Desktop's typed keys) with `text` and `utf16CodePoint`, to a focused node with no text field;
   every key event has `nativeKeyCode`. On X11 and Wayland dead keys and the Compose key compose through the

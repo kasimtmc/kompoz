@@ -116,7 +116,8 @@ add_library(kompoz_core STATIC
     src/vector.cpp
     src/viewmodel.cpp
     src/wavy_progress.cpp
-    src/widgets.cpp)
+    src/widgets.cpp
+    src/window.cpp)
 target_include_directories(kompoz_core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                                               $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 set_target_properties(kompoz_core PROPERTIES EXPORT_NAME core)

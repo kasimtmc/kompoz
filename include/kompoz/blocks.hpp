@@ -93,3 +93,4 @@
 #define VerticalFloatingToolbar(...) KOMPOZ_BLOCK(VerticalFloatingToolbar __VA_OPT__(, ) __VA_ARGS__)
 #define VerticalPager(...) KOMPOZ_CALL(VerticalPager __VA_OPT__(, ) __VA_ARGS__)
 #define WideNavigationRail(...) KOMPOZ_BLOCK(WideNavigationRail __VA_OPT__(, ) __VA_ARGS__)
+#define Window(...) KOMPOZ_BLOCK(Window __VA_OPT__(, ) __VA_ARGS__)

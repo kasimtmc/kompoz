@@ -25,6 +25,7 @@ namespace kompoz {
 
 namespace detail {
 class Dispatcher;
+struct WindowRequest;
 // A node taking part in a drag (KompozHost's): a dragAndDropTarget, or a contentReceiver (the
 // `ordinal`th on it).
 struct DropTarget {
@@ -337,6 +338,14 @@ public:
     // own links in it instead of asking the system (no desktop knows the app's kompoz:// scheme).
     void addDeepLinkHandler(const void* owner, std::function<bool(const std::string&)> accepts);
     void removeDeepLinkHandler(const void* owner);
+    // The windows of their own its composition asks for (Window), in the order they came: the
+    // platform's app core opens them, keeps their titles and sizes, and closes those gone. The
+    // version changes as one comes, goes or is changed (its title, shown or not).
+    const std::vector<std::shared_ptr<detail::WindowRequest>>& windowRequests() const { return windowRequests_; }
+    uint64_t windowRequestsVersion() const { return windowRequestsVersion_; }
+    void addWindowRequest(std::shared_ptr<detail::WindowRequest> request);
+    void removeWindowRequest(const detail::WindowRequest* request);
+    void windowRequestChanged();
     // The rememberSaveable values that can be written out (see saved_value.hpp), as bytes the
     // platform keeps while it may end the process (Android's saved instance state); given back
     // to restoreState before the first frame, they come back. On the composition thread.
@@ -735,6 +744,8 @@ private:
     std::shared_ptr<detail::SaveableRegistry> saveable_;  // rememberSaveable outside any SaveableStateHolder
     std::optional<std::string> deepLink_;
     std::vector<std::pair<const void*, std::function<bool(const std::string&)>>> deepLinkHandlers_;
+    std::vector<std::shared_ptr<detail::WindowRequest>> windowRequests_;
+    uint64_t windowRequestsVersion_ = 0;
     MutableState<uint64_t> deepLinks_ = mutableStateOf(uint64_t(0));  // bumped with each one
     LayoutNode* flingNode_ = nullptr;
     int flingAxis_ = 0;

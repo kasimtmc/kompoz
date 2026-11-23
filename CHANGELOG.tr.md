@@ -1180,6 +1180,12 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Window (sürüyor)**: Compose Desktop'un `Window(onCloseRequest, title, state) { … }`'i, `WindowState` (boyutu,
+  küçültülmüş olup olmadığı, `toFront()`) ve `rememberWindowState(size = DpSize(…))`: oluşturulduğu sürece kendine ait
+  bir pencere; içeriği, çağıranın kompozisyon yerelleri ve uygulamanın durumuyla kendi kompozisyonunda; kullanıcının
+  kapatması `onCloseRequest`'idir. Uygulama çekirdeği her biri için bir çekirdek çalıştırır (AppWindows); şimdilik
+  başsız platform onları açar (CI birinin görüntüsünü alır, betikler birine `@Başlık: komut` ile ulaşır); sırada
+  Wayland, X11, Windows ve macOS var.
 - **Alan almayan yazılan metin**: bir tuşun yazdığı, `KeyDown`'ından sonra `text` ve `utf16CodePoint` taşıyan bir
   `KeyEventType.Unknown` tuş olayı olarak (Compose Desktop'un yazılan tuşları), içinde metin alanı olmayan odaklı bir
   düğüme gelir; her tuş olayında `nativeKeyCode` vardır. X11'de ve Wayland'de ölü tuşlar ve Compose tuşu masaüstünün

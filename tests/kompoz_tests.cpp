@@ -9877,6 +9877,49 @@ TEST(badges_sit_on_the_top_end_corner) {
     CHECK(dot && badge);
 }
 
+// Window(onCloseRequest, title, state) { … }, as Compose Desktop's: a request for a window of its own while it is
+// composed, kept up to date, its content composed elsewhere with the caller's locals; gone as it leaves.
+TEST(window_asks_for_a_window_of_its_own) {
+    auto shown = mutableStateOf(true);
+    auto heading = mutableStateOf(std::string("Mesajlar"));
+    int closes = 0;
+    WindowState phone(DpSize(400, 860));
+    KompozTestRule rule([&] {
+        KompozitionLocalProvider({LocalContentColor.provides(Color{1, 0, 0, 1})}, [&] {
+            if (shown.get())
+                Window(onCloseRequest = [&] { ++closes; }, kompoz::title = heading.get(), kompoz::state = phone, [] {
+                    Text("içerik", Modifier().testTag("içerik"));
+                });
+        });
+    });
+    KompozHost& host = rule.host();
+    CHECK(host.windowRequests().size() == 1);
+    if (host.windowRequests().size() != 1) return;
+    auto request = host.windowRequests()[0];
+    CHECK(request->title == "Mesajlar" && request->visible && request->state.size() == DpSize(400, 860));
+    // Its content, composed in a host of its own, sees the caller's composition locals (the theme).
+    Color seen;
+    KompozTestRule window([request, &seen] {
+        (void)request->contentChanges.get();
+        request->content();
+        seen = LocalContentColor.current();
+    });
+    CHECK(window.onNodeWithText("içerik").exists());
+    request->onCloseRequest();
+    CHECK(closes == 1);
+    uint64_t version = host.windowRequestsVersion();
+    heading.set("Bildirimler");
+    rule.waitForIdle();
+    CHECK(request->title == "Bildirimler" && host.windowRequestsVersion() != version);
+    phone.setIsMinimized(true);
+    CHECK(request->state.isMinimized());
+    phone.toFront();
+    CHECK(!request->state.isMinimized());
+    shown.set(false);
+    rule.waitForIdle();
+    CHECK(host.windowRequests().empty());
+}
+
 TEST(dialog_draws_on_top_takes_input_and_dismisses) {
     auto open = mutableStateOf(false);
     auto log = std::make_shared<std::vector<std::string>>();
