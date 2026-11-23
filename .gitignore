@@ -25,6 +25,6 @@ CMakeUserPresets.json
 .env
 .env.*
 __pycache__/
-editors/clion/.gradle/
-editors/clion/.kotlin/
-editors/clion/.intellijPlatform/
+editors/clion-studio/.gradle/
+editors/clion-studio/.kotlin/
+editors/clion-studio/.intellijPlatform/

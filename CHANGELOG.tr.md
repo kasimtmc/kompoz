@@ -1180,6 +1180,12 @@
   yapı; `AppIcons.Add`, `AppIcons::Add`'dir), `topAppBarColors(containerColor = …)`'ı `TopAppBarDefaults.` olmadan (Kotlin'in
   import'unun yaptığı gibi; tek bir yapının adı olan her `…Colors` nesnesi) ve `"Dokunma: " + count`'u (Kotlin'in String artı her
   değeri, string şablonunun yazdığı gibi). Testler artık Compose'un Scaffold örneğini yapıştırıldığı gibi tutar.
+- **Editör eklentileri tek sürümde, Android Studio da**: VS Code eklentisi ile JetBrains eklentisi tek bir sürümü
+  (0.3.0) paylaşır ve birlikte yayımlanır: bir `editors-v<sürüm>` etiketi (`vscode-v*` ve `clion-v*` yerine
+  `.github/workflows/editors-release.yml`) iki paketi, `kompoz-<sürüm>.vsix` ve `kompoz-clion-studio-<sürüm>.zip`'i, tek
+  bir GitHub sürümüne koyar ve Open VSX ile JetBrains Marketplace'te yayımlar. Artık `editors/clion-studio` içindeki
+  eklenti Android Studio'yu da alır: 2026.2 serisinden başlayarak IDE'ler; Plugin Verifier ile CLion 2026.3'e karşı olduğu
+  gibi Android Studio 2026.2.2'ye karşı da denetlenir (`-PidePath=` onu sizdeki bir IDE'ye karşı derler).
 - **Window**: Compose Desktop'un `Window(onCloseRequest, title, state) { … }`'i, `WindowState` (boyutu,
   küçültülmüş olup olmadığı, `toFront()`) ve `rememberWindowState(size = DpSize(…))`: oluşturulduğu sürece kendine ait
   bir pencere; içeriği, çağıranın kompozisyon yerelleri ve uygulamanın durumuyla kendi kompozisyonunda; kullanıcının

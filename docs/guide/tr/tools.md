@@ -12,13 +12,13 @@ Kotlin söz dizimiyle `@Kompozable` işlevler içeren bir `.cpp` dosyası hem C+
 
 Derlemeyi, `kompozable` kullanan bir CMake derlemesinin yazdığı `compile_commands.json` ve `kompozc_commands.json` dosyalarından bulur (Kompoz `CMAKE_EXPORT_COMPILE_COMMANDS`'ı açar; kendi projenizde de açın): dosyanın dizininde ya da üstündekilerden birinde, ya da oradaki `build/` veya CLion'un `cmake-build-debug/`'ı gibi bir dizinde. Bir komut dil standardını derleyicinin varsayılanına bırakıyorsa (CMake o varsayılan yetiyorsa hiçbirini yazmaz, GCC 16'nın C++20'si gibi), onu derleyiciye sorar ve clangd'ye verir; clangd'ninki C++17'dir. Tanımadığı argümanlar clangd'nindir; `--clangd YOL` başlatılacak clangd'yi söyler. clangd olmadan da kompozc'nin kendi tanılarını verir.
 
-**VS Code**: Kompoz'un `editors/vscode` içindeki eklentisi, Kotlin kodu içeren bir C++ dosyasını "Kompoz C++" olarak gösterir: Kotlin'ini Kotlin olarak, C++'ını C++ olarak vurgular ve onun için dil sunucusunu başlatır. C/C++ ve clangd eklentileri böyle bir dosyaya karışmaz (Kotlin'i hatalı işaretlerlerdi); düz C++ dosyaları onlarda kalır. Open VSX'te `plyground.kompoz` olarak bulunur: VSCodium, Code - OSS ve Open VSX kullanan öteki editörler onu Eklentiler görünümünden kurar. Microsoft'un VS Code'unda bir [VS Code sürümünün](https://github.com/kasimtmc/kompoz/releases) `.vsix`'ini (Eklentiler, `…` menüsü, Install from VSIX) ya da kendi derlediğinizi kurun:
+**VS Code**: Kompoz'un `editors/vscode` içindeki eklentisi, Kotlin kodu içeren bir C++ dosyasını "Kompoz C++" olarak gösterir: Kotlin'ini Kotlin olarak, C++'ını C++ olarak vurgular ve onun için dil sunucusunu başlatır. C/C++ ve clangd eklentileri böyle bir dosyaya karışmaz (Kotlin'i hatalı işaretlerlerdi); düz C++ dosyaları onlarda kalır. Open VSX'te `plyground.kompoz` olarak bulunur: VSCodium, Code - OSS ve Open VSX kullanan öteki editörler onu Eklentiler görünümünden kurar. Microsoft'un VS Code'unda bir [editör eklentileri sürümünün](https://github.com/kasimtmc/kompoz/releases) `kompoz-*.vsix`'ini (Eklentiler, `…` menüsü, Install from VSIX) ya da kendi derlediğinizi kurun:
 
 ```bash
 cd editors/vscode && npm ci && npm run package
 ```
 
-kompozc'yu CLion eklentisi gibi bulur (aşağıda): `kompoz.kompozcPath` ayarı, `KOMPOZC`, çalışma alanında derlenmiş olanı ya da `PATH`'teki. `kompoz.clangdPath` ve `kompoz.clangdArguments` arkasındaki clangd içindir; **Kompoz: Restart kompozc --lsp** yeniden derlemeden sonra onu yeniden başlatır.
+kompozc'yu CLion ve Android Studio eklentisi gibi bulur (aşağıda): `kompoz.kompozcPath` ayarı, `KOMPOZC`, çalışma alanında derlenmiş olanı ya da `PATH`'teki. `kompoz.clangdPath` ve `kompoz.clangdArguments` arkasındaki clangd içindir; **Kompoz: Restart kompozc --lsp** yeniden derlemeden sonra onu yeniden başlatır.
 
 **Kate**: Kate'in eklenti mağazası yoktur; `kompozc --kate` onu bir kez hazırlar:
 
@@ -28,13 +28,13 @@ build/compiler/kompozc --kate
 
 Kate'e "Kompoz C++" vurgulamasını kurar (`.cpp`, `.cc` ve `.cxx` dosyaları: Kotlin'leri Kotlin olarak, C++'ları Kate'in C++'ı olarak vurgulanır; Kotlin'siz bir dosya C++ kalır) ve bu kompozc'nin dil sunucusunu, bu dosyalar için, Kate'in LSP istemcisi ayarlarına ekler; oradaki sunucular kalır. Kate'i yeniden başlatın; sunucuyu başlatıp başlatmayacağını bir kez sorar. kompozc'nin yeri değişince yeniden çalıştırın.
 
-**CLion**: Kompoz'un `editors/clion` içindeki eklentisi, Kotlin kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda CLion'un kendi vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). Bir [CLion sürümünün](https://github.com/kasimtmc/kompoz/releases) `.zip`'ini diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur) ya da onu kendi CLion'unuza karşı derleyip `build/distributions/` içindeki arşivi kurun. Gradle bir JDK ister; CLion'un kendi `jbr/` dizinindeki yeter:
+**CLion ve Android Studio**: Kompoz'un `editors/clion-studio` içindeki eklentisi, Kotlin kodu içeren C++ dosyaları için dil sunucusunu başlatır ve onlarda IDE'nin kendi C++ vurgulamasını kapatır (C++ motoru Kotlin'i hatalı işaretlerdi; yerini sunucunun tanıları alır). 2026.2 serisinden başlayarak IDE'leri alır. Onu JetBrains Marketplace'ten (Ayarlar, Eklentiler, Marketplace: Kompoz) kurun ya da bir [editör eklentileri sürümünün](https://github.com/kasimtmc/kompoz/releases) `kompoz-clion-studio-*.zip`'ini diskten kurun (Ayarlar, Eklentiler, Eklentiyi Diskten Kur) ya da onu kendi IDE'nize karşı derleyip `build/distributions/` içindeki arşivi kurun. Gradle bir JDK ister; IDE'nin kendi `jbr/` dizinindeki yeter:
 
 ```bash
-cd editors/clion && JAVA_HOME=/yol/clion/jbr ./gradlew buildPlugin -PclionPath=/yol/clion
+cd editors/clion-studio && JAVA_HOME=/yol/clion/jbr ./gradlew buildPlugin -PidePath=/yol/clion
 ```
 
-Eklenti dil sunucusu desteği olan öteki JetBrains editörleri (Rider, Android Studio, IntelliJ IDEA, ...) için de sunulur; CLion'da denenmiştir. kompozc'yi Ayarlar, Araçlar, Kompoz'da; yoksa `KOMPOZC`'de; yoksa projede derlenmişini (`build/` ya da `cmake-build-*/compiler/kompozc`); yoksa `PATH`'te bulur.
+Eklenti dil sunucusu desteği olan öteki JetBrains editörleri (Rider, IntelliJ IDEA, ...) için de sunulur; CLion'da ve Android Studio'da denenmiştir. kompozc'yi Ayarlar, Araçlar, Kompoz'da; yoksa `KOMPOZC`'de; yoksa projede derlenmişini (`build/` ya da `cmake-build-*/compiler/kompozc`); yoksa `PATH`'te bulur.
 
 ## Önizlemeler
 

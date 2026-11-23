@@ -438,8 +438,8 @@ jobs:
         working-directory: examples/showcase/android
         run: ./gradlew --no-daemon assembleDebug
 
-  clion-plugin:
-    name: CLion plugin (editors/clion, built and verified against CLion 2026.3)
+  clion-studio-plugin:
+    name: CLion and Android Studio plugin (editors/clion-studio, verified against CLion 2026.3 and Android Studio 2026.2.2)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -449,6 +449,7 @@ jobs:
           java-version: 21
       # (As the Android job's, but for CLion itself, downloaded from JetBrains' /cpp/: 1.9 GB of the
       # repository's 10 GB of caches, and it isn't what Maven Central's failures hold up; 290 MB without it.
+      # Android Studio, downloaded from Google's servers for the Plugin Verifier, is left out as well.
       # files-2.1's directories one by one: a directory given whole goes into the cache with all it holds.)
       - uses: actions/cache@v4
         with:
@@ -457,10 +458,11 @@ jobs:
             !~/.gradle/caches/modules-2/files-2.1
             ~/.gradle/caches/modules-2/files-2.1/*
             !~/.gradle/caches/modules-2/files-2.1/cpp
+            !~/.gradle/caches/modules-2/files-2.1/com.google.android.studio
             ~/.gradle/wrapper
-          key: gradle-clion-${{ hashFiles('editors/clion/*.gradle*', 'editors/clion/gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-clion-studio-${{ hashFiles('editors/clion-studio/*.gradle*', 'editors/clion-studio/gradle/wrapper/gradle-wrapper.properties') }}
       - name: Build and verify
-        working-directory: editors/clion
+        working-directory: editors/clion-studio
         run: ./gradlew --no-daemon buildPlugin verifyPlugin
 
   vscode:

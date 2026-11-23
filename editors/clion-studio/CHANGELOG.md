@@ -1,5 +1,12 @@
 # Changes
 
+## 0.3.0
+
+- Android Studio too: the plugin takes the IDEs from the 2026.2 line on (Android Studio and CLion 2026.2 and later),
+  is checked with JetBrains' Plugin Verifier against Android Studio 2026.2.2 as against CLion 2026.3, and was tried in
+  Android Studio 2026.2.2. Its package is `kompoz-clion-studio-<version>.zip`.
+- Its version is the VS Code extension's: the two are released together, from one tag.
+
 ## 0.2.4
 
 - The Kotlin is colored as Kotlin: CLion asks kompozc --lsp for its colors (semantic tokens) in files with Kotlin code,

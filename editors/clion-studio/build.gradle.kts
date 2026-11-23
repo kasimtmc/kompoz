@@ -1,11 +1,12 @@
-// Kompoz's CLion plugin. Built against a CLion of yours (-PclionPath=/path/to/clion: no download) or
-// against CLion 2026.3 downloaded:
+// Kompoz's plugin for CLion and Android Studio. Built against an IDE of yours (-PidePath=/path/to/clion or
+// /path/to/android-studio: no download) or against CLion 2026.3 downloaded:
 //
-//   JAVA_HOME=/path/to/clion/jbr ./gradlew buildPlugin -PclionPath=/path/to/clion
+//   JAVA_HOME=/path/to/clion/jbr ./gradlew buildPlugin -PidePath=/path/to/clion
 //
-// (Gradle needs a JDK: CLion's own, its jbr/, will do.)
-// build/distributions/kompoz-clion-*.zip is then installed in CLion from disk (Settings, Plugins). A tag clion-v<version>
-// releases it, on GitHub and JetBrains Marketplace (.github/workflows/clion-release.yml).
+// (Gradle needs a JDK: the IDE's own, its jbr/, will do.)
+// build/distributions/kompoz-clion-studio-*.zip is then installed in the IDE from disk (Settings, Plugins). A tag
+// editors-v<version> releases it with the VS Code extension, whose version is the same, on GitHub and JetBrains
+// Marketplace (.github/workflows/editors-release.yml).
 
 plugins {
     id("org.jetbrains.kotlin.jvm") version "2.4.21"
@@ -13,7 +14,7 @@ plugins {
 }
 
 group = "com.plyg"
-version = "0.2.4"
+version = "0.3.0"
 
 repositories {
     mavenCentral()
@@ -22,8 +23,8 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        val clionPath = providers.gradleProperty("clionPath")
-        if (clionPath.isPresent) local(clionPath.get()) else clion("2026.3")
+        val idePath = providers.gradleProperty("idePath")
+        if (idePath.isPresent) local(idePath.get()) else clion("2026.3")
     }
 }
 
@@ -42,15 +43,21 @@ val changeNotesHtml = run {
 
 intellijPlatform {
     pluginConfiguration {
-        ideaVersion { sinceBuild = "263" }
+        ideaVersion { sinceBuild = "262" }
         changeNotes = changeNotesHtml
     }
     buildSearchableOptions = false
-    // ./gradlew verifyPlugin: JetBrains' Plugin Verifier against the CLion built with (its APIs as used).
+    // ./gradlew verifyPlugin: JetBrains' Plugin Verifier against the IDE built with (its APIs as used), or against
+    // CLion 2026.3 and Android Studio 2026.2.2 (a 262 build: the oldest line the plugin takes, sinceBuild) downloaded.
     pluginVerification {
         ides {
-            val clionPath = providers.gradleProperty("clionPath")
-            if (clionPath.isPresent) local(file(clionPath.get())) else create("CL", "2026.3")
+            val idePath = providers.gradleProperty("idePath")
+            if (idePath.isPresent) {
+                local(file(idePath.get()))
+            } else {
+                create("CL", "2026.3")
+                create("AI", "2026.2.2.10")
+            }
         }
     }
 }

@@ -5,7 +5,7 @@
     <description><![CDATA[
         For C++ sources with <code>@Kompozable</code> functions written in Kotlin's syntax (Kompoz's
         <code>kompozable</code>): kompozc's language server, <code>kompozc --lsp</code>, in front of clangd, in CLion
-        and the other JetBrains IDEs with language server support (tried in CLion).
+        and the other JetBrains IDEs with language server support (tried in CLion and Android Studio).
         In such a file the IDE's own C++ highlighting is turned off (it would read the Kotlin as broken C++);
         kompozc's errors, and the C++ compiler's on the translation, show on their own lines, and clangd's
         answers in the C++ around the Kotlin.

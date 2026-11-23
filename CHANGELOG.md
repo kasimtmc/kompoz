@@ -1143,6 +1143,12 @@
   members; `AppIcons.Add` is `AppIcons::Add`), `topAppBarColors(containerColor = …)` without its `TopAppBarDefaults.` (as
   Kotlin's import has it; any `…Colors` object one struct goes by), and `"Taps: " + count` (Kotlin's String plus any value, written
   as a string template writes it). The tests now hold Compose's Scaffold sample exactly as it was pasted.
+- **Editor extensions, one version, and Android Studio**: the VS Code extension and the JetBrains plugin share one
+  version (0.3.0) and are released together: a tag `editors-v<version>` (`.github/workflows/editors-release.yml`, in
+  place of `vscode-v*` and `clion-v*`) puts both packages in one GitHub release, `kompoz-<version>.vsix` and
+  `kompoz-clion-studio-<version>.zip`, and publishes them to Open VSX and JetBrains Marketplace. The plugin, now in
+  `editors/clion-studio`, takes Android Studio too: the IDEs from the 2026.2 line on, checked with the Plugin Verifier
+  against Android Studio 2026.2.2 as against CLion 2026.3 (`-PidePath=` builds it against an IDE of yours).
 - **Window**: Compose Desktop's `Window(onCloseRequest, title, state) { … }`, `WindowState` (its size,
   minimized or not, `toFront()`) and `rememberWindowState(size = DpSize(…))`: a window of its own while it is
   composed, its content in a composition of its own with the caller's composition locals and the app's state, the

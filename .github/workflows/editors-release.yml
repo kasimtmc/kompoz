@@ -1,0 +1,152 @@
+# A tag like `editors-v0.3.0` pushed: Kompoz's editor extensions, which share one version, released together. The VS
+# Code extension (editors/vscode) checked, tested and packaged; the plugin for CLion and Android Studio
+# (editors/clion-studio) built and verified against CLion 2026.3 and Android Studio 2026.2.2. Both their versions must
+# be the tag's (package.json's and build.gradle.kts's). Both packages go into one GitHub release (not the repository's
+# latest: that stays Kompoz's); the extension is then published to Open VSX when the repository has the `OVSX_PAT`
+# secret, and the plugin uploaded to JetBrains Marketplace when it has `JETBRAINS_TOKEN` (JetBrains reviews each
+# version before it is listed). Run by hand (workflow_dispatch) it only builds.
+name: Editor extensions release
+
+on:
+  push:
+    tags: ["editors-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  vscode:
+    name: VS Code extension
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - name: The tag's version
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: editors/vscode
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "editors-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::package.json has version $version, the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+      - name: Check, test and package
+        working-directory: editors/vscode
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kompoz-vscode
+          path: editors/vscode/*.vsix
+
+  clion-studio:
+    name: CLion and Android Studio plugin
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag's version
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: editors/clion-studio
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' build.gradle.kts)
+          if [ "editors-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::build.gradle.kts has version $version, the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      # (ci.yml's cache, only read here: see there.)
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2/*
+            !~/.gradle/caches/modules-2/files-2.1
+            ~/.gradle/caches/modules-2/files-2.1/*
+            !~/.gradle/caches/modules-2/files-2.1/cpp
+            !~/.gradle/caches/modules-2/files-2.1/com.google.android.studio
+            ~/.gradle/wrapper
+          key: gradle-clion-studio-${{ hashFiles('editors/clion-studio/*.gradle*', 'editors/clion-studio/gradle/wrapper/gradle-wrapper.properties') }}
+      - name: Build and verify
+        working-directory: editors/clion-studio
+        run: ./gradlew --no-daemon buildPlugin verifyPlugin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kompoz-clion-studio
+          path: editors/clion-studio/build/distributions/*.zip
+
+  release:
+    name: GitHub release
+    needs: [vscode, clion-studio]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+      - name: Create it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#editors-v}
+          # (the version's entry of each one's CHANGELOG.md as the notes)
+          entry() { awk -v v="## $version" '$0 == v {on = 1; next} /^## / {on = 0} on' "$1"; }
+          { echo "## VS Code"; entry editors/vscode/CHANGELOG.md
+            echo "## CLion and Android Studio"; entry editors/clion-studio/CHANGELOG.md; } > notes.md
+          gh release create "$GITHUB_REF_NAME" packages/* --repo "$GITHUB_REPOSITORY" --latest=false \
+            --title "Kompoz's editor extensions $version" --notes-file notes.md
+
+  open-vsx:
+    name: Open VSX
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    env:
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kompoz-vscode
+          path: vsix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Publish
+        if: env.OVSX_PAT != ''
+        run: npx --yes ovsx@1 publish vsix/*.vsix
+      - name: No token
+        if: env.OVSX_PAT == ''
+        run: echo "::notice::OVSX_PAT isn't set; the VS Code extension wasn't published to Open VSX."
+
+  jetbrains:
+    name: JetBrains Marketplace
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    env:
+      JETBRAINS_TOKEN: ${{ secrets.JETBRAINS_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kompoz-clion-studio
+          path: zip
+      # (the zip built and verified above, with Marketplace's upload API: the plugin by its id in plugin.xml)
+      - name: Upload
+        if: env.JETBRAINS_TOKEN != ''
+        run: |
+          curl --fail-with-body --silent --show-error --header "Authorization: Bearer $JETBRAINS_TOKEN" \
+            -F xmlId=com.plyg.kompoz -F file=@"$(ls zip/*.zip)" https://plugins.jetbrains.com/api/updates/upload
+      - name: No token
+        if: env.JETBRAINS_TOKEN == ''
+        run: echo "::notice::JETBRAINS_TOKEN isn't set; the plugin wasn't uploaded to JetBrains Marketplace."

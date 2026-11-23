@@ -58,21 +58,17 @@ CI, Kompoz'u macOS'ta derliyor, testlerini çalıştırıyor ve orada bir uygula
   (iOS) bir köprü; `platform/linux/atspi_bridge.cpp` ve `platform/windows/uia_bridge.cpp` gibi, onlarınki gibi
   `tests/platform_tests*.cpp` testleriyle.
 
-## VS Code eklentisi
+## Editör eklentileri
 
-`editors/vscode` kendi başına yayımlanır. `package.json`'undaki `version`'ı artırın, o sürümün kaydını
-`CHANGELOG.md`'sinin en üstüne ekleyin ve `vscode-v<sürüm>` etiketini gönderin (`vscode-v0.2.0`). Ardından
-`.github/workflows/vscode-release.yml` onu denetler, sınar ve paketler, `.vsix`'i kendine ait bir GitHub sürümüne ekler ve
-depoda `OVSX_PAT` gizli değişkeni (bir Open VSX erişim anahtarı) varsa Open VSX'te (`plyground.kompoz` olarak) yayımlar.
-
-## CLion eklentisi
-
-`editors/clion` da kendi başına yayımlanır. `build.gradle.kts`'indeki `version`'ı artırın, o sürümün kaydını
-`CHANGELOG.md`'sinin en üstüne ekleyin (maddeleri eklentinin değişiklik notları olur) ve `clion-v<sürüm>` etiketini
-gönderin (`clion-v0.3.0`). Ardından `.github/workflows/clion-release.yml` onu derler ve JetBrains'in Plugin Verifier'ıyla
-denetler, `.zip`'i kendine ait bir GitHub sürümüne ekler ve depoda `JETBRAINS_TOKEN` gizli değişkeni (bir Marketplace
-anahtarı) varsa JetBrains Marketplace'e (plyGround'un Kompoz'u olarak) yükler; JetBrains her sürümü listelemeden önce
-inceler.
+`editors/vscode` (VS Code eklentisi) ile `editors/clion-studio` (CLion ve Android Studio eklentisi) tek bir sürümü
+paylaşır ve birlikte yayımlanır. İkisinde de, `package.json`'da ve `build.gradle.kts`'te, `version`'ı artırın, o
+sürümün kaydını her birinin `CHANGELOG.md`'sinin en üstüne ekleyin (eklentininkinin maddeleri değişiklik notları olur)
+ve `editors-v<sürüm>` etiketini gönderin (`editors-v0.4.0`). Ardından `.github/workflows/editors-release.yml` VS Code
+eklentisini denetler, sınar ve paketler, öteki eklentiyi derler ve JetBrains'in Plugin Verifier'ıyla denetler, iki
+paketi de notları iki kayıt olan tek bir GitHub sürümüne ekler. Depoda `OVSX_PAT` gizli değişkeni (bir Open VSX erişim
+anahtarı) varsa VS Code eklentisini Open VSX'te (`plyground.kompoz` olarak) yayımlar, `JETBRAINS_TOKEN` gizli değişkeni
+(bir Marketplace anahtarı) varsa öteki eklentiyi JetBrains Marketplace'e (plyGround'un Kompoz'u olarak) yükler;
+JetBrains her sürümü listelemeden önce inceler.
 
 ## Lisans
 

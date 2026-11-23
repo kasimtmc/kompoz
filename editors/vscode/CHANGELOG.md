@@ -1,5 +1,10 @@
 # Changes
 
+## 0.3.0
+
+- Its version is the plugin for CLion and Android Studio's (from 0.1.1 to 0.3.0 for that): the two are released
+  together, from one tag.
+
 ## 0.1.1
 
 - Kompoz's icon.

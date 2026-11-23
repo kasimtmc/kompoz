@@ -12,13 +12,13 @@ A `.cpp` file with `@Kompozable` functions in Kotlin's syntax is both C++ and Ko
 
 It finds the build by the `compile_commands.json` and `kompozc_commands.json` that a CMake build with `kompozable` writes (Kompoz sets `CMAKE_EXPORT_COMPILE_COMMANDS`; set it in your project too), in the file's directory or one above it, or in a directory there such as `build/` or CLion's `cmake-build-debug/`. Where a command leaves the language standard to the compiler's default (CMake writes none where that default will do, as GCC 16's C++20), it asks the compiler for it and gives it to clangd, whose own is C++17. Arguments it doesn't know are clangd's; `--clangd PATH` names the clangd to start. Without a clangd it still gives kompozc's own diagnostics.
 
-**VS Code**: Kompoz's extension, in `editors/vscode`, shows a C++ file with Kotlin code as "Kompoz C++": its Kotlin highlighted as Kotlin, its C++ as C++, and the language server started for it. The C/C++ and clangd extensions leave such a file alone (they would mark the Kotlin); plain C++ files stay theirs. It is on Open VSX as `plyground.kompoz`: VSCodium, Code - OSS and the other editors that use Open VSX install it from their Extensions view. In Microsoft's VS Code, install the `.vsix` of a [VS Code release](https://github.com/kasimtmc/kompoz/releases) (Extensions, the `…` menu, Install from VSIX), or one you build:
+**VS Code**: Kompoz's extension, in `editors/vscode`, shows a C++ file with Kotlin code as "Kompoz C++": its Kotlin highlighted as Kotlin, its C++ as C++, and the language server started for it. The C/C++ and clangd extensions leave such a file alone (they would mark the Kotlin); plain C++ files stay theirs. It is on Open VSX as `plyground.kompoz`: VSCodium, Code - OSS and the other editors that use Open VSX install it from their Extensions view. In Microsoft's VS Code, install the `kompoz-*.vsix` of an [editor extensions release](https://github.com/kasimtmc/kompoz/releases) (Extensions, the `…` menu, Install from VSIX), or one you build:
 
 ```bash
 cd editors/vscode && npm ci && npm run package
 ```
 
-It finds kompozc as the CLion plugin does (below): the `kompoz.kompozcPath` setting, `KOMPOZC`, built in the workspace, or on `PATH`. `kompoz.clangdPath` and `kompoz.clangdArguments` are for the clangd behind it; **Kompoz: Restart kompozc --lsp** starts it again after a rebuild.
+It finds kompozc as the CLion and Android Studio plugin does (below): the `kompoz.kompozcPath` setting, `KOMPOZC`, built in the workspace, or on `PATH`. `kompoz.clangdPath` and `kompoz.clangdArguments` are for the clangd behind it; **Kompoz: Restart kompozc --lsp** starts it again after a rebuild.
 
 **Kate**: Kate has no extension store; `kompozc --kate` sets it up, once:
 
@@ -28,13 +28,13 @@ build/compiler/kompozc --kate
 
 It installs Kate's highlighting for "Kompoz C++" (`.cpp`, `.cc` and `.cxx` files: their Kotlin highlighted as Kotlin, their C++ as Kate's C++; a file without Kotlin stays C++) and adds this kompozc's language server to Kate's LSP client settings, for those files, keeping the servers already there. Restart Kate; it asks once whether to start the server. Run it again after kompozc moves.
 
-**CLion**: Kompoz's plugin, in `editors/clion`, starts the language server for the C++ files with Kotlin code and turns CLion's own highlighting off in them (its C++ engine would mark the Kotlin; the server's diagnostics take its place). Install the `.zip` of a [CLion release](https://github.com/kasimtmc/kompoz/releases) from disk (Settings, Plugins, Install Plugin from Disk), or build it against your CLion and install the archive in `build/distributions/`. Gradle needs a JDK; CLion's own, in its `jbr/`, will do:
+**CLion and Android Studio**: Kompoz's plugin, in `editors/clion-studio`, starts the language server for the C++ files with Kotlin code and turns the IDE's own C++ highlighting off in them (its C++ engine would mark the Kotlin; the server's diagnostics take its place). It takes the IDEs from the 2026.2 line on. Install it from JetBrains Marketplace (Settings, Plugins, Marketplace: Kompoz), or the `kompoz-clion-studio-*.zip` of an [editor extensions release](https://github.com/kasimtmc/kompoz/releases) from disk (Settings, Plugins, Install Plugin from Disk), or build it against your IDE and install the archive in `build/distributions/`. Gradle needs a JDK; the IDE's own, in its `jbr/`, will do:
 
 ```bash
-cd editors/clion && JAVA_HOME=/path/to/clion/jbr ./gradlew buildPlugin -PclionPath=/path/to/clion
+cd editors/clion-studio && JAVA_HOME=/path/to/clion/jbr ./gradlew buildPlugin -PidePath=/path/to/clion
 ```
 
-The plugin is offered for the other JetBrains IDEs with language server support too (Rider, Android Studio, IntelliJ IDEA, ...); it has been tried in CLion. It finds kompozc in Settings, Tools, Kompoz, or else in `KOMPOZC`, or else built in the project (`build/` or `cmake-build-*/compiler/kompozc`), or else on `PATH`.
+The plugin is offered for the other JetBrains IDEs with language server support too (Rider, IntelliJ IDEA, ...); it has been tried in CLion and Android Studio. It finds kompozc in Settings, Tools, Kompoz, or else in `KOMPOZC`, or else built in the project (`build/` or `cmake-build-*/compiler/kompozc`), or else on `PATH`.
 
 ## Previews
 
