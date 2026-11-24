@@ -66,7 +66,8 @@ struct Egl {
         if (!library) {
 #if defined(_WIN32)
             // There but not loadable: a DLL it needs is missing (ANGLE's: the Visual C++ runtime).
-            if (DWORD code = GetLastError(); std::filesystem::exists(std::filesystem::path(std::u8string(eglLibrary().begin(), eglLibrary().end()))))
+            const std::string path = eglLibrary();
+            if (DWORD code = GetLastError(); std::filesystem::exists(std::filesystem::path(std::u8string(path.begin(), path.end()))))
                 failure = "libEGL.dll is beside the program but couldn't be loaded (Windows error " + std::to_string(code) +
                           "; a DLL it needs, such as the Visual C++ runtime, may be missing)";
 #endif
