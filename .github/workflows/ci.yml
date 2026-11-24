@@ -57,10 +57,20 @@ jobs:
             cxx: clang++-19
             flags: ""
             jobs: 6
+          # Data races between Kompoz's threads (snapshots written from other threads, coroutines' dispatchers, the
+          # GPU renderer, AsyncImage's loading, the AT-SPI bridge, kompozc --lsp): the tests and the app, not the
+          # showcase (ThreadSanitizer's code is several times slower, and it has no threads of its own).
+          - name: Clang 19, TSan
+            cc: clang-19
+            cxx: clang++-19
+            flags: -fsanitize=thread -fno-omit-frame-pointer
+            examples: "OFF"
+            jobs: 4
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
     steps:
       - uses: actions/checkout@v4
       - name: Packages
@@ -81,7 +91,8 @@ jobs:
       - name: Configure
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKOMPOZ_VENDORED_DEPS=ON \
-            -DKOMPOZ_WITH_JPEG=ON -DKOMPOZ_WITH_WEBP=ON -DKOMPOZ_WITH_CURL=ON -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
+            -DKOMPOZ_WITH_JPEG=ON -DKOMPOZ_WITH_WEBP=ON -DKOMPOZ_WITH_CURL=ON -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" \
+            -DKOMPOZ_BUILD_EXAMPLES=${{ matrix.examples || 'ON' }}
       - name: Build
         # (tests/kompoz_tests.cpp alone, after the library: GCC's sanitized compile of it peaks near 14 GB, and the
         # runner has 16; beside another heavy object it ran the runner out of memory, "lost communication")
@@ -142,7 +153,7 @@ jobs:
       # The README's other way: Kompoz a subdirectory of the app's project (add_subdirectory, from outside
       # Kompoz's tree), kompozable called in the app's scope. (Once: Clang's job builds Kompoz again faster.)
       - name: Build the app with Kompoz as a subdirectory, and run it
-        if: matrix.cxx == 'clang++-19'
+        if: matrix.name == 'Clang 19'
         env:
           KOMPOZ_HEADLESS: 1
         run: |
