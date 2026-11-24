@@ -271,6 +271,15 @@ void KompozHost::windowRequestChanged() {
     requestRedraw();  // (a frame: the app core opens, changes or closes the window after it)
 }
 
+void KompozHost::addTrayRequest(std::shared_ptr<detail::TrayRequest> request) {
+    trayRequests_.push_back(std::move(request));
+    requestRedraw();  // (a frame: the app core shows it after it)
+}
+void KompozHost::removeTrayRequest(const detail::TrayRequest* request) {
+    std::erase_if(trayRequests_, [request](const auto& r) { return r.get() == request; });
+    requestRedraw();
+}
+
 void KompozHost::openUri(const std::string& uri) {
     for (const auto& [owner, accepts] : deepLinkHandlers_)
         if (accepts(uri)) return openDeepLink(uri);

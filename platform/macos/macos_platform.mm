@@ -256,11 +256,10 @@ public:
         if (stepping_ || !core_) return true;
         stepping_ = true;
         for (const Event& e : std::exchange(events_, {})) {
-            if (e.type == EventType::Quit && !secondary_) quit_ = true;  // (a window's: its onCloseRequest, AppCore's)
             core_->handle(e);
             needFrame_ = true;
         }
-        bool going = !quit_;
+        bool going = !quit_ && !core_->quitting();
         waitingForDue_ = false;
         if (going && (needFrame_ || busy_)) {
             int64_t due = core_->frameDue(), at = now();

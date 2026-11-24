@@ -8,6 +8,8 @@
 
 #include "../app/platform.hpp"
 
+#include <kompoz/tray.hpp>
+
 #include <atomic>
 #include <cstdint>
 #include <deque>
@@ -22,6 +24,7 @@ namespace kompoz::platform {
 class DesktopAccent;
 class WallpaperColors;
 class AtspiBridge;
+class StatusNotifier;
 
 // An X11 keysym (xkbcommon's are the same) as Kompoz's key.
 Key keyOf(uint32_t keysym);
@@ -58,6 +61,10 @@ public:
     // ask for it, `window` where the window is (its points) and `title` its title.
     void composed(KompozHost& host, bool redraw, int64_t frameTime, const Rect& window, float dpToPoints, const std::string& title);
     bool wantsFrames() const;
+    // The app's tray icons (Tray), as a StatusNotifierItem each (status_notifier.hpp): started with the
+    // first, their clicks run in takeNotifications.
+    bool syncTray(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests);
+    bool traySupported() const;
     // Their threads ended, before the loop they wake goes.
     void stop();
     // The screen saver held off (org.freedesktop.ScreenSaver's Inhibit, for as long as the
@@ -71,6 +78,8 @@ private:
     std::optional<std::string> buttonLayout_;
     std::unique_ptr<WallpaperColors> wallpaper_;
     std::unique_ptr<AtspiBridge> a11y_;
+    std::unique_ptr<StatusNotifier> tray_;
+    std::function<void()> wake_;
     bool focused_ = false, semanticsDirty_ = true;
     void* screenSaverBus_ = nullptr;  // the D-Bus connection holding the screen saver off
     int64_t lastSemantics_ = 0;

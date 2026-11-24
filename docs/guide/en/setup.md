@@ -201,6 +201,31 @@ For the web build of your own app, copy the Emscripten options from `examples/sh
 
 On macOS Kompoz builds with Homebrew's FreeType, HarfBuzz and libpng (`brew install freetype harfbuzz libpng`) as on Linux, and runs: CI builds it there, runs the tests and an app in a real window, on Kompoz's own macOS platform (AppKit, Metal). It hasn't been used by hand on a Mac yet, and screen readers there (NSAccessibility) aren't connected. iOS hasn't been built: it needs an Xcode project or CMake setup like the Android one.
 
+## System tray on desktop
+
+`Tray` adds an icon for as long as it is composed. It accepts an `ImageBitmap`, a tooltip, an activation callback, and a `MenuScope` with `Item` and `Separator`. It updates the icon and menu when state changes. The desktop application's `onCloseRequest` can hide its window while the composition and its effects continue:
+
+```kotlin
+@Kompozable
+fun App() {
+    val icon = imageResource("tray.png")
+    Tray(icon = icon, tooltip = "My app", onAction = { setAppWindowVisible(true) }) {
+        Item("Open", onClick = { setAppWindowVisible(true) })
+        Separator()
+        Item("Quit", onClick = { exitApplication() })
+    }
+}
+
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "My app", .content = [] { App(); }, .onCloseRequest = [] {
+        if (kompoz::isTraySupported()) kompoz::setAppWindowVisible(false);
+        else kompoz::exitApplication();
+    }};
+}
+```
+
+Windows uses its notification area; Linux uses the StatusNotifierItem host (for example KDE Plasma or a GNOME AppIndicator extension). `isTraySupported()` allows a close button to exit normally where no tray is available. The tray API does not create a phone background service; an Android app must manage that with Android's service lifecycle.
+
 ## Packaging
 
 ```bash

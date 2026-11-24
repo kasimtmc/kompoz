@@ -3,6 +3,7 @@
 #include "../common/desktop_accent.hpp"
 #include "../common/system.hpp"
 #include "atspi_bridge.hpp"
+#include "status_notifier.hpp"
 #include "libdbus.hpp"
 #ifdef KOMPOZ_WALLPAPER_COLORS
 #include "../common/wallpaper_colors.hpp"
@@ -99,6 +100,7 @@ DesktopServices::DesktopServices() = default;
 DesktopServices::~DesktopServices() = default;
 
 void DesktopServices::start(const std::string& title, std::function<void()> wake) {
+    wake_ = wake;
     auto notifier = [wake](std::atomic<bool>& flag) {
         return Notifier{.notify = [wake, &flag] {
             flag = true;
@@ -123,9 +125,10 @@ void DesktopServices::takeNotifications(std::deque<Event>& events) {
     }
     if (wallpaperChanged_.exchange(false)) events.push_back({.type = EventType::WallpaperChanged});
     if (a11yRequested_.exchange(false)) events.push_back({.type = EventType::AccessibilityRequest});
+    if (tray_) tray_->takeActions();  // (a click's callback runs here, on the platform's thread)
     if (gQuitSignalled) {
         gQuitSignalled = 0;
-        events.push_back({.type = EventType::Quit});
+        events.push_back({.type = EventType::Quit, .text = "signal"});
     }
 }
 
@@ -183,7 +186,20 @@ void DesktopServices::composed(KompozHost& host, bool redraw, int64_t frameTime,
     }
 }
 
+bool DesktopServices::syncTray(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests) {
+    if (!tray_ && requests.empty()) return false;
+    if (!tray_) tray_ = std::make_unique<StatusNotifier>(wake_);
+    tray_->sync(requests);
+    return true;
+}
+
+bool DesktopServices::traySupported() const {
+    if (!tray_) const_cast<DesktopServices*>(this)->tray_ = std::make_unique<StatusNotifier>(wake_);
+    return tray_->available();
+}
+
 void DesktopServices::stop() {
+    tray_.reset();
     keepScreenOn(false, {});
     a11y_.reset();
     wallpaper_.reset();

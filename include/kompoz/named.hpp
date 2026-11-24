@@ -546,6 +546,7 @@ struct Rows {};
 struct OnCheckedChange {};
 struct OnDismissRequest {};
 struct OnCloseRequest {};
+struct OnAction {};
 struct IsMinimized {};
 struct OnExpandedChange {};
 struct OnValueChange {};
@@ -1025,6 +1026,7 @@ inline constexpr Param<detail::names::Rows> rows;
 inline constexpr Param<detail::names::OnCheckedChange> onCheckedChange;
 inline constexpr Param<detail::names::OnDismissRequest> onDismissRequest;
 inline constexpr Param<detail::names::OnCloseRequest> onCloseRequest;
+inline constexpr Param<detail::names::OnAction> onAction;  // (Tray's: its icon clicked)
 inline constexpr Param<detail::names::IsMinimized> isMinimized;
 inline constexpr Param<detail::names::OnExpandedChange> onExpandedChange;
 inline constexpr Param<detail::names::OnValueChange> onValueChange;

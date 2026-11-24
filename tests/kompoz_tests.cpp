@@ -9920,6 +9920,47 @@ TEST(window_asks_for_a_window_of_its_own) {
     CHECK(host.windowRequests().empty());
 }
 
+// Tray(icon, tooltip, onAction) { menu }, as Compose Desktop's: a request for a tray icon while it is composed, its
+// version bumped only as what it shows changes, its callbacks the latest; gone as it leaves.
+TEST(tray_asks_for_an_icon_and_keeps_its_menu_up_to_date) {
+    auto shown = mutableStateOf(true);
+    auto tip = mutableStateOf(std::string("AirLink"));
+    auto online = mutableStateOf(1);
+    auto other = mutableStateOf(0);
+    int actions = 0, opened = 0;
+    KompozTestRule rule([&] {
+        (void)other.get();
+        if (shown.get())
+            Tray(kompoz::tooltip = tip.get(), kompoz::onAction = [&] { ++actions; }, [&](MenuScope& menu) {
+                menu.Item("Aç", kompoz::onClick = [&] { ++opened; });
+                menu.Separator();
+                for (int i = 0; i < online.get(); ++i) menu.Item("Cihaz " + std::to_string(i));
+            });
+    });
+    KompozHost& host = rule.host();
+    CHECK(host.trayRequests().size() == 1);
+    if (host.trayRequests().size() != 1) return;
+    auto request = host.trayRequests()[0];
+    CHECK(request->tooltip == "AirLink" && request->menu.size() == 3 && request->menu[1].separator);
+    request->onAction();
+    request->menu[0].onClick();
+    CHECK(actions == 1 && opened == 1);
+    uint64_t version = request->version;
+    other.set(1);  // recomposed, nothing it shows changed
+    rule.waitForIdle();
+    CHECK(request->version == version);
+    online.set(2);
+    rule.waitForIdle();
+    CHECK(request->menu.size() == 4 && request->version != version);
+    version = request->version;
+    tip.set("AirLink: 2 cihaz");
+    rule.waitForIdle();
+    CHECK(request->tooltip == "AirLink: 2 cihaz" && request->version != version);
+    shown.set(false);
+    rule.waitForIdle();
+    CHECK(host.trayRequests().empty());
+}
+
 TEST(dialog_draws_on_top_takes_input_and_dismisses) {
     auto open = mutableStateOf(false);
     auto log = std::make_shared<std::vector<std::string>>();

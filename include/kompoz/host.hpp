@@ -26,6 +26,7 @@ namespace kompoz {
 namespace detail {
 class Dispatcher;
 struct WindowRequest;
+struct TrayRequest;
 // A node taking part in a drag (KompozHost's): a dragAndDropTarget, or a contentReceiver (the
 // `ordinal`th on it).
 struct DropTarget {
@@ -346,6 +347,11 @@ public:
     void addWindowRequest(std::shared_ptr<detail::WindowRequest> request);
     void removeWindowRequest(const detail::WindowRequest* request);
     void windowRequestChanged();
+    // The tray icons its composition asks for (Tray), in the order they came: the platform's app core
+    // shows them and keeps them up to date (each request's version), and takes away those gone.
+    const std::vector<std::shared_ptr<detail::TrayRequest>>& trayRequests() const { return trayRequests_; }
+    void addTrayRequest(std::shared_ptr<detail::TrayRequest> request);
+    void removeTrayRequest(const detail::TrayRequest* request);
     // The rememberSaveable values that can be written out (see saved_value.hpp), as bytes the
     // platform keeps while it may end the process (Android's saved instance state); given back
     // to restoreState before the first frame, they come back. On the composition thread.
@@ -746,6 +752,7 @@ private:
     std::vector<std::pair<const void*, std::function<bool(const std::string&)>>> deepLinkHandlers_;
     std::vector<std::shared_ptr<detail::WindowRequest>> windowRequests_;
     uint64_t windowRequestsVersion_ = 0;
+    std::vector<std::shared_ptr<detail::TrayRequest>> trayRequests_;
     MutableState<uint64_t> deepLinks_ = mutableStateOf(uint64_t(0));  // bumped with each one
     LayoutNode* flingNode_ = nullptr;
     int flingAxis_ = 0;

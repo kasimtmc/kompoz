@@ -201,6 +201,31 @@ Kendi uygulamanızın web derlemesi için Emscripten seçeneklerini `examples/sh
 
 macOS'ta Kompoz, Linux'taki gibi Homebrew'un FreeType, HarfBuzz ve libpng'siyle derlenir (`brew install freetype harfbuzz libpng`) ve çalışır: CI onu orada derliyor, testleri ve bir uygulamayı gerçek bir pencerede, Kompoz'un kendi macOS platformunda (AppKit, Metal) çalıştırıyor. Henüz bir Mac'te elle kullanılmadı, oradaki ekran okuyuculara da (NSAccessibility) bağlı değil. iOS derlenmedi: Android'inki gibi bir Xcode projesi ya da CMake kurulumu gerekiyor.
 
+## Masaüstünde sistem tepsisi
+
+`Tray` kompozisyonda kaldığı sürece bir simge gösterir. `ImageBitmap`, ipucu metni, etkinleştirme işlevi ve `Item` ile `Separator` içeren bir `MenuScope` alır. Durum değiştiğinde simge ve menü güncellenir. Masaüstü uygulamasının `onCloseRequest` işlevi pencereyi gizlerken kompozisyon ve efektler çalışmayı sürdürebilir:
+
+```kotlin
+@Kompozable
+fun App() {
+    val icon = imageResource("tray.png")
+    Tray(icon = icon, tooltip = "Uygulamam", onAction = { setAppWindowVisible(true) }) {
+        Item("Aç", onClick = { setAppWindowVisible(true) })
+        Separator()
+        Item("Çık", onClick = { exitApplication() })
+    }
+}
+
+kompoz::Application kompoz::createApplication(int, char**) {
+    return {.title = "Uygulamam", .content = [] { App(); }, .onCloseRequest = [] {
+        if (kompoz::isTraySupported()) kompoz::setAppWindowVisible(false);
+        else kompoz::exitApplication();
+    }};
+}
+```
+
+Windows bildirim alanını, Linux ise StatusNotifierItem sunucusunu kullanır (örneğin KDE Plasma veya GNOME AppIndicator eklentisi). Tepsi bulunmadığında `isTraySupported()` ile kapatma düğmesi uygulamadan çıkabilir. Tepsi API'si telefonda arka plan servisi oluşturmaz; Android uygulaması bunu servis yaşam döngüsüyle yönetir.
+
 ## Paketleme
 
 ```bash

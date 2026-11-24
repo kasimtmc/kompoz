@@ -52,6 +52,9 @@ public:
     // The window's native surface went away or is another (between frames): what the GPU device
     // made for the old one let go of now (gpu::Device::surfaceChanged).
     void surfaceChanged();
+    // Whether the app is done (its window closed with no onCloseRequest, a signal, exitApplication):
+    // the platform's loop ends, whether or not a frame is due (its window may be hidden).
+    bool quitting() const;
     // Before the platform goes: KOMPOZ_STATE_FILE written.
     void quit();
     KompozHost& host();

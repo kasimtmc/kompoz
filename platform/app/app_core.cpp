@@ -7,6 +7,7 @@
 #include <kompoz/display_list.hpp>
 #include <kompoz/host.hpp>
 #include <kompoz/preview.hpp>
+#include <kompoz/tray.hpp>
 #include <kompoz/window.hpp>
 
 #include "../common/clip_formats.hpp"
@@ -128,6 +129,8 @@ struct AppState {
     // starts with three such events.)
     bool metricsChanged = false;
     bool focused = true, minimized = false, hidden = false;  // desktops' and browsers' lifecycle
+    bool windowShown = true;      // the app's window: hidden by setAppWindowVisible(false)
+    uint64_t trayShown = 0;       // the tray's requests and versions, as last given to the platform (a hash)
     uint64_t framePeriodNs = 16'666'667;  // the display's refresh interval: frames not shown are paced to it
     int64_t lastFrameTime = -1;           // the last frame's time, on the display's beat (frameTimeOnBeat)
     bool damageCheck = false;  // KOMPOZ_DAMAGE_CHECK: each frame compared with all of it drawn
@@ -747,6 +750,17 @@ PointerButton otherButton(platform::MouseButton button) {
     }
 }
 
+// The app's tray icons (Tray) to the platform, when they came, went or changed (each one's version).
+void syncTray(App& app) {
+    const auto& requests = app.host->trayRequests();
+    uint64_t key = 1469598103934665603ull;
+    for (const auto& r : requests) key = (key ^ (r->id * 1000003ull + r->version)) * 1099511628211ull;
+    if (requests.empty()) key = 0;
+    if (key == app.trayShown) return;
+    app.trayShown = key;
+    app.platform.syncTray(requests);
+}
+
 void handleEvent(App& app, const platform::Event& e) {
     using platform::EventType;
     KompozHost& host = *app.host;
@@ -770,8 +784,13 @@ void handleEvent(App& app, const platform::Event& e) {
     switch (e.type) {
     // (AccentChanged, WallpaperChanged, AccessibilityRequest, Wake: the platform's own, Platform::handled.)
     case EventType::Quit:  // (a window of the app's: the app asked, Window's onCloseRequest)
-        if (!app.window) app.quit = true;
-        else if (app.window->onCloseRequest) app.window->onCloseRequest();
+        if (app.window) {
+            if (app.window->onCloseRequest) app.window->onCloseRequest();
+        } else if (e.text == "signal" || !app.config.onCloseRequest) {
+            app.quit = true;  // (a signal ends it whatever the app's own close does)
+        } else {
+            app.config.onCloseRequest();  // (the app may hide its window, or exitApplication)
+        }
         break;
     case EventType::FocusGained:
     case EventType::FocusLost:
@@ -1086,6 +1105,31 @@ bool AppCore::start(int argc, char** argv) {
     if (auto path = platform.option("KOMPOZ_STATE_FILE"); path && !app.window)
         if (std::vector<uint8_t> state = platform::readFile(*path); !state.empty()) app.host->restoreState(state);
     platform.started(*app.host);
+    if (!app.window) {  // (exitApplication, the app's window hidden or shown, from the app's composition)
+        App* self = &app;
+        kompoz::detail::setAppControl({
+            .exit = [self] {
+                self->quit = true;
+                self->host->requestRedraw();
+                self->host->wake();
+            },
+            .setWindowVisible = [self](bool shown) {
+                if (self->windowShown == shown) return;
+                if (!self->platform.setWindowShown(shown)) return;
+                self->windowShown = shown;
+                self->hidden = !shown;
+                updateLifecycle(*self);
+                if (shown) {
+                    if (self->display) self->display->invalidate();
+                    self->showFrame = true;
+                }
+                self->host->requestRedraw();
+                self->host->wake();
+            },
+            .windowVisible = [self] { return self->windowShown; },
+            .traySupported = [self] { return self->platform.traySupported(); },
+        });
+    }
 
     std::stringstream in(app.window ? std::string() : platform.option("KOMPOZ_SCRIPT").value_or(""));
     for (std::string command; std::getline(in, command, ';');)
@@ -1138,6 +1182,7 @@ Next AppCore::frame(int64_t displayTime) {
     bool redraw = app.host->frame(now);
     uint64_t t1 = app.profile ? app.now() : 0, t2 = t1, t3 = t1;
     app.platform.composed(*app.host, redraw, now);
+    if (!app.window) syncTray(app);
     if (const auto& stats = app.host->stats(); app.trace && stats.recompositions != app.traced.recompositions) {
         app.logf("kompoz: recomposition %llu: %llu scopes ran, %llu skipped", (unsigned long long)stats.recompositions,
                  (unsigned long long)(stats.scopesRun - app.traced.scopesRun), (unsigned long long)(stats.scopesSkipped - app.traced.scopesSkipped));
@@ -1150,6 +1195,10 @@ Next AppCore::frame(int64_t displayTime) {
     }
     Drawn drawn;
     uint64_t waited = 0;  // in beginFrame: for the GPU to be done with a frame before
+    // A hidden window (setAppWindowVisible(false)) composes on, its effects and Tray running, but draws
+    // nothing: it has no surface on the screen (a wait for its next image would never end). All of it
+    // is drawn again as it is shown.
+    if (!app.windowShown && !app.window) redraw = false, app.showFrame = false;
     if (redraw || !shot.empty() || app.showFrame) {
         uint64_t before = app.now();
         app.gpu->beginFrame();
@@ -1185,6 +1234,8 @@ Next AppCore::frame(int64_t displayTime) {
     next.quit = app.quit;
     return next;
 }
+
+bool AppCore::quitting() const { return app_->quit; }
 
 void AppCore::surfaceChanged() {
     if (app_->gpu) app_->gpu->surfaceChanged();
@@ -1285,6 +1336,10 @@ void AppWindows::sync() {
 
 void AppCore::quit() {
     App& app = *app_;
+    if (!app.window) {
+        app.platform.syncTray({});  // (its icons gone with it)
+        kompoz::detail::setAppControl({});
+    }
     // KOMPOZ_STATE_FILE: the saved state written out at exit and read at start, as Android does
     // when it ends and brings back an app (to try rememberSaveable on the desktop).
     if (auto path = app.platform.option("KOMPOZ_STATE_FILE"); path && app.host) {

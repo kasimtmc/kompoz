@@ -10,6 +10,7 @@
 #include <kompoz/app.hpp>
 #include <kompoz/host.hpp>
 #include <kompoz/media_query.hpp>
+#include <kompoz/tray.hpp>
 
 #include <cstdint>
 #include <optional>
@@ -78,6 +79,17 @@ public:
     virtual void setTitle(const std::string& title) { (void)title; }
     virtual void setMinimized(bool minimized) { (void)minimized; }
     virtual void raise() {}
+    // The app's window hidden (off the screen and the taskbar, the app going on) or shown again and
+    // raised (Application::onCloseRequest with a Tray). False where the platform can't.
+    virtual bool setWindowShown(bool shown) { (void)shown; return false; }
+    // The app's tray icons (Tray) as the composition asks for them now: shown, updated (each one's
+    // version), the others taken away. Its clicks call the requests' callbacks on the platform's
+    // thread, between turns. False where the platform has no tray (or no host for one now).
+    virtual bool syncTray(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests) {
+        (void)requests;
+        return false;
+    }
+    virtual bool traySupported() const { return false; }
     // What Kompoz's title bar asks (Metrics::titleBar); (x, y): where, in points.
     virtual void windowAction(WindowAction action, float x, float y) { (void)action, (void)x, (void)y; }
     // The pointer and the keyboard; with `probe` (after the first frame: what tells may take a

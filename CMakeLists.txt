@@ -117,7 +117,8 @@ add_library(kompoz_core STATIC
     src/viewmodel.cpp
     src/wavy_progress.cpp
     src/widgets.cpp
-    src/window.cpp)
+    src/window.cpp
+    src/tray.cpp)
 target_include_directories(kompoz_core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                                               $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 set_target_properties(kompoz_core PROPERTIES EXPORT_NAME core)
@@ -372,14 +373,15 @@ if(KOMPOZ_BUILD_APP)
     elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         # The desktop's accent color from the XDG portal (libdbus loaded at run time): dynamic color.
         # Screen readers read the semantics tree through AT-SPI (the same libdbus).
-        target_sources(kompoz_app PRIVATE platform/linux/desktop_accent.cpp platform/linux/atspi_bridge.cpp)
+        target_sources(kompoz_app PRIVATE platform/linux/desktop_accent.cpp platform/linux/atspi_bridge.cpp
+                       platform/linux/status_notifier.cpp)
         target_compile_definitions(kompoz_app PRIVATE KOMPOZ_DESKTOP_ACCENT=1 KOMPOZ_ATSPI=1)
         target_link_libraries(kompoz_app PUBLIC ${CMAKE_DL_LIBS})
     elseif(WIN32)
         # Windows' accent color (DWM's, in the registry): dynamic color. Screen readers read the
         # semantics tree through UI Automation. Kompoz's Win32 platform (platform/windows).
         target_sources(kompoz_app PRIVATE platform/windows/desktop_accent.cpp platform/windows/uia_bridge.cpp
-                       platform/windows/win32_platform.cpp platform/common/egl_window.cpp)
+                       platform/windows/win32_platform.cpp platform/windows/win32_tray.cpp platform/common/egl_window.cpp)
         target_compile_definitions(kompoz_app PRIVATE KOMPOZ_DESKTOP_ACCENT=1 KOMPOZ_UIA=1 KOMPOZ_WIN32=1)
         target_link_libraries(kompoz_app PUBLIC uiautomationcore oleaut32 dwmapi imm32 winmm cfgmgr32 shell32 uuid)
     endif()

@@ -151,11 +151,10 @@ public:
         pump();
         desktop_.takeNotifications(events_);
         for (const Event& e : std::exchange(events_, {})) {
-            if (e.type == EventType::Quit && !secondary_) quit_ = true;  // (a window's: its onCloseRequest, AppCore's)
             core.handle(e);
             needFrame_ = true;
         }
-        if (quit_) return false;
+        if (core.quitting()) return false;
         if (!needFrame_ && !busy_) return true;
         // The pause until the frame is due is the host's for work between frames (a lazy list's next
         // item), and what comes meanwhile is handled before it.
@@ -269,6 +268,27 @@ public:
         }
         return failed(std::string("no ") + gpu::backendName(backend) + " here");
     }
+
+    // Hidden: unmapped (off the screen and the taskbar), the window and the GPU's hold on it kept;
+    // shown: mapped again and raised, all of it drawn again.
+    bool setWindowShown(bool shown) override {
+        if (secondary_ || !window_) return false;
+        if (shown) {
+            XMapRaised(display_, window_);
+            needFrame_ = true;
+            events_.push_back({.type = EventType::Shown});
+        } else {
+            XUnmapWindow(display_, window_);
+            events_.push_back({.type = EventType::Hidden});
+        }
+        XFlush(display_);
+        return true;
+    }
+
+    bool syncTray(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests) override {
+        return !secondary_ && desktop_.syncTray(requests);
+    }
+    bool traySupported() const override { return !secondary_ && desktop_.traySupported(); }
 
     void closeWindow() override {
         egl_.close();

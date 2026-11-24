@@ -143,11 +143,10 @@ public:
         wl_display_dispatch_pending(display_);
         desktop_.takeNotifications(events_);
         for (const Event& e : std::exchange(events_, {})) {
-            if (e.type == EventType::Quit && !secondary_) quit_ = true;  // (a window's: its onCloseRequest, AppCore's)
             core.handle(e);
             needFrame_ = true;
         }
-        if (quit_) return false;
+        if (core.quitting()) return false;
         if (callbackDone_) {
             callbackDone_ = false;
             needFrame_ = needFrame_ || busy_;
@@ -194,25 +193,7 @@ public:
             wp_fractional_scale_v1_add_listener(fractional_, &kFractional, this);
             viewport_ = wp_viewporter_get_viewport(viewporter_, surface_);
         }
-        xdgSurface_ = xdg_wm_base_get_xdg_surface(wmBase_, surface_);
-        xdg_surface_add_listener(xdgSurface_, &kXdgSurface, this);
-        toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
-        xdg_toplevel_add_listener(toplevel_, &kToplevel, this);
-        xdg_toplevel_set_title(toplevel_, app.title.c_str());
-        xdg_toplevel_set_app_id(toplevel_, "dev.kompoz.app");
-        // The compositor's decorations where it has them (unless KOMPOZ_DECORATIONS=kompoz), else
-        // Kompoz's own: as the decoration's configure says.
-        if (decorations_) {
-            decoration_ = zxdg_decoration_manager_v1_get_toplevel_decoration(decorations_, toplevel_);
-            zxdg_toplevel_decoration_v1_add_listener(decoration_, &kDecoration, this);
-            bool own = option("KOMPOZ_DECORATIONS") == "kompoz";
-            zxdg_toplevel_decoration_v1_set_mode(decoration_, own ? ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE : ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-        } else {
-            ownDecorations_ = true;
-        }
-        wl_surface_commit(surface_);
-        while (!configured_)  // (the first configure, acknowledged before anything is drawn)
-            if (wl_display_roundtrip(display_) < 0) return failed("the compositor didn't configure the window");
+        if (!makeToplevel()) return failed("the compositor didn't configure the window");
         applySize();
         updateEdges();
         surface.drawableSize = [this](int* w, int* h) { *w = pixelWidth(), *h = pixelHeight(); };
@@ -240,6 +221,70 @@ public:
         }
         return failed(std::string("no ") + gpu::backendName(backend) + " here");
     }
+
+    // The surface's window role: an xdg_toplevel with its title, app id and decorations, configured
+    // before anything is drawn. Made again as the app's window is shown after it was hidden.
+    bool makeToplevel() {
+        xdgSurface_ = xdg_wm_base_get_xdg_surface(wmBase_, surface_);
+        xdg_surface_add_listener(xdgSurface_, &kXdgSurface, this);
+        toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
+        xdg_toplevel_add_listener(toplevel_, &kToplevel, this);
+        xdg_toplevel_set_title(toplevel_, title_.c_str());
+        xdg_toplevel_set_app_id(toplevel_, "dev.kompoz.app");
+        // The compositor's decorations where it has them (unless KOMPOZ_DECORATIONS=kompoz), else
+        // Kompoz's own: as the decoration's configure says.
+        if (decorations_) {
+            decoration_ = zxdg_decoration_manager_v1_get_toplevel_decoration(decorations_, toplevel_);
+            zxdg_toplevel_decoration_v1_add_listener(decoration_, &kDecoration, this);
+            bool own = option("KOMPOZ_DECORATIONS") == "kompoz";
+            zxdg_toplevel_decoration_v1_set_mode(decoration_, own ? ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE : ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+        } else {
+            ownDecorations_ = true;
+        }
+        wl_surface_commit(surface_);
+        while (!configured_)  // (the first configure, acknowledged before anything is drawn)
+            if (wl_display_roundtrip(display_) < 0) return false;
+        return true;
+    }
+
+    // Wayland hides a window by taking its role away (its buffer let go with it: the surface shows
+    // nothing and has no window), the surface and the GPU's hold on it kept; shown, the role is
+    // given again and configured, and a frame put in it.
+    bool setWindowShown(bool shown) override {
+        if (secondary_ || !surface_ || shown == (toplevel_ != nullptr)) return !secondary_ && surface_;
+        if (!shown) {
+            for (Edge& e : edges_)
+                if (e.shown) {
+                    wl_surface_attach(e.surface, nullptr, 0, 0);
+                    wl_surface_commit(e.surface);
+                    if (e.buffer) e.buffer->retired = true;
+                    e.buffer = nullptr, e.shown = false;
+                }
+            if (frameCallback_) wl_callback_destroy(std::exchange(frameCallback_, nullptr));
+            if (decoration_) zxdg_toplevel_decoration_v1_destroy(std::exchange(decoration_, nullptr));
+            // wl_proxy_destroy only releases the client proxy. The server-side xdg_toplevel
+            // survives it, so each reopen otherwise leaves another visible window behind.
+            if (toplevel_) xdg_toplevel_destroy(std::exchange(toplevel_, nullptr));
+            if (xdgSurface_) xdg_surface_destroy(std::exchange(xdgSurface_, nullptr));
+            wl_surface_attach(surface_, nullptr, 0, 0);
+            wl_surface_commit(surface_);
+            configured_ = false, awaitingCallback_ = false;
+            wl_display_flush(display_);
+            events_.push_back({.type = EventType::Hidden});
+            return true;
+        }
+        if (!makeToplevel()) return false;
+        applySize();
+        updateEdges();
+        raise();
+        needFrame_ = true;
+        return true;
+    }
+
+    bool syncTray(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests) override {
+        return !secondary_ && desktop_.syncTray(requests);
+    }
+    bool traySupported() const override { return !secondary_ && desktop_.traySupported(); }
 
     void closeWindow() override {
         egl_.close();

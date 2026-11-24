@@ -37,6 +37,7 @@
 #include "state.hpp"
 #include "strings.hpp"
 #include "text_measure.hpp"
+#include "tray.hpp"
 #include "viewmodel.hpp"
 #include "widgets.hpp"
 #include "window.hpp"

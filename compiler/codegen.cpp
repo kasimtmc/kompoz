@@ -207,6 +207,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"keyframes", "KeyframesConfig"},  // (keyframes { durationMillis = 420; 1.35f at 110 }: the spec's frames)
     {"navOptions", "NavOptionsBuilder"},
     {"MenuBar", "MenuBarScope"},             {"Menu", "MenuScope"},  // (Compose Multiplatform's menu builder)
+    {"Tray", "MenuScope"},  // (Tray(icon = …) { Item(…); Separator() }: its menu's items)
     {"NavHost", "NavGraphBuilder"},          {"navigation", "NavGraphBuilder"},
     {"navigate", "NavOptionsBuilder"},       {"popUpTo", "PopUpToBuilder"},     {"navDeepLink", "NavDeepLink"},
     // (an ImageVector's builder: group(…) { path(…) { moveTo(…) } })

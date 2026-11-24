@@ -8,6 +8,7 @@
 #include "../common/system.hpp"
 #include "../common/wallpaper_colors.hpp"
 #include "uia_bridge.hpp"
+#include "win32_tray.hpp"
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00
@@ -573,6 +574,30 @@ public:
         return true;
     }
 
+    // Hidden (off the screen and the taskbar), the window and the GPU's hold on it kept; shown again
+    // restored and brought to the front, all of it drawn again.
+    bool setWindowShown(bool shown) override {
+        if (secondary_ || !hwnd_) return false;
+        if (shown) {
+            ShowWindow(hwnd_, IsIconic(hwnd_) ? SW_RESTORE : SW_SHOW);
+            SetForegroundWindow(hwnd_);
+            needFrame_ = true;
+            events_.push_back({.type = EventType::Shown});
+        } else {
+            ShowWindow(hwnd_, SW_HIDE);
+            events_.push_back({.type = EventType::Hidden});
+        }
+        return true;
+    }
+
+    bool syncTray(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests) override {
+        if (secondary_ || (!tray_ && requests.empty())) return false;
+        if (!tray_) tray_ = std::make_unique<Win32Tray>();
+        tray_->sync(requests);
+        return true;
+    }
+    bool traySupported() const override { return !secondary_; }
+
     void closeWindow() override {
         egl_.close();
         wgl_.close();
@@ -772,6 +797,7 @@ private:
     std::unique_ptr<DesktopAccent> accent_;
     std::unique_ptr<WallpaperColors> wallpaper_;
     std::unique_ptr<UiaBridge> a11y_;
+    std::unique_ptr<Win32Tray> tray_;  // the app's tray icons (Tray)
     bool semanticsDirty_ = true, keptOn_ = false, probed_ = false, hasMicrophone_ = false, hasCamera_ = false;
     int64_t lastSemantics_ = 0;
 
@@ -803,13 +829,12 @@ private:
         if (accentChanged_.exchange(false)) events_.push_back({.type = EventType::AccentChanged});
         if (wallpaperChanged_.exchange(false)) events_.push_back({.type = EventType::WallpaperChanged});
         if (a11yRequested_.exchange(false)) events_.push_back({.type = EventType::AccessibilityRequest});
-        if (!secondary_ && gQuitAsked.exchange(false)) events_.push_back({.type = EventType::Quit});
+        if (!secondary_ && gQuitAsked.exchange(false)) events_.push_back({.type = EventType::Quit, .text = "signal"});
         for (const Event& e : std::exchange(events_, {})) {
-            if (e.type == EventType::Quit && !secondary_) quit_ = true;  // (a window's: its onCloseRequest, AppCore's)
             core_->handle(e);
             needFrame_ = true;
         }
-        bool going = !quit_;
+        bool going = !quit_ && !core_->quitting();
         waitingForDue_ = false;
         if (going && (needFrame_ || busy_)) {
             // The pause until the frame is due is the host's for work between frames (a lazy

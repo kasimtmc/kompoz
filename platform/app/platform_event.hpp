@@ -54,7 +54,7 @@ struct Event {
     Key key = Key::Unknown;
     KeyModifiers modifiers;  // held down (pointer and key events)
     int nativeKeyCode = 0;   // KeyDown, KeyUp: the platform's code of the key (KeyEvent's)
-    std::string text;        // Text: typed, whether a text field takes it or not (KeyEventType::Unknown then)
+    std::string text;        // Text: typed, whether a text field takes it or not (KeyEventType::Unknown then); Quit: "signal" when a signal asked
     std::vector<std::string> mimeTypes;      // DropBegin
     std::shared_ptr<const ClipEntry> clip;  // DropData
 };
