@@ -45,6 +45,9 @@ bool mimeTypeMatches(std::string_view type, std::string_view wanted);
 struct ClipMetadata {
     std::vector<std::string> mimeTypes;
     std::string label;
+    // A password: its source asked for it not to be kept or shown (Android's EXTRA_IS_SENSITIVE; a
+    // Linux password manager's x-kde-passwordManagerHint type).
+    bool isSensitive = false;
     // Whether one of its types is one `mimeType` (a wildcard one too) stands for.
     bool hasMimeType(std::string_view mimeType) const;
     friend bool operator==(const ClipMetadata&, const ClipMetadata&) = default;

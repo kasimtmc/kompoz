@@ -115,6 +115,8 @@ ClipEntry clipFromFormats(const std::vector<std::string>& types, const std::func
 
 ClipMetadata clipMetadataOf(const std::vector<std::string>& types) {
     ClipMetadata metadata;
+    // KeePassXC, Klipper and others offer this type with a password: keep it out of histories.
+    metadata.isSensitive = has(types, "x-kde-passwordManagerHint");
     if (std::ranges::any_of(kUriTypes, [&](const char* t) { return has(types, t); })) {
         metadata.mimeTypes.push_back("text/uri-list");
         return metadata;

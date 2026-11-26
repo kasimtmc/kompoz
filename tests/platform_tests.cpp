@@ -880,6 +880,12 @@ void clipsGoByMimeTypes() {
     CHECK((read == std::vector<std::string>{"text/plain;charset=utf-8", "text/html", "image/png"}));
     CHECK((back.clipMetadata.mimeTypes == std::vector<std::string>{"text/plain", "text/html", "image/png"}));
     CHECK((platform::clipMetadataOf(types).mimeTypes == back.clipMetadata.mimeTypes));
+    CHECK(!platform::clipMetadataOf(types).isSensitive);
+    // A password manager's clip: marked sensitive, read as its text.
+    CHECK(platform::clipMetadataOf({"text/plain;charset=utf-8", "x-kde-passwordManagerHint"}).isSensitive);
+    CHECK(platform::clipFromFormats({"text/plain;charset=utf-8", "x-kde-passwordManagerHint"}, [](const std::string&) {
+        return std::string("s3cret");
+    }).clipMetadata.isSensitive);
     // HTML in UTF-16 with its byte order mark (as some browsers write it), and X11's text alone.
     ClipEntry wide = platform::clipFromFormats({"text/html", "UTF8_STRING"}, [](const std::string& type) {
         return type == "text/html" ? std::string("\xFF\xFE<\0b\0>\0\xE7\0", 10) : std::string("ç");
