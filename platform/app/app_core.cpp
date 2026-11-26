@@ -74,6 +74,7 @@ struct AppState {
         int front = 0;
     } applied;
     bool mediaProbed = false;  // a microphone and a camera looked for (after the first frame)
+    uint64_t openedAt = 0;     // when the window was opened (a popup's focus lost right after is the opening click's)
     std::unique_ptr<FontSystem> fonts;
     // Kompoz's GPU renderer (gpu/renderer.hpp) on the device KOMPOZ_GPU chose, with the kept frame
     // in a texture of its own.
@@ -761,6 +762,18 @@ void syncTray(App& app) {
     app.platform.syncTray(requests);
 }
 
+// The user closing the window: a window of the app's its request's onCloseRequest; the app's its
+// Application's (it may hide the window, or exitApplication), none: the app ends.
+void closeRequested(App& app) {
+    if (app.window) {
+        if (app.window->onCloseRequest) app.window->onCloseRequest();
+    } else if (!app.config.onCloseRequest) {
+        app.quit = true;
+    } else {
+        app.config.onCloseRequest();
+    }
+}
+
 void handleEvent(App& app, const platform::Event& e) {
     using platform::EventType;
     KompozHost& host = *app.host;
@@ -784,19 +797,17 @@ void handleEvent(App& app, const platform::Event& e) {
     switch (e.type) {
     // (AccentChanged, WallpaperChanged, AccessibilityRequest, Wake: the platform's own, Platform::handled.)
     case EventType::Quit:  // (a window of the app's: the app asked, Window's onCloseRequest)
-        if (app.window) {
-            if (app.window->onCloseRequest) app.window->onCloseRequest();
-        } else if (e.text == "signal" || !app.config.onCloseRequest) {
-            app.quit = true;  // (a signal ends it whatever the app's own close does)
-        } else {
-            app.config.onCloseRequest();  // (the app may hide its window, or exitApplication)
-        }
+        if (e.text == "signal" && !app.window) app.quit = true;  // (a signal ends it whatever the app's own close does)
+        else closeRequested(app);
         break;
     case EventType::FocusGained:
     case EventType::FocusLost:
         app.focused = e.type == EventType::FocusGained;
         host.setWindowFocused(app.focused);
         updateLifecycle(app);
+        // A popup goes as the user turns elsewhere (a click outside it). Not in its first moments: the
+        // click on the tray icon that opened it may still be taking the focus back to the panel.
+        if (app.config.popup && !app.focused && app.now() - app.openedAt >= 300'000'000ull) closeRequested(app);
         break;
     case EventType::Minimized:
     case EventType::Maximized:
@@ -936,8 +947,12 @@ void handleEvent(App& app, const platform::Event& e) {
     case EventType::KeyDown:
     case EventType::KeyUp:
         if (e.key == Key::Unknown && e.nativeKeyCode == 0) break;
-        if (e.type == EventType::KeyDown) host.keyDown(e.key, e.modifiers, e.nativeKeyCode);
-        else host.keyUp(e.key, e.modifiers, e.nativeKeyCode);
+        if (e.type == EventType::KeyDown) {
+            // Escape a popup's content left unused (no menu or field of its own took it) closes it.
+            if (!host.keyDown(e.key, e.modifiers, e.nativeKeyCode) && e.key == Key::Escape && app.config.popup) closeRequested(app);
+        } else {
+            host.keyUp(e.key, e.modifiers, e.nativeKeyCode);
+        }
         break;
     default: break;
     }
@@ -966,6 +981,7 @@ bool startGpu(App& app, gpu::Backend backend) {
         return false;
     }
     app.windowOpen = true;
+    app.openedAt = app.now();
     // The compiled pipelines beside the downloaded images, a file for each backend and build of the
     // shaders; another's goes (a driver keeps what it was given: an older build's pipelines would
     // stay in it, read at every start, the file growing with each update).
@@ -1019,6 +1035,7 @@ bool AppCore::start(int argc, char** argv) {
             (void)w->contentChanges.get();
             w->content();
         };
+        app.config.popup = w->popup;
         app.applied = {w->title, size, false, 0};
     } else {
         static App* logged = nullptr;  // (the GPU layer's messages into the platform's log)

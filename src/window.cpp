@@ -31,7 +31,7 @@ WindowState detail::rememberWindowState(Size size, bool isMinimized, CallSite si
 }
 
 void detail::Window(std::function<void()> onCloseRequest, std::optional<WindowState> state, bool visible, std::string title,
-                    const Content& content, CallSite site) {
+                    const Content& content, std::optional<WindowPopup> popup, CallSite site) {
     KompozableScope scope(site);
     static std::atomic<uint64_t> next{1};
     auto& request = remember([] {
@@ -48,6 +48,7 @@ void detail::Window(std::function<void()> onCloseRequest, std::optional<WindowSt
     request->visible = visible;
     request->state = state.value_or(own);
     request->onCloseRequest = std::move(onCloseRequest);
+    request->popup = std::move(popup);
     KompozitionLocalContext locals = currentKompozitionLocalContext();
     request->content = [locals, content] { KompozitionLocalProvider(locals, content); };
     SideEffect([request, changed, &host] {

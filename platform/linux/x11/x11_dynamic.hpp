@@ -20,7 +20,7 @@ namespace kompoz::platform::x11 {
     X(XDestroyWindow)                                                                                                 \
     X(XMapWindow) X(XChangeProperty) X(XDeleteProperty) X(XGetWindowProperty) X(XFree) X(XSetWMProtocols)             \
     X(XAllocSizeHints) X(XSetWMNormalHints) X(XAllocClassHint) X(XSetClassHint) X(XPending) X(XNextEvent)             \
-    X(XFilterEvent) X(XFlush) X(XSendEvent) X(XResizeWindow) X(XMapRaised) X(XUnmapWindow) X(XIconifyWindow) X(XTranslateCoordinates) X(XDefineCursor)                \
+    X(XFilterEvent) X(XFlush) X(XSendEvent) X(XResizeWindow) X(XMoveWindow) X(XMapRaised) X(XUnmapWindow) X(XIconifyWindow) X(XTranslateCoordinates) X(XDefineCursor)                \
     X(XCreateFontCursor) X(XFreeCursor) X(XSetSelectionOwner) X(XGetSelectionOwner) X(XConvertSelection)              \
     X(XCheckTypedWindowEvent) X(XLookupKeysym) X(Xutf8LookupString) X(XOpenIM) X(XCloseIM) X(XCreateIC)               \
     X(XDestroyIC) X(XSetICFocus) X(XUnsetICFocus) X(XSetICValues) X(XSetIMValues) X(XVaCreateNestedList)              \
@@ -78,6 +78,7 @@ bool load();
 #define XFlush KOMPOZ_X11_RENAME(XFlush)
 #define XSendEvent KOMPOZ_X11_RENAME(XSendEvent)
 #define XResizeWindow KOMPOZ_X11_RENAME(XResizeWindow)
+#define XMoveWindow KOMPOZ_X11_RENAME(XMoveWindow)
 #define XMapRaised KOMPOZ_X11_RENAME(XMapRaised)
 #define XUnmapWindow KOMPOZ_X11_RENAME(XUnmapWindow)
 #define XIconifyWindow KOMPOZ_X11_RENAME(XIconifyWindow)

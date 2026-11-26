@@ -226,6 +226,23 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 Windows uses its notification area; Linux uses the StatusNotifierItem host (for example KDE Plasma or a GNOME AppIndicator extension). `isTraySupported()` allows a close button to exit normally where no tray is available. The tray API does not create a phone background service; an Android app must manage that with Android's service lifecycle.
 
+### A panel at the tray icon
+
+`onAction` can also take the point where the icon was clicked (`{ at -> … }`, an `IntOffset?` in screen coordinates; `null` where the host doesn't say). A `Window` given `popup = WindowPopup(anchor = at)` opens there as the icon's panel, like the panels' own applets: no title bar, above other windows, next to the panel, and its `onCloseRequest` is called when it loses the keyboard focus (a click elsewhere) or when Escape is not used by its content:
+
+```kotlin
+var popup by remember { mutableStateOf<WindowPopup?>(null) }
+Tray(icon = icon, tooltip = "My app", onAction = { at -> popup = WindowPopup(anchor = at) })
+popup?.let { p ->
+    Window(onCloseRequest = { popup = null }, popup = p,
+           state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
+        Panel()
+    }
+}
+```
+
+On Wayland the panel is a wlr-layer-shell surface (KDE Plasma, Sway, Hyprland), placed at the anchor's output edge nearer to it; where the compositor has no layer-shell (GNOME) it is a plain window. On X11 it is an undecorated window kept on top and out of the taskbar, and on Windows a `WS_POPUP` tool window, both placed inside the work area at the anchor. Elsewhere it is a normal window. The panel is read once, when the window opens.
+
 ## Packaging
 
 ```bash

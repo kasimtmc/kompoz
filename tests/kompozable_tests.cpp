@@ -3109,6 +3109,35 @@ TEST(drawing_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("sürüklendi").exists());
 }
 
+// A tray icon's panel as the guide writes it: Tray's onAction taking the point clicked ({ at -> … }), a
+// Window opened there with popup = WindowPopup(anchor = at), closed by its onCloseRequest.
+@Kompozable
+fun TrayPanel() {
+    var popup by remember { mutableStateOf<WindowPopup?>(null) }
+    Tray(tooltip = "Uygulamam", onAction = { at -> popup = WindowPopup(anchor = at) })
+    popup?.let { p ->
+        Window(onCloseRequest = { popup = null }, popup = p, state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
+            Text("panel")
+        }
+    }
+}
+
+TEST(tray_panel_as_the_guide_writes_it) {
+    KompozTestRule rule([] { TrayPanel(); });
+    KompozHost& host = rule.host();
+    CHECK(host.trayRequests().size() == 1 && host.windowRequests().empty());
+    if (host.trayRequests().size() != 1) return;
+    host.trayRequests()[0]->onAction(IntOffset{1800, 1060});
+    rule.waitForIdle();
+    CHECK(host.windowRequests().size() == 1);
+    if (host.windowRequests().size() != 1) return;
+    auto request = host.windowRequests()[0];
+    CHECK(request->popup && request->popup->anchor == (IntOffset{1800, 1060}) && request->state.size() == DpSize(380, 560));
+    request->onCloseRequest();
+    rule.waitForIdle();
+    CHECK(host.windowRequests().empty());
+}
+
 // Input forms as Compose writes them: ContextMenuArea(items = { listOf(ContextMenuItem("…") { }) }) { }, TooltipArea(tooltip = { },
 // delayMillis =, tooltipPlacement =) { }, Modifier.onClick(matcher =, keyboardModifiers = { }) { }, an event's changes.first(),
 // transformable(state, canPan = { }), clickable(interactionSource = null, indication = null) { }, Popup(popupPositionProvider =

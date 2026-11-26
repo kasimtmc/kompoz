@@ -40,7 +40,7 @@ bool sameItems(const std::vector<MenuBarItem>& a, const std::vector<MenuBarItem>
 }
 } // namespace
 
-void detail::Tray(ImageBitmap icon, std::string tooltip, std::function<void()> onAction,
+void detail::Tray(ImageBitmap icon, std::string tooltip, std::function<void(std::optional<IntOffset>)> onAction,
                   const std::function<void(MenuScope&)>& menu, CallSite site) {
     KompozableScope scope(site);
     static std::atomic<uint64_t> next{1};

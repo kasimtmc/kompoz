@@ -152,7 +152,9 @@ struct Win32Tray::State {
             if (s.uid != uid) continue;
             auto request = s.request;  // (its callbacks may take the icon away)
             if (event == WM_LBUTTONUP || event == NIN_SELECT || event == NIN_KEYSELECT) {
-                if (request->onAction) request->onAction();
+                // Where: version 4 gives the click's (the icon's for the keyboard's) screen point in wParam.
+                IntOffset at{short(LOWORD(w)), short(HIWORD(w))};
+                if (request->onAction) request->onAction(at);
             } else if (event == WM_CONTEXTMENU || event == WM_RBUTTONUP) {
                 showMenu(request);
             }

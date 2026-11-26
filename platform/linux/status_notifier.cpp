@@ -47,10 +47,13 @@ struct Icon {
     uint32_t revision = 1;
 };
 
-// An action the user took, for the platform's thread: the request's id and the item (0: the icon).
+// An action the user took, for the platform's thread: the request's id and the item (0: the icon),
+// and for the icon's, where the host said it was clicked (screen coordinates; none: (0, 0), as
+// hosts that don't know send).
 struct Action {
     uint64_t request = 0;
     int item = 0;
+    std::optional<IntOffset> at;
 };
 
 std::vector<uint8_t> argbOf(const ImageBitmap& image) {
@@ -288,10 +291,10 @@ struct StatusNotifier::State {
         if (!it.children.empty()) entry("children-display", "s", [](Writer& x) { x.str("submenu"); });
     }
 
-    void push(uint64_t request, int item) {
+    void push(uint64_t request, int item, std::optional<IntOffset> at = std::nullopt) {
         // handle() already holds mutex while dispatching the DBus method call.
         // Locking it again here would deadlock every tray activation and menu click.
-        actions.push_back({request, item});
+        actions.push_back({request, item, at});
         if (wakePlatform) wakePlatform();
     }
 
@@ -366,8 +369,13 @@ struct StatusNotifier::State {
         }
         if (item && interface == kItem) {
             // Activate (a click), SecondaryActivate (a middle click): the request's onAction. Scroll and
-            // ContextMenu (the host shows the menu itself from Menu) do nothing here.
-            if (member == "Activate" || member == "SecondaryActivate") push(icon.id, 0);
+            // ContextMenu (the host shows the menu itself from Menu) do nothing here. Its x, y: where
+            // the host has the icon (KDE's), a popup's anchor.
+            if (member == "Activate" || member == "SecondaryActivate") {
+                Reader r(d, m);
+                int x = r.i32(), y = r.i32();
+                push(icon.id, 0, x || y ? std::optional(IntOffset{x, y}) : std::nullopt);
+            }
             return reply(m);
         }
         if (menu && interface == kMenu) {
@@ -566,7 +574,7 @@ void StatusNotifier::takeActions() {
         for (const auto& r : s.requests) {
             if (r->id != a.request) continue;
             if (a.item == 0) {
-                if (r->onAction) r->onAction();
+                if (r->onAction) r->onAction(a.at);
             } else {
                 int counter = 0;
                 if (const MenuBarItem* item = itemAt(r->menu, counter, a.item); item && item->enabled && item->onClick) item->onClick();

@@ -226,6 +226,23 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 Windows bildirim alanını, Linux ise StatusNotifierItem sunucusunu kullanır (örneğin KDE Plasma veya GNOME AppIndicator eklentisi). Tepsi bulunmadığında `isTraySupported()` ile kapatma düğmesi uygulamadan çıkabilir. Tepsi API'si telefonda arka plan servisi oluşturmaz; Android uygulaması bunu servis yaşam döngüsüyle yönetir.
 
+### Tepsi simgesinde panel
+
+`onAction`, simgeye tıklanan noktayı da alabilir (`{ at -> … }`, ekran koordinatlarında bir `IntOffset?`; sunucu bildirmezse `null`). `popup = WindowPopup(anchor = at)` verilen bir `Window`, panellerin kendi uygulamacıkları gibi orada simgenin paneli olarak açılır: başlık çubuğu yoktur, diğer pencerelerin üstünde ve panelin yanında durur; klavye odağını kaybettiğinde (başka yere tıklanınca) ya da içeriği Escape'i kullanmadığında `onCloseRequest` çağrılır:
+
+```kotlin
+var popup by remember { mutableStateOf<WindowPopup?>(null) }
+Tray(icon = icon, tooltip = "Uygulamam", onAction = { at -> popup = WindowPopup(anchor = at) })
+popup?.let { p ->
+    Window(onCloseRequest = { popup = null }, popup = p,
+           state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
+        Panel()
+    }
+}
+```
+
+Wayland'de panel bir wlr-layer-shell yüzeyidir (KDE Plasma, Sway, Hyprland) ve noktanın bulunduğu ekranın yakın kenarına yerleşir; bileşicide layer-shell yoksa (GNOME) sıradan bir penceredir. X11'de çerçevesiz, hep üstte duran ve görev çubuğunda görünmeyen bir pencere, Windows'ta ise bir `WS_POPUP` araç penceresidir; ikisi de çalışma alanı içinde noktaya yerleşir. Diğer platformlarda normal bir penceredir. Panel bilgisi pencere açılırken bir kez okunur.
+
 ## Paketleme
 
 ```bash

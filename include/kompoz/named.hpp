@@ -547,6 +547,7 @@ struct OnCheckedChange {};
 struct OnDismissRequest {};
 struct OnCloseRequest {};
 struct OnAction {};
+struct Popup {};
 struct IsMinimized {};
 struct OnExpandedChange {};
 struct OnValueChange {};
@@ -1088,6 +1089,8 @@ inline constexpr Param<detail::names::Small> small;
 inline constexpr Param<detail::names::Medium> medium;
 inline constexpr Param<detail::names::Large> large;
 inline constexpr Param<detail::names::ExtraLarge> extraLarge;
+// (Window's: a tray icon's panel; a word too common to be a name of all of kompoz's)
+inline constexpr Param<detail::names::Popup> popup;
 // Members' (Modifier's, Color's, InfiniteTransition's): words too common to be names of all of kompoz's (end, x, width).
 inline constexpr Param<detail::names::Start> start;
 inline constexpr Param<detail::names::Top> top;

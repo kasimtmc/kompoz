@@ -520,14 +520,20 @@ public:
             return false;
         };
         title_ = app.title;
-        hwnd_ = CreateWindowExW(0, kClassName, wide(title_).c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 100, 100, nullptr, nullptr,
-                                GetModuleHandleW(nullptr), this);
+        popup_ = app.popup;
+        // A popup (Application::popup): no frame, above the other windows, out of the taskbar; made at
+        // its anchor, so that its DPI is that monitor's.
+        DWORD style = popup_ ? WS_POPUP : WS_OVERLAPPEDWINDOW, exStyle = popup_ ? WS_EX_TOOLWINDOW | WS_EX_TOPMOST : 0;
+        int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
+        if (popup_) x = popup_->anchor ? popup_->anchor->x : 0, y = popup_->anchor ? popup_->anchor->y : 0;
+        hwnd_ = CreateWindowExW(exStyle, kClassName, wide(title_).c_str(), style, x, y, 100, 100, nullptr, nullptr, GetModuleHandleW(nullptr), this);
         if (!hwnd_) return failed("the window couldn't be made");
         // The app's size in dp at its monitor's DPI, the frame around it.
         dpi_ = GetDpiForWindow(hwnd_);
         RECT r{0, 0, LONG(std::lround(app.width * scale())), LONG(std::lround(app.height * scale()))};
-        AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_);
+        AdjustWindowRectExForDpi(&r, style, FALSE, exStyle, dpi_);
         SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        placePopup();
         clientSize();
         dark_ = darkMode();
         darkTitleBar();
@@ -570,8 +576,25 @@ public:
         default: return failed(std::string("no ") + gpu::backendName(backend) + " here");
         }
         ShowWindow(hwnd_, SW_SHOWNORMAL);
+        if (popup_) SetForegroundWindow(hwnd_);  // (the keyboard's: it closes as it loses it)
         events_.push_back({.type = EventType::Shown});
         return true;
+    }
+
+    // A popup at its anchor's monitor's top or bottom (whichever the anchor is nearer: where the
+    // taskbar is) inside its work area, along it at the anchor.
+    void placePopup() {
+        if (!hwnd_ || !popup_ || !popup_->anchor) return;
+        POINT at{popup_->anchor->x, popup_->anchor->y};
+        MONITORINFO monitor{.cbSize = sizeof(MONITORINFO)};
+        RECT window;
+        if (!GetMonitorInfoW(MonitorFromPoint(at, MONITOR_DEFAULTTONEAREST), &monitor) || !GetWindowRect(hwnd_, &window)) return;
+        const RECT& work = monitor.rcWork;
+        int w = window.right - window.left, h = window.bottom - window.top;
+        int x = std::clamp(int(at.x) - w / 2, int(work.left), std::max(int(work.left), int(work.right) - w));
+        bool top = at.y - monitor.rcMonitor.top < (monitor.rcMonitor.bottom - monitor.rcMonitor.top) / 2;
+        int y = top ? int(work.top) : std::max(int(work.top), int(work.bottom) - h);
+        SetWindowPos(hwnd_, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     // Hidden (off the screen and the taskbar), the window and the GPU's hold on it kept; shown again
@@ -632,8 +655,9 @@ public:
     void setWindowSize(int width, int height) override {
         if (!hwnd_) return;
         RECT r{0, 0, width, height};
-        AdjustWindowRectExForDpi(&r, DWORD(GetWindowLongPtrW(hwnd_, GWL_STYLE)), FALSE, 0, dpi_);
+        AdjustWindowRectExForDpi(&r, DWORD(GetWindowLongPtrW(hwnd_, GWL_STYLE)), FALSE, DWORD(GetWindowLongPtrW(hwnd_, GWL_EXSTYLE)), dpi_);
         SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        placePopup();  // (a bottom one grows upwards)
     }
     void setTitle(const std::string& title) override {
         title_ = title;
@@ -780,6 +804,7 @@ private:
 
     AppCore* core_ = nullptr;
     bool secondary_ = false;  // a window of the app's own (Window)
+    std::optional<WindowPopup> popup_;  // the window a popup (Application::popup)
     std::deque<Event> events_;
     HANDLE wakeEvent_ = nullptr, timer_ = nullptr;
     bool quit_ = false, busy_ = false, needFrame_ = true, waitingForDue_ = false, inModalLoop_ = false, stepping_ = false;

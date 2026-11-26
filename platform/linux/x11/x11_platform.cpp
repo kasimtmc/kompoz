@@ -48,13 +48,15 @@ struct Atoms {
     Atom WM_PROTOCOLS, WM_DELETE_WINDOW, _NET_WM_PING, _NET_WM_NAME, _NET_WM_PID, _NET_WM_WINDOW_TYPE, _NET_WM_WINDOW_TYPE_NORMAL,
         UTF8_STRING, CLIPBOARD, TARGETS, INCR, TEXT, RESOURCE_MANAGER, KOMPOZ_SELECTION,
         XdndAware, XdndEnter, XdndPosition, XdndStatus, XdndLeave, XdndDrop, XdndFinished, XdndSelection, XdndTypeList, XdndActionCopy,
-        _NET_ACTIVE_WINDOW;
+        _NET_ACTIVE_WINDOW, _NET_WM_WINDOW_TYPE_UTILITY, _NET_WM_STATE, _NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR,
+        _NET_WM_STATE_SKIP_PAGER, _MOTIF_WM_HINTS, _NET_WORKAREA;
 };
 constexpr const char* kAtomNames[] = {
     "WM_PROTOCOLS", "WM_DELETE_WINDOW", "_NET_WM_PING", "_NET_WM_NAME", "_NET_WM_PID", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
     "UTF8_STRING", "CLIPBOARD", "TARGETS", "INCR", "TEXT", "RESOURCE_MANAGER",
     "KOMPOZ_SELECTION", "XdndAware", "XdndEnter", "XdndPosition", "XdndStatus", "XdndLeave", "XdndDrop", "XdndFinished", "XdndSelection",
-    "XdndTypeList", "XdndActionCopy", "_NET_ACTIVE_WINDOW"};
+    "XdndTypeList", "XdndActionCopy", "_NET_ACTIVE_WINDOW", "_NET_WM_WINDOW_TYPE_UTILITY", "_NET_WM_STATE", "_NET_WM_STATE_ABOVE",
+    "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER", "_MOTIF_WM_HINTS", "_NET_WORKAREA"};
 static_assert(sizeof(Atoms) == sizeof(kAtomNames) / sizeof(*kAtomNames) * sizeof(Atom));
 
 // A scroll valuator of a device (XInput 2's smooth scrolling): its axis, how much is a notch, and
@@ -217,7 +219,8 @@ public:
         Atom protocols[] = {atoms_.WM_DELETE_WINDOW, atoms_._NET_WM_PING};
         XSetWMProtocols(display_, window_, protocols, 2);
         XChangeProperty(display_, window_, atoms_._NET_WM_WINDOW_TYPE, XA_ATOM, 32, PropModeReplace,
-                        reinterpret_cast<unsigned char*>(&atoms_._NET_WM_WINDOW_TYPE_NORMAL), 1);
+                        reinterpret_cast<unsigned char*>(app.popup ? &atoms_._NET_WM_WINDOW_TYPE_UTILITY : &atoms_._NET_WM_WINDOW_TYPE_NORMAL), 1);
+        if (app.popup) makePopup(*app.popup);
         long xdndVersion = 5;
         XChangeProperty(display_, window_, atoms_.XdndAware, XA_ATOM, 32, PropModeReplace, reinterpret_cast<unsigned char*>(&xdndVersion), 1);
         // The pointer, touch and pinches through XInput 2 (the keyboard's events are the core
@@ -236,6 +239,7 @@ public:
         showCursor();
         XMapWindow(display_, window_);
         XFlush(display_);
+        if (app.popup) raise();  // (the keyboard's: it closes as it loses it)
         events_.push_back({.type = EventType::Shown});
         surface.drawableSize = [this](int* w, int* h) { *w = width_, *h = height_; };
         switch (backend) {
@@ -622,6 +626,47 @@ private:
         }
         XRRFreeScreenResources(resources);
         return best > 0 ? best : 60;
+    }
+
+    // A popup (Application::popup): undecorated (Motif's hints), above the other windows and out of
+    // the taskbar and the pager, at the anchor's monitor's top or bottom (whichever the anchor is
+    // nearer: where the panel is) inside its work area, along it at the anchor; the window manager
+    // told the position is the user's own.
+    void makePopup(const WindowPopup& popup) {
+        long motif[5] = {2, 0, 0, 0, 0};  // (flags: decorations given; decorations: none)
+        XChangeProperty(display_, window_, atoms_._MOTIF_WM_HINTS, atoms_._MOTIF_WM_HINTS, 32, PropModeReplace, reinterpret_cast<unsigned char*>(motif), 5);
+        Atom states[] = {atoms_._NET_WM_STATE_ABOVE, atoms_._NET_WM_STATE_SKIP_TASKBAR, atoms_._NET_WM_STATE_SKIP_PAGER};
+        XChangeProperty(display_, window_, atoms_._NET_WM_STATE, XA_ATOM, 32, PropModeReplace, reinterpret_cast<unsigned char*>(states), 3);
+        if (!popup.anchor) return;
+        IntOffset at = *popup.anchor;
+        Screen* screen = ScreenOfDisplay(display_, screen_);
+        int mx = 0, my = 0, mw = WidthOfScreen(screen), mh = HeightOfScreen(screen);  // the monitor's
+        if (x11::fn.xrandr && rrEvent_ >= 0)
+            if (XRRScreenResources* resources = XRRGetScreenResourcesCurrent(display_, root_)) {
+                for (int i = 0; i < resources->ncrtc; ++i) {
+                    XRRCrtcInfo* crtc = XRRGetCrtcInfo(display_, resources, resources->crtcs[i]);
+                    if (!crtc) continue;
+                    if (crtc->mode != None && at.x >= crtc->x && at.y >= crtc->y && at.x < crtc->x + int(crtc->width) && at.y < crtc->y + int(crtc->height))
+                        mx = crtc->x, my = crtc->y, mw = int(crtc->width), mh = int(crtc->height);
+                    XRRFreeCrtcInfo(crtc);
+                }
+                XRRFreeScreenResources(resources);
+            }
+        int top = my, bottom = my + mh;  // (the work area's, where the window manager says: the panels left out)
+        if (auto area = property(root_, atoms_._NET_WORKAREA); area && area->size() >= 4 * sizeof(long)) {
+            const long* a = reinterpret_cast<const long*>(area->data());
+            top = std::max(top, int(a[1])), bottom = std::min(bottom, int(a[1] + a[3]));
+            if (bottom - top < height_) top = my, bottom = my + mh;
+        }
+        x_ = std::clamp(at.x - width_ / 2, mx, std::max(mx, mx + mw - width_));
+        y_ = at.y - my < mh / 2 ? top : std::max(top, bottom - height_);
+        XMoveWindow(display_, window_, x_, y_);
+        if (XSizeHints* hints = XAllocSizeHints()) {
+            hints->flags = USPosition | PPosition;
+            hints->x = x_, hints->y = y_;
+            XSetWMNormalHints(display_, window_, hints);
+            XFree(hints);
+        }
     }
 
     // ---- Input ----------------------------------------------------------------------------

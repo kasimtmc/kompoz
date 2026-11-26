@@ -9942,7 +9942,7 @@ TEST(tray_asks_for_an_icon_and_keeps_its_menu_up_to_date) {
     if (host.trayRequests().size() != 1) return;
     auto request = host.trayRequests()[0];
     CHECK(request->tooltip == "AirLink" && request->menu.size() == 3 && request->menu[1].separator);
-    request->onAction();
+    request->onAction(std::nullopt);
     request->menu[0].onClick();
     CHECK(actions == 1 && opened == 1);
     uint64_t version = request->version;
@@ -9959,6 +9959,34 @@ TEST(tray_asks_for_an_icon_and_keeps_its_menu_up_to_date) {
     shown.set(false);
     rule.waitForIdle();
     CHECK(host.trayRequests().empty());
+}
+
+// Tray's onAction taking where the icon was clicked (the old one taking nothing still called), and a
+// Window opened there as a popup: its WindowPopup carried in its request, for the platform to place it.
+TEST(tray_click_point_opens_a_popup_window) {
+    auto popup = mutableStateOf(std::optional<WindowPopup>());
+    int plain = 0;
+    KompozTestRule rule([&] {
+        Tray(kompoz::tooltip = "AirLink", kompoz::onAction = [&](std::optional<IntOffset> at) { popup.set(WindowPopup{.anchor = at}); });
+        Tray(kompoz::tooltip = "Öteki", kompoz::onAction = [&] { ++plain; });
+        if (auto p = popup.get())
+            Window(onCloseRequest = [&] { popup.set(std::nullopt); }, arg::popup = *p,
+                   kompoz::state = rememberWindowState(arg::size = DpSize(380, 560)), [] { Text("panel"); });
+    });
+    KompozHost& host = rule.host();
+    CHECK(host.trayRequests().size() == 2 && host.windowRequests().empty());
+    if (host.trayRequests().size() != 2) return;
+    host.trayRequests()[1]->onAction(IntOffset{5, 5});
+    CHECK(plain == 1);
+    host.trayRequests()[0]->onAction(IntOffset{1800, 1060});
+    rule.waitForIdle();
+    CHECK(host.windowRequests().size() == 1);
+    if (host.windowRequests().size() != 1) return;
+    auto request = host.windowRequests()[0];
+    CHECK(request->popup && request->popup->anchor == (IntOffset{1800, 1060}) && request->state.size() == DpSize(380, 560));
+    request->onCloseRequest();  // (its focus lost, Escape)
+    rule.waitForIdle();
+    CHECK(host.windowRequests().empty());
 }
 
 TEST(dialog_draws_on_top_takes_input_and_dismisses) {

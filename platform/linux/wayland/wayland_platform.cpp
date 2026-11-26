@@ -19,6 +19,10 @@
 #include "generated/wayland-client-protocol.h"
 #include "generated/xdg-decoration-unstable-v1-client-protocol.h"
 #include "generated/xdg-shell-client-protocol.h"
+#define namespace name_space  // (an argument's name in the protocol, a keyword in C++)
+#include "generated/wlr-layer-shell-unstable-v1-client-protocol.h"
+#undef namespace
+#include "generated/xdg-output-unstable-v1-client-protocol.h"
 
 #ifdef KOMPOZ_GPU_VULKAN
 #define VK_USE_PLATFORM_WAYLAND_KHR 1
@@ -52,13 +56,22 @@
 namespace kompoz::platform {
 namespace {
 
-// A display output: its scale and refresh rate, and whether the window is on it.
+// A display output: its scale and refresh rate, and whether the window is on it; where it is in the
+// compositor's space, in logical pixels (xdg-output's, else wl_output's position and its mode over
+// its scale), for a popup placed at a point.
 struct Output {
     wl_output* output = nullptr;
     uint32_t name = 0;
     int32_t scale = 1;
     int32_t refreshMhz = 0;
     bool entered = false;
+    zxdg_output_v1* xdgOutput = nullptr;
+    int x = 0, y = 0, modeWidth = 0, modeHeight = 0;           // wl_output's
+    int logicalX = 0, logicalY = 0, logicalWidth = 0, logicalHeight = 0;  // xdg-output's (0 wide: none told)
+    void logical(int* ox, int* oy, int* w, int* h) const {
+        if (logicalWidth > 0 && logicalHeight > 0) *ox = logicalX, *oy = logicalY, *w = logicalWidth, *h = logicalHeight;
+        else *ox = x, *oy = y, *w = modeWidth / std::max(1, scale), *h = modeHeight / std::max(1, scale);
+    }
 };
 
 class WaylandPlatform;
@@ -79,7 +92,8 @@ public:
         destroy(textInput_), destroy(pinch_), destroy(cursorDevice_), destroy(dataDevice_), destroy(selectionOffer_), destroy(dragOffer_);
         destroy(source_), destroy(gestures_);
         destroy(pointer_), destroy(keyboard_), destroy(touch_), destroy(seat_);
-        for (Output& o : outputs_) destroy(o.output);
+        for (Output& o : outputs_) destroy(o.xdgOutput), destroy(o.output);
+        destroy(layerShell_), destroy(xdgOutputs_);
         destroy(compositor_), destroy(wmBase_), destroy(decorations_), destroy(fractionalManager_), destroy(viewporter_);
         destroy(shm_), destroy(subcompositor_);
         destroy(cursorShapes_), destroy(textInputs_), destroy(dataDevices_), destroy(idleInhibits_), destroy(activation_), destroy(registry_);
@@ -193,7 +207,12 @@ public:
             wp_fractional_scale_v1_add_listener(fractional_, &kFractional, this);
             viewport_ = wp_viewporter_get_viewport(viewporter_, surface_);
         }
-        if (!makeToplevel()) return failed("the compositor didn't configure the window");
+        popup_ = app.popup;
+        if (popup_ && layerShell_) {
+            if (!makeLayerSurface()) return failed("the compositor didn't configure the popup");
+        } else if (!makeToplevel()) {
+            return failed("the compositor didn't configure the window");
+        }
         applySize();
         updateEdges();
         surface.drawableSize = [this](int* w, int* h) { *w = pixelWidth(), *h = pixelHeight(); };
@@ -232,19 +251,68 @@ public:
         xdg_toplevel_set_title(toplevel_, title_.c_str());
         xdg_toplevel_set_app_id(toplevel_, "dev.kompoz.app");
         // The compositor's decorations where it has them (unless KOMPOZ_DECORATIONS=kompoz), else
-        // Kompoz's own: as the decoration's configure says.
+        // Kompoz's own: as the decoration's configure says. A popup without layer-shell: none at all.
         if (decorations_) {
             decoration_ = zxdg_decoration_manager_v1_get_toplevel_decoration(decorations_, toplevel_);
             zxdg_toplevel_decoration_v1_add_listener(decoration_, &kDecoration, this);
-            bool own = option("KOMPOZ_DECORATIONS") == "kompoz";
+            bool own = popup_ || option("KOMPOZ_DECORATIONS") == "kompoz";
             zxdg_toplevel_decoration_v1_set_mode(decoration_, own ? ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE : ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
         } else {
-            ownDecorations_ = true;
+            ownDecorations_ = !popup_;
         }
         wl_surface_commit(surface_);
         while (!configured_)  // (the first configure, acknowledged before anything is drawn)
             if (wl_display_roundtrip(display_) < 0) return false;
         return true;
+    }
+
+    // A popup's role (Application::popup): a layer surface above the windows, on the output its
+    // anchor is on, at that output's top or bottom edge (whichever the anchor is nearer: where the
+    // panel is), the compositor keeping it off the panel's exclusive zone, and along the edge at the
+    // anchor, kept on the output. The keyboard's on demand: the compositor takes it away as the user
+    // clicks elsewhere (FocusLost, the app core closes it).
+    bool makeLayerSurface() {
+        wl_display_roundtrip(display_);  // (the outputs' xdg-output geometry)
+        const Output* on = nullptr;
+        if (popup_->anchor)
+            for (const Output& o : outputs_) {
+                int x, y, w, h;
+                o.logical(&x, &y, &w, &h);
+                if (popup_->anchor->x >= x && popup_->anchor->x < x + w && popup_->anchor->y >= y && popup_->anchor->y < y + h) on = &o;
+            }
+        layerOutput_ = on ? on->name : 0;
+        layerSurface_ = zwlr_layer_shell_v1_get_layer_surface(layerShell_, surface_, on ? on->output : nullptr, ZWLR_LAYER_SHELL_V1_LAYER_TOP,
+                                                              "kompoz-popup");
+        zwlr_layer_surface_v1_add_listener(layerSurface_, &kLayerSurface, this);
+        zwlr_layer_surface_v1_set_exclusive_zone(layerSurface_, 0);
+        // (before version 4 only "all the keyboard's" or none: all of it, Escape closing it then)
+        zwlr_layer_surface_v1_set_keyboard_interactivity(
+            layerSurface_, zwlr_layer_surface_v1_get_version(layerSurface_) >= 4 ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND : 1);
+        placeLayerSurface();
+        wl_surface_commit(surface_);
+        while (!configured_)
+            if (!layerSurface_ || wl_display_roundtrip(display_) < 0) return false;
+        return true;
+    }
+    // Its size and place for the size it has now (none anchored: the compositor centers it).
+    void placeLayerSurface() {
+        if (!layerSurface_) return;
+        zwlr_layer_surface_v1_set_size(layerSurface_, uint32_t(width_), uint32_t(height_));
+        const Output* on = nullptr;
+        for (const Output& o : outputs_)
+            if (o.name == layerOutput_ && layerOutput_) on = &o;
+        if (!on || !popup_->anchor) {
+            zwlr_layer_surface_v1_set_anchor(layerSurface_, 0);
+            return;
+        }
+        int x, y, w, h;
+        on->logical(&x, &y, &w, &h);
+        IntOffset at = *popup_->anchor;
+        bool top = at.y - y < h / 2;
+        int left = std::clamp(at.x - x - width_ / 2, 0, std::max(0, w - width_));
+        zwlr_layer_surface_v1_set_anchor(layerSurface_, ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+                                                            (top ? ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP : ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM));
+        zwlr_layer_surface_v1_set_margin(layerSurface_, 0, 0, 0, left);
     }
 
     // Wayland hides a window by taking its role away (its buffer let go with it: the surface shows
@@ -298,6 +366,7 @@ public:
         }
         for (ShmBuffer& b : shmBuffers_) wl_buffer_destroy(b.buffer);
         shmBuffers_.clear();
+        if (layerSurface_) zwlr_layer_surface_v1_destroy(std::exchange(layerSurface_, nullptr));
         destroy(frameCallback_), destroy(inhibitor_), destroy(decoration_), destroy(viewport_), destroy(fractional_), destroy(toplevel_), destroy(xdgSurface_);
         destroy(surface_);
         configured_ = false, awaitingCallback_ = false;
@@ -327,6 +396,7 @@ public:
     void pixelSize(int* width, int* height) const override { *width = pixelWidth(), *height = pixelHeight(); }
     void setWindowSize(int width, int height) override {
         width_ = width, height_ = height;
+        placeLayerSurface();
         applySize();
         updateEdges();
         events_.push_back({.type = EventType::Resized});
@@ -452,6 +522,11 @@ private:
     wl_data_device_manager* dataDevices_ = nullptr;
     zwp_idle_inhibit_manager_v1* idleInhibits_ = nullptr;
     xdg_activation_v1* activation_ = nullptr;
+    zwlr_layer_shell_v1* layerShell_ = nullptr;
+    zxdg_output_manager_v1* xdgOutputs_ = nullptr;
+    zwlr_layer_surface_v1* layerSurface_ = nullptr;  // a popup's role, instead of an xdg_toplevel
+    uint32_t layerOutput_ = 0;                       // the output it is on (its global's name; 0: the compositor's choice)
+    std::optional<WindowPopup> popup_;               // the window a popup (Application::popup)
     bool secondary_ = false;    // a window of the app's own (Window)
     bool needFrame_ = true;     // something to show (a frame on the next callback)
     int64_t lastInputAt_ = -1;  // when the user last pressed a key, a button or the screen in it (raise's)
@@ -1036,6 +1111,8 @@ private:
     static const wp_fractional_scale_v1_listener kFractional;
     static const xdg_surface_listener kXdgSurface;
     static const xdg_toplevel_listener kToplevel;
+    static const zwlr_layer_surface_v1_listener kLayerSurface;
+    static const zxdg_output_v1_listener kXdgOutput;
     static const zxdg_toplevel_decoration_v1_listener kDecoration;
     static const wl_buffer_listener kBuffer;
     static const wl_callback_listener kFrameCallback;
@@ -1056,11 +1133,14 @@ const xdg_wm_base_listener WaylandPlatform::kWmBase = {
 };
 
 const wl_output_listener WaylandPlatform::kOutput = {
-    .geometry = [](void*, wl_output*, int32_t, int32_t, int32_t, int32_t, int32_t, const char*, const char*, int32_t) {},
-    .mode = [](void* data, wl_output* output, uint32_t flags, int32_t, int32_t, int32_t refresh) {
+    .geometry = [](void* data, wl_output* output, int32_t x, int32_t y, int32_t, int32_t, int32_t, const char*, const char*, int32_t) {
+        for (Output& o : self(data).outputs_)
+            if (o.output == output) o.x = x, o.y = y;
+    },
+    .mode = [](void* data, wl_output* output, uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
         if (!(flags & WL_OUTPUT_MODE_CURRENT)) return;
         for (Output& o : self(data).outputs_)
-            if (o.output == output) o.refreshMhz = refresh;
+            if (o.output == output) o.refreshMhz = refresh, o.modeWidth = width, o.modeHeight = height;
     },
     .done = [](void*, wl_output*) {},
     .scale = [](void* data, wl_output* output, int32_t scale) {
@@ -1130,6 +1210,44 @@ const xdg_surface_listener WaylandPlatform::kXdgSurface = {
     },
 };
 
+const zwlr_layer_surface_v1_listener WaylandPlatform::kLayerSurface = {
+    .configure = [](void* data, zwlr_layer_surface_v1* surface, uint32_t serial, uint32_t width, uint32_t height) {
+        WaylandPlatform& p = self(data);
+        zwlr_layer_surface_v1_ack_configure(surface, serial);
+        bool resized = width > 0 && height > 0 && (int(width) != p.width_ || int(height) != p.height_);
+        if (resized) p.width_ = int(width), p.height_ = int(height);
+        if (resized && p.configured_) {
+            p.applySize();
+            p.events_.push_back({.type = EventType::Resized});
+        }
+        if (!p.configured_) {
+            p.configured_ = true;
+            p.events_.push_back({.type = EventType::Shown});
+            p.events_.push_back({.type = EventType::Resized});
+        }
+    },
+    // (its output gone: as the user closing it)
+    .closed = [](void* data, zwlr_layer_surface_v1* surface) {
+        WaylandPlatform& p = self(data);
+        if (surface == p.layerSurface_) zwlr_layer_surface_v1_destroy(std::exchange(p.layerSurface_, nullptr));
+        p.events_.push_back({.type = EventType::Quit});
+    },
+};
+
+const zxdg_output_v1_listener WaylandPlatform::kXdgOutput = {
+    .logical_position = [](void* data, zxdg_output_v1* output, int32_t x, int32_t y) {
+        for (Output& o : self(data).outputs_)
+            if (o.xdgOutput == output) o.logicalX = x, o.logicalY = y;
+    },
+    .logical_size = [](void* data, zxdg_output_v1* output, int32_t width, int32_t height) {
+        for (Output& o : self(data).outputs_)
+            if (o.xdgOutput == output) o.logicalWidth = width, o.logicalHeight = height;
+    },
+    .done = [](void*, zxdg_output_v1*) {},
+    .name = [](void*, zxdg_output_v1*, const char*) {},
+    .description = [](void*, zxdg_output_v1*, const char*) {},
+};
+
 const xdg_toplevel_listener WaylandPlatform::kToplevel = {
     .configure = [](void* data, xdg_toplevel*, int32_t width, int32_t height, wl_array* states) {
         WaylandPlatform& p = self(data);
@@ -1166,7 +1284,7 @@ const xdg_toplevel_listener WaylandPlatform::kToplevel = {
 const zxdg_toplevel_decoration_v1_listener WaylandPlatform::kDecoration = {
     .configure = [](void* data, zxdg_toplevel_decoration_v1*, uint32_t mode) {
         WaylandPlatform& p = self(data);
-        bool own = mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+        bool own = mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE && !p.popup_;
         if (own == p.ownDecorations_) return;
         p.ownDecorations_ = own;
         if (!p.configured_) return;
@@ -1563,6 +1681,10 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
             p.idleInhibits_ = bind<zwp_idle_inhibit_manager_v1>(registry, name, &zwp_idle_inhibit_manager_v1_interface, version, 1);
         else if (i == xdg_activation_v1_interface.name)
             p.activation_ = bind<xdg_activation_v1>(registry, name, &xdg_activation_v1_interface, version, 1);
+        else if (i == zwlr_layer_shell_v1_interface.name)
+            p.layerShell_ = bind<zwlr_layer_shell_v1>(registry, name, &zwlr_layer_shell_v1_interface, version, 4);
+        else if (i == zxdg_output_manager_v1_interface.name)
+            p.xdgOutputs_ = bind<zxdg_output_manager_v1>(registry, name, &zxdg_output_manager_v1_interface, version, 3);
         else if (i == wl_seat_interface.name && !p.seat_) {
             p.seat_ = bind<wl_seat>(registry, name, &wl_seat_interface, version, 8);
             wl_seat_add_listener(p.seat_, &kSeat, &p);
@@ -1572,11 +1694,18 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
             wl_output_add_listener(o.output, &kOutput, &p);
         }
         p.attachSeat();
+        if (p.xdgOutputs_)  // (each output's logical geometry, whichever global came first)
+            for (Output& o : p.outputs_)
+                if (!o.xdgOutput) {
+                    o.xdgOutput = zxdg_output_manager_v1_get_xdg_output(p.xdgOutputs_, o.output);
+                    zxdg_output_v1_add_listener(o.xdgOutput, &kXdgOutput, &p);
+                }
     },
     .global_remove = [](void* data, wl_registry*, uint32_t name) {
         WaylandPlatform& p = self(data);
         std::erase_if(p.outputs_, [name](Output& o) {
             if (o.name != name) return false;
+            if (o.xdgOutput) zxdg_output_v1_destroy(o.xdgOutput);
             wl_output_destroy(o.output);
             return true;
         });

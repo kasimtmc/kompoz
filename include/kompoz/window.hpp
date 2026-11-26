@@ -10,9 +10,20 @@
 //       MessagesScreen()
 //   }
 //
+// With popup = WindowPopup(anchor = at), a tray icon's panel (app.hpp's WindowPopup), as a click
+// on the icon gives `at` (Tray's onAction):
+//
+//   var popup by remember { mutableStateOf<WindowPopup?>(null) }
+//   Tray(icon = icon, onAction = { at -> popup = WindowPopup(anchor = at) })
+//   popup?.let { p ->
+//       Window(onCloseRequest = { popup = null }, popup = p,
+//              state = rememberWindowState(size = DpSize(380.dp, 560.dp))) { Panel() }
+//   }
+//
 // The app's window closing closes them all. On Android and the web, which give an app one window,
 // they aren't shown.
 
+#include "app.hpp"
 #include "graphics.hpp"
 #include "named.hpp"
 #include "runtime.hpp"
@@ -66,23 +77,25 @@ struct WindowRequest {
     std::string title;
     bool visible = true;
     WindowState state;
-    std::function<void()> onCloseRequest;  // the user closing it (its title bar's ×, Alt+F4)
+    std::function<void()> onCloseRequest;  // the user closing it (its title bar's ×, Alt+F4; a popup's focus lost, Escape)
+    std::optional<WindowPopup> popup;      // (read as it opens)
     Content content;                       // with the caller's composition locals provided
     MutableState<int> contentChanges = mutableStateOf(0);  // read by the window's composition: its content recomposed
 };
 
 // (state: none given, one remembered here)
 void Window(std::function<void()> onCloseRequest, std::optional<WindowState> state, bool visible, std::string title,
-            const Content& content, CallSite site = CallSite::current());
+            const Content& content, std::optional<WindowPopup> popup = std::nullopt, CallSite site = CallSite::current());
 struct WindowImpl {
-    using P = Params<names::OnCloseRequest, names::State, names::Visible, names::Title, Block>;
+    using P = Params<names::OnCloseRequest, names::State, names::Visible, names::Title, names::Popup, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
         std::function<void()> onCloseRequest = P::arg<names::OnCloseRequest>(args...);
         static_assert(P::blockGiven<A...>(), "kompoz: Window takes a block: its content");
         Window(std::move(onCloseRequest), P::get<names::State>(std::optional<WindowState>(), args...), P::get<names::Visible>(true, args...),
-               std::string(P::get<names::Title>(std::string("Untitled"), args...)), P::block(std::forward<A>(args)...), site);
+               std::string(P::get<names::Title>(std::string("Untitled"), args...)), P::block(std::forward<A>(args)...),
+               P::get<names::Popup>(std::optional<WindowPopup>(), args...), site);
     }
 };
 } // namespace detail
