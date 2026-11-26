@@ -65,18 +65,23 @@ jobs:
             cxx: clang++-19
             flags: -fsanitize=thread -fno-omit-frame-pointer
             examples: "OFF"
+            # The Vulkan validation layers synchronize their threads in code ThreadSanitizer doesn't see, and half of
+            # it through libstdc++'s: it reports their own locks as races, then fails a check of its own. What they
+            # validate the other two jobs do; here Vulkan runs without them.
+            vulkan_validation: "0"
             jobs: 4
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-      TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+      # (tests/tsan.supp: only reports with lavapipe's or LLVM's frames, which don't call back into Kompoz)
+      TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/tests/tsan.supp
     steps:
       - uses: actions/checkout@v4
       - name: Packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 clangd-19 dbus \
+          sudo apt-get install -y --no-install-recommends ninja-build g++-14 clang-19 lld-19 clangd-19 libclang-rt-19-dev dbus \
             libkf5syntaxhighlighting-tools libturbojpeg0-dev libwebp-dev libcurl4-openssl-dev libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers
           # The headers Kompoz's Wayland and X11 platforms are built with; Mesa's EGL and OpenGL ES (llvmpipe) for
           # the OpenGL ES tests.
@@ -118,7 +123,7 @@ jobs:
         working-directory: build
         env:
           KOMPOZ_GPU_REQUIRED: "1"
-          KOMPOZ_GPU_VALIDATION: "1"
+          KOMPOZ_GPU_VALIDATION: ${{ matrix.vulkan_validation || '1' }}
           ASAN_OPTIONS: detect_leaks=0
         run: |
           export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
