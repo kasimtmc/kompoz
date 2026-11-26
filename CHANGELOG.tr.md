@@ -1206,6 +1206,9 @@
   `Error`) ve `rememberNotification`. Linux'ta masaüstünün bildirimi (org.freedesktop.Notifications; türün simgesi
   freedesktop adıyla, yoksa tepsi simgesinin pikselleri), tepsi olmasa da; Windows'ta simgenin balonu (Windows 10'dan
   itibaren bir bildirim kartı). Tray'i oluşturulmadan gönderilen bildirim onu bekler.
+- **Panodaki parola**: `ClipMetadata.isSensitive`, Linux'ta bir parola yöneticisinin `x-kde-passwordManagerHint` ile
+  sunduğu pano içeriği için (KeePassXC, Klipper'ınki); böylece uygulama onu kaydettiklerinin ve ilettiklerinin dışında
+  tutar.
 - **Alan almayan yazılan metin**: bir tuşun yazdığı, `KeyDown`'ından sonra `text` ve `utf16CodePoint` taşıyan bir
   `KeyEventType.Unknown` tuş olayı olarak (Compose Desktop'un yazılan tuşları), içinde metin alanı olmayan odaklı bir
   düğüme gelir; her tuş olayında `nativeKeyCode` vardır. X11'de ve Wayland'de ölü tuşlar ve Compose tuşu masaüstünün

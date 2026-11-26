@@ -1168,6 +1168,8 @@
   `Error`) and `rememberNotification`. On Linux the desktop's notification (org.freedesktop.Notifications, a type's
   icon by its freedesktop name, else the tray icon's pixels), also with no tray; on Windows the icon's balloon (a toast
   from Windows 10 on). One sent before its Tray is composed waits for it.
+- **A password on the clipboard**: `ClipMetadata.isSensitive`, on Linux for a clip a password manager offers with
+  `x-kde-passwordManagerHint` (KeePassXC, Klipper's), so that an app keeps it out of what it records or sends on.
 - **Typed text where no field takes it**: what a key types comes, after its `KeyDown`, as a `KeyEventType.Unknown`
   key event (Compose Desktop's typed keys) with `text` and `utf16CodePoint`, to a focused node with no text field;
   every key event has `nativeKeyCode`. On X11 and Wayland dead keys and the Compose key compose through the
