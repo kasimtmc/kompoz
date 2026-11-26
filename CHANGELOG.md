@@ -1157,6 +1157,12 @@
   (xdg-activation brings one to the front with the token of the window last given input), X11, each on a display
   connection of its own (_NET_ACTIVE_WINDOW at the time of the last input), Windows and macOS, in one loop with
   the app's window (CI shoots one in a real window on both).
+- **Which GPU draws** (`Application`'s `gpuPriority`, `KOMPOZ_GPU_PRIORITY`): `GpuPriority::Auto`, `Integrated` or
+  `Discrete` (else the integrated one), as Compose Desktop's Skiko has it; Auto is the GPU the screen is on where Linux
+  tells (its firmware's VGA device), else the integrated one. On Linux, unless Discrete, an NVIDIA GPU the screen isn't
+  on (a laptop's Optimus GPU) has its Vulkan driver left unloaded (`VK_LOADER_DRIVERS_DISABLE=*nvidia*`, unless the
+  user chose the loader's drivers): loaded, it woke that GPU from its sleep as the app started, as each window closed
+  and as the app ended, some 2 s each, though the integrated GPU drew (an app's quit from its tray took 2 s).
 - **Typed text where no field takes it**: what a key types comes, after its `KeyDown`, as a `KeyEventType.Unknown`
   key event (Compose Desktop's typed keys) with `text` and `utf16CodePoint`, to a focused node with no text field;
   every key event has `nativeKeyCode`. On X11 and Wayland dead keys and the Compose key compose through the

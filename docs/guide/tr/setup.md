@@ -126,6 +126,7 @@ kompozc derlemeyi yapan makinede çalışır. Kompoz o makine için derlenirken 
 | `content` | Pencereyi dolduran composable. |
 | `fontPath`, `boldFontPath`, `mediumFontPath` | Gömülü fontlar yerine kullanılacak fontlar. |
 | `imageDiskCacheBytes` | `AsyncImage`'ın indirdiği resimlerin ne kadarının diskte tutulacağı (varsayılan 64 MB; 0 hiçbirini tutmaz). |
+| `gpuPriority` | İki GPU'lu bir bilgisayarda hangisinin çizeceği, Compose Desktop'un Skiko'sundaki gibi, masaüstünde: `GpuPriority::Auto` (varsayılan) Linux'un söyleyebildiği yerde ekranın bağlı olduğu GPU, yoksa tümleşik olan; `Integrated` tümleşik olan; `Discrete` harici olan, yoksa tümleşik olan. Linux'ta `Discrete` değilse, ekranın bağlı olmadığı bir NVIDIA GPU'sunun (dizüstündeki Optimus GPU'su) Vulkan sürücüsü yüklenmez: yüklenirse o GPU'yu uygulama açılırken ve kapanırken uykusundan uyandırır, her birinde 2 sn kadar. `KOMPOZ_GPU_PRIORITY` bunu geçersiz kılar ([Araçlar](tools.md) sayfasına bakın). |
 
 Masaüstünde komut satırı, uygulamanın açılışta açacağı bir derin bağlantı taşıyabilir, örneğin `./myapp kompoz://item/42` ([Gezinme](navigation.md) sayfasına bakın).
 

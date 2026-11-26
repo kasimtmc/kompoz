@@ -20,6 +20,15 @@ struct WindowPopup {
     bool operator==(const WindowPopup&) const = default;
 };
 
+// Which GPU draws, on a computer with two (a laptop's integrated one and a discrete one), as Compose
+// Desktop's Skiko has it (skiko.directx.gpu.priority). Auto: the one the screen is on where the
+// platform tells (Linux), else the integrated one; Integrated: the integrated one; Discrete: the
+// discrete one, else the integrated one. On Linux, unless Discrete, an NVIDIA GPU the screen isn't on
+// (Optimus) has its Vulkan driver left unloaded: loaded, it wakes the sleeping GPU as the app starts
+// and again as it ends (some 2 s each). KOMPOZ_GPU_PRIORITY=auto|integrated|discrete overrides it,
+// KOMPOZ_GPU_DEVICE=<part of a name> both. Desktops only.
+enum class GpuPriority { Auto, Integrated, Discrete };
+
 struct Application {
     std::string title = "Kompoz";
     int width = 480, height = 800;  // initial window size in dp (desktop only)
@@ -35,6 +44,7 @@ struct Application {
     std::function<void()> onCloseRequest;
     // The window opened as a popup (WindowPopup): Window's popup, for which the app core sets it.
     std::optional<WindowPopup> popup;
+    GpuPriority gpuPriority = GpuPriority::Auto;  // (GpuPriority)
 };
 
 // Implemented by the application. The platform backend owns the real entry point

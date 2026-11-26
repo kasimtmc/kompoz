@@ -21,6 +21,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <string_view>
@@ -63,6 +65,56 @@ struct Api {
     KOMPOZ_VK_DEVICE_FUNCTIONS(KOMPOZ_VK_MEMBER)
 #undef KOMPOZ_VK_MEMBER
 };
+
+#if defined(__linux__) && !defined(__ANDROID__)
+// The computer's GPUs as Linux has them (its PCI display devices): the vendor of the one the screen is
+// on (the firmware's VGA device; 0: none told), and whether an NVIDIA GPU with NVIDIA's own driver
+// is beside it, the screen not on it (a laptop's Optimus GPU, put to sleep while nothing uses it).
+struct PciGpus {
+    uint32_t screenVendor = 0;
+    bool nvidiaOffload = false;
+};
+
+PciGpus pciGpus() {
+    PciGpus gpus;
+    bool nvidia = false, nvidiaShows = false;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator("/sys/bus/pci/devices", ec)) {
+        auto read = [&](const char* name) {
+            std::string value;
+            std::ifstream(entry.path() / name) >> value;
+            return value;
+        };
+        if (!read("class").starts_with("0x03")) continue;  // (a display controller)
+        uint32_t vendor = uint32_t(std::strtoul(read("vendor").c_str(), nullptr, 16));
+        bool shows = read("boot_vga") == "1";
+        if (shows) gpus.screenVendor = vendor;
+        if (vendor == 0x10de && std::filesystem::read_symlink(entry.path() / "driver", ec).filename() == "nvidia") {
+            nvidia = true;
+            nvidiaShows |= shows;
+        }
+    }
+    gpus.nvidiaOffload = nvidia && !nvidiaShows && gpus.screenVendor != 0;
+    return gpus;
+}
+
+// Before the process's first instance: an Optimus GPU's driver left out of it unless it may draw
+// (Discrete, KOMPOZ_GPU_DEVICE) or the loader's drivers are the user's to choose. Loaded, NVIDIA's
+// wakes its sleeping GPU as the instance is made and again as it goes or the process ends (some 2 s
+// each), though the integrated GPU draws. Through the loader's own filter, set for the process (once,
+// before the loader reads it; its child processes have it too).
+void keepOffloadDriverOut() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        if (priority() == Priority::Discrete || std::getenv("KOMPOZ_GPU_DEVICE")) return;
+        for (const char* user : {"VK_LOADER_DRIVERS_SELECT", "VK_LOADER_DRIVERS_DISABLE", "VK_DRIVER_FILES", "VK_ICD_FILENAMES", "VK_ADD_DRIVER_FILES"})
+            if (std::getenv(user)) return;
+        if (!pciGpus().nvidiaOffload) return;
+        setenv("VK_LOADER_DRIVERS_DISABLE", "*nvidia*", 0);
+        log("kompoz: GPU: NVIDIA's Vulkan driver left unloaded: the screen is on the other GPU (KOMPOZ_GPU_PRIORITY=discrete to draw on it)");
+    });
+}
+#endif
 
 constexpr int kFramesInFlight = 2;
 constexpr uint32_t kTimestamps = 1024;  // a frame's timestamps at most (setGpuTiming): its passes' beyond go untimed
@@ -267,6 +319,9 @@ public:
             return false;
         };
         if (!s.vulkanGetInstanceProcAddr) return fail("no Vulkan loader");
+#if defined(__linux__) && !defined(__ANDROID__)
+        keepOffloadDriverOut();
+#endif
         drawableSize = s.drawableSize;
         vk.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(s.vulkanGetInstanceProcAddr);
         auto global = [&](const char* name) { return vk.vkGetInstanceProcAddr(VK_NULL_HANDLE, name); };
@@ -422,9 +477,15 @@ public:
     }
 
     // A GPU with a queue that draws (and presents to the surface, if there is one): the one
-    // KOMPOZ_GPU_DEVICE names part of, else an integrated one (it saves power), else a discrete
-    // one, else any.
+    // KOMPOZ_GPU_DEVICE names part of, else as the priority says (setPriority): Auto, the one the
+    // screen is on where Linux tells, else an integrated one (it saves power), else a discrete one;
+    // Discrete, a discrete one, else an integrated one; else any.
     bool pickPhysicalDevice() {
+        Priority asked = priority();
+        uint32_t screenVendor = 0;
+#if defined(__linux__) && !defined(__ANDROID__)
+        if (asked == Priority::Auto) screenVendor = pciGpus().screenVendor;
+#endif
         uint32_t count = 0;
         vk.vkEnumeratePhysicalDevices(instance, &count, nullptr);
         std::vector<VkPhysicalDevice> devices(count);
@@ -451,10 +512,13 @@ public:
                 VkBool32 present = surface ? VK_FALSE : VK_TRUE;
                 if (surface) vk.vkGetPhysicalDeviceSurfaceSupportKHR(d, q, surface, &present);
                 if (!(families[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) || !present) continue;
-                int rank = p.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? 3
-                           : p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 2
-                           : p.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU          ? 0
-                                                                                  : 1;
+                bool integrated = p.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+                bool discrete = p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+                int rank = integrated ? (asked == Priority::Discrete ? 3 : 4)
+                           : discrete ? (asked == Priority::Discrete ? 4 : 3)
+                           : p.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU ? 0
+                                                                         : 1;
+                if (screenVendor && p.vendorID == screenVendor && (integrated || discrete)) rank = 5;  // (Auto: the screen's)
                 if (wanted && std::string_view(p.deviceName).find(wanted) != std::string_view::npos) rank = 10;
                 if (rank > bestRank) {
                     bestRank = rank;

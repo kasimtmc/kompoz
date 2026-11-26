@@ -1045,6 +1045,18 @@ bool AppCore::start(int argc, char** argv) {
         if (auto preview = platform.option("KOMPOZ_PREVIEW")) kompoz::detail::showPreview(app.config, preview->c_str());  // a preview instead of the app
         app.appTitle = app.config.title;
         startImageDiskCache(app.config.title, app.config.imageDiskCacheBytes);
+        // Which GPU draws, for the app's windows all (Application's gpuPriority, KOMPOZ_GPU_PRIORITY's).
+        gpu::Priority priority = app.config.gpuPriority == kompoz::GpuPriority::Integrated ? gpu::Priority::Integrated
+                                 : app.config.gpuPriority == kompoz::GpuPriority::Discrete ? gpu::Priority::Discrete
+                                                                                           : gpu::Priority::Auto;
+        if (auto asked = platform.option("KOMPOZ_GPU_PRIORITY")) {
+            std::string word = asked->substr(0, asked->find_first_of(" \t\r\n"));
+            if (word == "auto") priority = gpu::Priority::Auto;
+            else if (word == "integrated") priority = gpu::Priority::Integrated;
+            else if (word == "discrete") priority = gpu::Priority::Discrete;
+            else app.logf("kompoz: KOMPOZ_GPU_PRIORITY=%s isn't auto, integrated or discrete", word.c_str());
+        }
+        gpu::setPriority(priority);
     }
     // On Android, where an app has no environment, each a file in its files (Platform::option):
     //   adb shell run-as <package> touch files/kompoz-profile

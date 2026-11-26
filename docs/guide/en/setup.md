@@ -126,6 +126,7 @@ kompozc runs on the machine that builds. Built for that machine, Kompoz builds i
 | `content` | The composable that fills the window. |
 | `fontPath`, `boldFontPath`, `mediumFontPath` | Fonts to use instead of the bundled ones. |
 | `imageDiskCacheBytes` | How much of the images `AsyncImage` downloads is kept on disk (64 MB by default; 0 keeps none). |
+| `gpuPriority` | Which GPU draws on a computer with two, as Compose Desktop's Skiko has it, on the desktop: `GpuPriority::Auto` (the default) the one the screen is on where Linux tells, else the integrated one; `Integrated` the integrated one; `Discrete` the discrete one, else the integrated one. On Linux, unless `Discrete`, an NVIDIA GPU the screen isn't on (a laptop's Optimus GPU) has its Vulkan driver left unloaded: loaded, it wakes that GPU from its sleep as the app starts and again as it ends, some 2 s each. `KOMPOZ_GPU_PRIORITY` overrides it (see [Tools](tools.md)). |
 
 On the desktop the command line can carry a deep link that the app opens with, such as `./myapp kompoz://item/42` (see [Navigation](navigation.md)).
 

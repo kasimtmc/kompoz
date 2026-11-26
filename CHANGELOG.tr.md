@@ -1194,6 +1194,13 @@
   birini kendi bağlantısında (xdg-activation birini, en son girdi alan pencerenin belirteciyle öne getirir), X11 her
   birini kendi ekran bağlantısında (_NET_ACTIVE_WINDOW, son girdinin zamanıyla), Windows ve macOS da uygulamanın
   penceresiyle bir döngüde (CI ikisinde de gerçek bir pencerede birinin görüntüsünü alır).
+- **Hangi GPU'nun çizeceği** (`Application`'ın `gpuPriority`'si, `KOMPOZ_GPU_PRIORITY`): `GpuPriority::Auto`,
+  `Integrated` ya da `Discrete` (yoksa tümleşik olan), Compose Desktop'un Skiko'sundaki gibi; Auto, Linux'un
+  söyleyebildiği yerde ekranın bağlı olduğu GPU (donanım yazılımının VGA aygıtı), yoksa tümleşik olan. Linux'ta Discrete
+  değilse, ekranın bağlı olmadığı bir NVIDIA GPU'sunun (dizüstündeki Optimus GPU'su) Vulkan sürücüsü yüklenmez
+  (`VK_LOADER_DRIVERS_DISABLE=*nvidia*`, kullanıcı yükleyicinin sürücülerini kendisi seçmediyse): yüklendiğinde, çizen
+  tümleşik GPU olsa da o GPU'yu uygulama açılırken, her pencere kapanırken ve uygulama biterken uykusundan
+  uyandırıyordu, her birinde 2 sn kadar (tepsiden çıkış 2 sn sürüyordu).
 - **Alan almayan yazılan metin**: bir tuşun yazdığı, `KeyDown`'ından sonra `text` ve `utf16CodePoint` taşıyan bir
   `KeyEventType.Unknown` tuş olayı olarak (Compose Desktop'un yazılan tuşları), içinde metin alanı olmayan odaklı bir
   düğüme gelir; her tuş olayında `nativeKeyCode` vardır. X11'de ve Wayland'de ölü tuşlar ve Compose tuşu masaüstünün

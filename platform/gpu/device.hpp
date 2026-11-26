@@ -170,6 +170,13 @@ struct Surface {
     std::string pipelineCache;
 };
 
+// Which GPU the devices made from here on draw on, where there are two (Application's gpuPriority):
+// Auto, the one the screen is on where it can be told (Linux), else as Integrated; Integrated, an
+// integrated one first; Discrete, a discrete one first.
+enum class Priority { Auto, Integrated, Discrete };
+void setPriority(Priority priority);
+Priority priority();
+
 // Where the hardware layer's messages go (stderr until the platform says).
 void setLogger(void (*logger)(const char* message));
 void log(const std::string& message);

@@ -2,6 +2,7 @@
 
 #include "device.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -20,6 +21,12 @@ void (*gLogger)(const char*) = nullptr;
 }
 
 void setLogger(void (*logger)(const char* message)) { gLogger = logger; }
+
+namespace {
+std::atomic<Priority> gPriority{Priority::Auto};
+}
+void setPriority(Priority priority) { gPriority = priority; }
+Priority priority() { return gPriority; }
 
 void log(const std::string& message) {
     if (gLogger)
