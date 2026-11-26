@@ -177,10 +177,19 @@ public:
             if (next.quit) return false;
             busy_ = next.busy;
             armTimer(next.busy ? -1 : next.wakeAt);
+        } else if (hidden_ && needFrame_) {
+            // The app's window hidden (setAppWindowVisible(false)): no frame callbacks come, yet its
+            // composition goes on (its Tray, its effects, the windows it opens: a tray popup); the
+            // core draws nothing for it. Busy, at a display's beat.
+            needFrame_ = false;
+            Next next = core.frame();
+            if (next.quit) return false;
+            busy_ = next.busy;
+            armTimer(next.busy ? monotonicNow() + 16'000'000 : next.wakeAt);
         }
         return true;
     }
-    bool frameDueNow() const { return needFrame_ && !awaitingCallback_ && configured_; }
+    bool frameDueNow() const { return needFrame_ && ((!awaitingCallback_ && configured_) || hidden_); }
 
     // ---- Platform ------------------------------------------------------------------------
 
@@ -339,8 +348,11 @@ public:
             configured_ = false, awaitingCallback_ = false;
             wl_display_flush(display_);
             events_.push_back({.type = EventType::Hidden});
+            hidden_ = true;
+            needFrame_ = true;
             return true;
         }
+        hidden_ = false;
         if (!makeToplevel()) return false;
         applySize();
         updateEdges();
@@ -628,6 +640,7 @@ private:
     std::vector<ClipFormat> oursAs_;  // and as each type it is offered as
 
     int wakeFd_ = -1, timerFd_ = -1, repeatFd_ = -1;
+    bool hidden_ = false;  // the app's window hidden by the app: composed without frame callbacks
     std::deque<Event> events_;
     bool quit_ = false, busy_ = false, awaitingCallback_ = false, callbackDone_ = false;
     AppCore* core_ = nullptr;
