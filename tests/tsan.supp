@@ -1,8 +1,11 @@
 # ThreadSanitizer: what isn't Kompoz's own code and isn't built with it.
 #
-# lavapipe (Mesa's Vulkan on the CPU) and the LLVM it compiles shaders with run threads of their own and synchronize
-# them in code ThreadSanitizer doesn't see; what they free, copy or lock through its interceptors is reported as
-# racing with their own threads. Neither calls back into Kompoz, so a report with their frames is theirs.
+# Mesa's drivers on the CPU (lavapipe for Vulkan, llvmpipe for OpenGL ES, in libgallium or a library of their own) and
+# the LLVM they compile shaders with run threads of their own and synchronize them in code ThreadSanitizer doesn't
+# see; what they free, copy or lock through its interceptors is reported as racing with their own threads. Without the
+# API's validation (CI's TSan job runs without it) none of them calls back into Kompoz, so a report with their frames
+# is theirs.
 race:libvulkan_lvp.so
+race:libgallium
 race:libLLVM
 deadlock:libLLVM
