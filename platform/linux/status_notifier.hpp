@@ -30,6 +30,9 @@ public:
     bool available() const;
     // What the user did since (an icon activated, a menu item clicked): run on the platform's thread.
     void takeActions();
+    // A notification of the desktop's (org.freedesktop.Notifications' Notify, from the bus's thread),
+    // sent by `app` for its icon `icon` (shown with it when the notification has no type).
+    void notify(const std::string& app, const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification);
 
 private:
     struct State;

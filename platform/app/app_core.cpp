@@ -757,9 +757,17 @@ void syncTray(App& app) {
     uint64_t key = 1469598103934665603ull;
     for (const auto& r : requests) key = (key ^ (r->id * 1000003ull + r->version)) * 1099511628211ull;
     if (requests.empty()) key = 0;
-    if (key == app.trayShown) return;
-    app.trayShown = key;
-    app.platform.syncTray(requests);
+    if (key != app.trayShown) {
+        app.trayShown = key;
+        app.platform.syncTray(requests);
+    }
+    // The notifications their states were sent since (TrayState::sendNotification), each shown once.
+    for (const auto& r : requests) {
+        if (!r->notifications || r->notifications->pending.empty()) continue;
+        std::vector<kompoz::Notification> sent;
+        sent.swap(r->notifications->pending);
+        for (const kompoz::Notification& n : sent) app.platform.trayNotification(*r, n);
+    }
 }
 
 // The user closing the window: a window of the app's its request's onCloseRequest; the app's its

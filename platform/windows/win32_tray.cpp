@@ -184,6 +184,25 @@ Win32Tray::~Win32Tray() {
     if (state_->window) DestroyWindow(state_->window);
 }
 
+void Win32Tray::notify(const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification) {
+    State& st = *state_;
+    for (const State::Shown& s : st.shown) {
+        if (s.request.get() != &icon || !s.added) continue;
+        NOTIFYICONDATAW n{};
+        n.cbSize = sizeof n, n.hWnd = st.window, n.uID = s.uid;
+        n.uFlags = NIF_INFO;
+        wcsncpy_s(n.szInfoTitle, wideOf(notification.title).substr(0, 63).c_str(), _TRUNCATE);
+        wcsncpy_s(n.szInfo, wideOf(notification.message).substr(0, 255).c_str(), _TRUNCATE);
+        using Type = kompoz::Notification::Type;
+        n.dwInfoFlags = notification.type == Type::Info      ? NIIF_INFO
+                        : notification.type == Type::Warning ? NIIF_WARNING
+                        : notification.type == Type::Error   ? NIIF_ERROR
+                                                             : NIIF_USER | NIIF_LARGE_ICON;
+        if (notification.type == Type::None) n.hBalloonIcon = s.icon;
+        Shell_NotifyIconW(NIM_MODIFY, &n);
+    }
+}
+
 void Win32Tray::sync(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests) {
     State& st = *state_;
     if (!st.window) return;

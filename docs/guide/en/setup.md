@@ -227,17 +227,37 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 Windows uses its notification area; Linux uses the StatusNotifierItem host (for example KDE Plasma or a GNOME AppIndicator extension). `isTraySupported()` allows a close button to exit normally where no tray is available. The tray API does not create a phone background service; an Android app must manage that with Android's service lifecycle.
 
+### Notifications
+
+As in Compose Desktop, a notification goes through a tray icon's state: `rememberTrayState()`, given to `Tray` as `state`, and its `sendNotification`:
+
+```kotlin
+@Kompozable
+fun Notifier(icon: ImageBitmap) {
+    val trayState = rememberTrayState()
+    Tray(icon = icon, state = trayState, tooltip = "My app")
+    Button(onClick = { trayState.sendNotification(Notification("My app", "3 files received", Notification.Type.Info)) }) {
+        Text("Notify")
+    }
+}
+```
+
+`Notification.Type` is `None`, `Info`, `Warning` or `Error`: the icon it is shown with (with `None` the tray icon's). On Linux it is the desktop's notification (`org.freedesktop.Notifications`: KDE's, GNOME's, mako, dunst), also where no tray shows the icon; on Windows the icon's notification in the notification area (a toast from Windows 10 on). Elsewhere nothing is shown. One sent before its `Tray` is composed waits for it.
+
 ### A panel at the tray icon
 
 `onAction` can also take the point where the icon was clicked (`{ at -> … }`, an `IntOffset?` in screen coordinates; `null` where the host doesn't say). A `Window` given `popup = WindowPopup(anchor = at)` opens there as the icon's panel, like the panels' own applets: no title bar, above other windows, next to the panel, and its `onCloseRequest` is called when it loses the keyboard focus (a click elsewhere) or when Escape is not used by its content:
 
 ```kotlin
-var popup by remember { mutableStateOf<WindowPopup?>(null) }
-Tray(icon = icon, tooltip = "My app", onAction = { at -> popup = WindowPopup(anchor = at) })
-popup?.let { p ->
-    Window(onCloseRequest = { popup = null }, popup = p,
-           state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
-        Panel()
+@Kompozable
+fun TrayPanel(icon: ImageBitmap) {
+    var popup by remember { mutableStateOf<WindowPopup?>(null) }
+    Tray(icon = icon, tooltip = "My app", onAction = { at -> popup = WindowPopup(anchor = at) })
+    popup?.let { p ->
+        Window(onCloseRequest = { popup = null }, popup = p,
+               state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
+            Text("panel")
+        }
     }
 }
 ```

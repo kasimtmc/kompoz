@@ -227,17 +227,37 @@ kompoz::Application kompoz::createApplication(int, char**) {
 
 Windows bildirim alanını, Linux ise StatusNotifierItem sunucusunu kullanır (örneğin KDE Plasma veya GNOME AppIndicator eklentisi). Tepsi bulunmadığında `isTraySupported()` ile kapatma düğmesi uygulamadan çıkabilir. Tepsi API'si telefonda arka plan servisi oluşturmaz; Android uygulaması bunu servis yaşam döngüsüyle yönetir.
 
+### Bildirimler
+
+Compose Desktop'taki gibi bildirim bir tepsi simgesinin durumuyla gönderilir: `rememberTrayState()`, `Tray`'e `state` olarak verilir ve `sendNotification` çağrılır:
+
+```kotlin
+@Kompozable
+fun Notifier(icon: ImageBitmap) {
+    val trayState = rememberTrayState()
+    Tray(icon = icon, state = trayState, tooltip = "Uygulamam")
+    Button(onClick = { trayState.sendNotification(Notification("Uygulamam", "3 dosya alındı", Notification.Type.Info)) }) {
+        Text("Bildir")
+    }
+}
+```
+
+`Notification.Type`, `None`, `Info`, `Warning` ya da `Error` olur: bildirimin gösterildiği simge (`None` ile tepsi simgesininki). Linux'ta masaüstünün bildirimidir (`org.freedesktop.Notifications`: KDE'ninki, GNOME'unki, mako, dunst), simgeyi gösteren bir tepsi olmasa da; Windows'ta bildirim alanındaki simgenin bildirimi (Windows 10'dan itibaren bir bildirim kartı). Başka yerde gösterilmez. `Tray`'i oluşturulmadan gönderilen bildirim onu bekler.
+
 ### Tepsi simgesinde panel
 
 `onAction`, simgeye tıklanan noktayı da alabilir (`{ at -> … }`, ekran koordinatlarında bir `IntOffset?`; sunucu bildirmezse `null`). `popup = WindowPopup(anchor = at)` verilen bir `Window`, panellerin kendi uygulamacıkları gibi orada simgenin paneli olarak açılır: başlık çubuğu yoktur, diğer pencerelerin üstünde ve panelin yanında durur; klavye odağını kaybettiğinde (başka yere tıklanınca) ya da içeriği Escape'i kullanmadığında `onCloseRequest` çağrılır:
 
 ```kotlin
-var popup by remember { mutableStateOf<WindowPopup?>(null) }
-Tray(icon = icon, tooltip = "Uygulamam", onAction = { at -> popup = WindowPopup(anchor = at) })
-popup?.let { p ->
-    Window(onCloseRequest = { popup = null }, popup = p,
-           state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
-        Panel()
+@Kompozable
+fun TrayPanel(icon: ImageBitmap) {
+    var popup by remember { mutableStateOf<WindowPopup?>(null) }
+    Tray(icon = icon, tooltip = "Uygulamam", onAction = { at -> popup = WindowPopup(anchor = at) })
+    popup?.let { p ->
+        Window(onCloseRequest = { popup = null }, popup = p,
+               state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
+            Text("panel")
+        }
     }
 }
 ```

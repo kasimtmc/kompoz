@@ -3109,6 +3109,32 @@ TEST(drawing_forms_as_compose_writes_them) {
     CHECK(rule.onNodeWithText("sürüklendi").exists());
 }
 
+// A notification as Compose Desktop sends one: rememberTrayState(), Tray(state = …), sendNotification(Notification(…, Type)).
+@Kompozable
+fun TrayNotifier() {
+    val trayState = rememberTrayState()
+    val connected = rememberNotification("AirLink", "Bağlandı")
+    Tray(state = trayState, tooltip = "AirLink")
+    Button(onClick = {
+        trayState.sendNotification(connected)
+        trayState.sendNotification(Notification("AirLink", "3 dosya alındı", Notification.Type.Info))
+    }) {
+        Text("bildir")
+    }
+}
+
+TEST(tray_notifications_as_compose_desktop_sends_them) {
+    KompozTestRule rule([] { TrayNotifier(); });
+    KompozHost& host = rule.host();
+    CHECK(host.trayRequests().size() == 1);
+    if (host.trayRequests().size() != 1 || !host.trayRequests()[0]->notifications) return;
+    rule.onNodeWithText("bildir").performClick();
+    rule.waitForIdle();
+    const auto& pending = host.trayRequests()[0]->notifications->pending;
+    CHECK(pending.size() == 2 && pending[0].message == "Bağlandı" && pending[0].type == Notification::Type::None &&
+          pending[1].type == Notification::Type::Info);
+}
+
 // A tray icon's panel as the guide writes it: Tray's onAction taking the point clicked ({ at -> … }), a
 // Window opened there with popup = WindowPopup(anchor = at), closed by its onCloseRequest.
 @Kompozable

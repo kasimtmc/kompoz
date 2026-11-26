@@ -9961,6 +9961,36 @@ TEST(tray_asks_for_an_icon_and_keeps_its_menu_up_to_date) {
     CHECK(host.trayRequests().empty());
 }
 
+// TrayState's notifications, as Compose Desktop's: one sent before its Tray is composed waits for it, those sent after
+// reach the Tray's request in order (the app core shows them after a frame they ask for); a Tray without a state has none.
+TEST(tray_state_sends_notifications_through_its_tray) {
+    auto shown = mutableStateOf(false);
+    std::optional<TrayState> state;
+    KompozTestRule rule([&] {
+        auto trayState = rememberTrayState();
+        state = trayState;  // (the same state each composition: remembered)
+        Tray(kompoz::tooltip = "Öteki");
+        if (shown.get()) Tray(kompoz::state = trayState, kompoz::tooltip = "AirLink");
+    });
+    KompozHost& host = rule.host();
+    CHECK(host.trayRequests().size() == 1 && !host.trayRequests()[0]->notifications);
+    state->sendNotification(Notification("AirLink", "Bağlandı"));
+    shown.set(true);
+    rule.waitForIdle();
+    CHECK(host.trayRequests().size() == 2);
+    if (host.trayRequests().size() != 2) return;
+    auto request = host.trayRequests()[1];
+    CHECK(request->notifications && request->notifications->pending.size() == 1 && request->notifications->wake);
+    if (!request->notifications) return;
+    state->sendNotification(Notification("AirLink", "3 dosya alındı", Notification::Type::Info));
+    const auto& pending = request->notifications->pending;
+    CHECK(pending.size() == 2 && pending[0] == Notification("AirLink", "Bağlandı") && pending[1].type == Notification::Type::Info &&
+          pending[1].message == "3 dosya alındı");
+    shown.set(false);
+    rule.waitForIdle();
+    CHECK(host.trayRequests().size() == 1 && !request->notifications->wake);
+}
+
 // Tray's onAction taking where the icon was clicked (the old one taking nothing still called), and a
 // Window opened there as a popup: its WindowPopup carried in its request, for the platform to place it.
 TEST(tray_click_point_opens_a_popup_window) {

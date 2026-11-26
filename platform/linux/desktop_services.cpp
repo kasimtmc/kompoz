@@ -101,6 +101,7 @@ DesktopServices::~DesktopServices() = default;
 
 void DesktopServices::start(const std::string& title, std::function<void()> wake) {
     wake_ = wake;
+    title_ = title;
     auto notifier = [wake](std::atomic<bool>& flag) {
         return Notifier{.notify = [wake, &flag] {
             flag = true;
@@ -191,6 +192,11 @@ bool DesktopServices::syncTray(const std::vector<std::shared_ptr<kompoz::detail:
     if (!tray_) tray_ = std::make_unique<StatusNotifier>(wake_);
     tray_->sync(requests);
     return true;
+}
+
+void DesktopServices::trayNotification(const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification) {
+    if (!tray_) tray_ = std::make_unique<StatusNotifier>(wake_);
+    tray_->notify(title_, icon, notification);
 }
 
 bool DesktopServices::traySupported() const {

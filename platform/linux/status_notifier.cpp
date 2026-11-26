@@ -112,6 +112,13 @@ struct StatusNotifier::State {
     bool changed = false;              // icons to (re)register or signal
     std::vector<uint64_t> registered;  // the bus's thread's: the icons the watcher was told of
     std::vector<Action> actions;
+    struct Sent {  // a notification to send, as the bus's thread sends it
+        std::string app, title, message;
+        kompoz::Notification::Type type;
+        int width = 0, height = 0;
+        std::vector<uint8_t> rgba;  // its icon's, for one without a type
+    };
+    std::vector<Sent> notifications;
     // The requests themselves (the platform's thread's only): their callbacks.
     std::vector<std::shared_ptr<kompoz::detail::TrayRequest>> requests;
 
@@ -208,6 +215,57 @@ struct StatusNotifier::State {
             });
         }
         d.connection_flush(bus);
+    }
+
+    // The notifications sent since: Notify(app_name, replaces_id, app_icon, summary, body, actions,
+    // hints, expire_timeout), a type's icon by its freedesktop name, else the tray icon's pixels
+    // (image-data: iiibiiay), the server's own timeout.
+    void sendNotifications() {
+        std::vector<Sent> sent;
+        {
+            std::lock_guard lock(mutex);
+            sent.swap(notifications);
+        }
+        for (const Sent& n : sent) {
+            Message* m = d.message_new_method_call("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+                                                   "org.freedesktop.Notifications", "Notify");
+            if (!m) continue;
+            using Type = kompoz::Notification::Type;
+            const char* iconName = n.type == Type::Info      ? "dialog-information"
+                                   : n.type == Type::Warning ? "dialog-warning"
+                                   : n.type == Type::Error   ? "dialog-error"
+                                                             : "";
+            Writer w(d, m);
+            w.str(n.app);
+            w.u32(0);
+            w.str(iconName);
+            w.str(n.title);
+            w.str(n.message);
+            w.open(kTypeArray, "s", [](Writer&) {});
+            w.open(kTypeArray, "{sv}", [&](Writer& hints) {
+                if (n.rgba.empty() || *iconName) return;
+                hints.open(kTypeDictEntry, nullptr, [&](Writer& e) {
+                    e.str("image-data");
+                    e.open(kTypeVariant, "(iiibiiay)", [&](Writer& v) {
+                        v.open(kTypeStruct, nullptr, [&](Writer& s) {
+                            s.i32(n.width);
+                            s.i32(n.height);
+                            s.i32(n.width * 4);
+                            s.boolean(true);
+                            s.i32(8);
+                            s.i32(4);
+                            s.open(kTypeArray, "y", [&](Writer& bytes) {
+                                for (uint8_t b : n.rgba) bytes.basic(kTypeByte, &b);
+                            });
+                        });
+                    });
+                });
+            });
+            w.i32(-1);
+            d.connection_send(bus, m, nullptr);
+            d.message_unref(m);
+        }
+        if (!sent.empty()) d.connection_flush(bus);
     }
 
     // ---- StatusNotifierItem's properties ----
@@ -502,6 +560,7 @@ struct StatusNotifier::State {
         watcher = watcherThere();
         while (running.load()) {
             publish();
+            sendNotifications();
             if (!d.connection_read_write(bus, 0)) break;  // the bus went away
             while (Message* m = d.connection_pop_message(bus)) {
                 if (d.message_get_type(m) == kMessageMethodCall) handle(m);
@@ -559,6 +618,21 @@ void StatusNotifier::sync(const std::vector<std::shared_ptr<kompoz::detail::Tray
         }
         s.icons = std::move(icons);
         s.changed = true;
+    }
+    s.wake();
+}
+
+void StatusNotifier::notify(const std::string& app, const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification) {
+    State& s = *state_;
+    if (!s.thread.joinable()) return;
+    State::Sent sent{.app = app, .title = notification.title, .message = notification.message, .type = notification.type};
+    if (notification.type == kompoz::Notification::Type::None && !icon.icon.empty() && icon.icon.pixels()) {
+        sent.width = icon.icon.width(), sent.height = icon.icon.height();
+        sent.rgba.assign(icon.icon.pixels(), icon.icon.pixels() + size_t(sent.width) * size_t(sent.height) * 4);
+    }
+    {
+        std::lock_guard lock(s.mutex);
+        s.notifications.push_back(std::move(sent));
     }
     s.wake();
 }

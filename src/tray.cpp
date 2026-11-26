@@ -40,8 +40,14 @@ bool sameItems(const std::vector<MenuBarItem>& a, const std::vector<MenuBarItem>
 }
 } // namespace
 
+Notification rememberNotification(std::string title, std::string message, Notification::Type type, CallSite site) {
+    return remember([&] { return Notification(std::move(title), std::move(message), type); }, site);
+}
+
+TrayState rememberTrayState(CallSite site) { return remember([] { return TrayState(); }, site); }
+
 void detail::Tray(ImageBitmap icon, std::string tooltip, std::function<void(std::optional<IntOffset>)> onAction,
-                  const std::function<void(MenuScope&)>& menu, CallSite site) {
+                  const std::function<void(MenuScope&)>& menu, std::optional<TrayState> state, CallSite site) {
     KompozableScope scope(site);
     static std::atomic<uint64_t> next{1};
     auto& request = remember([] {
@@ -60,14 +66,27 @@ void detail::Tray(ImageBitmap icon, std::string tooltip, std::function<void(std:
     request->tooltip = std::move(tooltip);
     request->onAction = std::move(onAction);
     request->menu = std::move(built);
-    SideEffect([request, changed, &host] {
+    // Its state's notifications, shown by the app core after the frame its sendNotification asks for.
+    auto notifications = state ? state->notifications() : nullptr;
+    SideEffect([request, changed, notifications, &host] {
+        if (request->notifications != notifications) {
+            if (request->notifications) request->notifications->wake = nullptr;
+            request->notifications = notifications;
+            if (notifications) {
+                notifications->wake = [&host] { host.requestRedraw(); };
+                if (!notifications->pending.empty()) host.requestRedraw();  // (sent before it was composed)
+            }
+        }
         if (!changed) return;
         ++request->version;
         host.requestRedraw();
     });
     DisposableEffect(0, [request, &host]() -> std::function<void()> {
         host.addTrayRequest(request);
-        return [request, &host] { host.removeTrayRequest(request.get()); };
+        return [request, &host] {
+            if (request->notifications) request->notifications->wake = nullptr;
+            host.removeTrayRequest(request.get());
+        };
     });
 }
 

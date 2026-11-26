@@ -293,6 +293,9 @@ public:
         return !secondary_ && desktop_.syncTray(requests);
     }
     bool traySupported() const override { return !secondary_ && desktop_.traySupported(); }
+    void trayNotification(const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification) override {
+        if (!secondary_) desktop_.trayNotification(icon, notification);
+    }
 
     void closeWindow() override {
         egl_.close();

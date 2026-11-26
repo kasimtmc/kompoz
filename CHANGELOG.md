@@ -1163,6 +1163,11 @@
   on (a laptop's Optimus GPU) has its Vulkan driver left unloaded (`VK_LOADER_DRIVERS_DISABLE=*nvidia*`, unless the
   user chose the loader's drivers): loaded, it woke that GPU from its sleep as the app started, as each window closed
   and as the app ended, some 2 s each, though the integrated GPU drew (an app's quit from its tray took 2 s).
+- **Notifications** as Compose Desktop sends them: `rememberTrayState()`, `Tray(state = …)`,
+  `trayState.sendNotification(Notification(title, message, Notification.Type.Info))` (`None`, `Info`, `Warning`,
+  `Error`) and `rememberNotification`. On Linux the desktop's notification (org.freedesktop.Notifications, a type's
+  icon by its freedesktop name, else the tray icon's pixels), also with no tray; on Windows the icon's balloon (a toast
+  from Windows 10 on). One sent before its Tray is composed waits for it.
 - **Typed text where no field takes it**: what a key types comes, after its `KeyDown`, as a `KeyEventType.Unknown`
   key event (Compose Desktop's typed keys) with `text` and `utf16CodePoint`, to a focused node with no text field;
   every key event has `nativeKeyCode`. On X11 and Wayland dead keys and the Compose key compose through the

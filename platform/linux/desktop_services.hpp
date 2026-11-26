@@ -65,6 +65,8 @@ public:
     // first, their clicks run in takeNotifications.
     bool syncTray(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests);
     bool traySupported() const;
+    // A notification sent through a tray icon's state (TrayState), as the desktop's (StatusNotifier::notify).
+    void trayNotification(const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification);
     // Their threads ended, before the loop they wake goes.
     void stop();
     // The screen saver held off (org.freedesktop.ScreenSaver's Inhibit, for as long as the
@@ -80,6 +82,7 @@ private:
     std::unique_ptr<AtspiBridge> a11y_;
     std::unique_ptr<StatusNotifier> tray_;
     std::function<void()> wake_;
+    std::string title_;  // the app's (its notifications' sender)
     bool focused_ = false, semanticsDirty_ = true;
     void* screenSaverBus_ = nullptr;  // the D-Bus connection holding the screen saver off
     int64_t lastSemantics_ = 0;

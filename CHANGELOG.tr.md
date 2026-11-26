@@ -1201,6 +1201,11 @@
   (`VK_LOADER_DRIVERS_DISABLE=*nvidia*`, kullanıcı yükleyicinin sürücülerini kendisi seçmediyse): yüklendiğinde, çizen
   tümleşik GPU olsa da o GPU'yu uygulama açılırken, her pencere kapanırken ve uygulama biterken uykusundan
   uyandırıyordu, her birinde 2 sn kadar (tepsiden çıkış 2 sn sürüyordu).
+- Compose Desktop'un gönderdiği gibi **bildirimler**: `rememberTrayState()`, `Tray(state = …)`,
+  `trayState.sendNotification(Notification(başlık, metin, Notification.Type.Info))` (`None`, `Info`, `Warning`,
+  `Error`) ve `rememberNotification`. Linux'ta masaüstünün bildirimi (org.freedesktop.Notifications; türün simgesi
+  freedesktop adıyla, yoksa tepsi simgesinin pikselleri), tepsi olmasa da; Windows'ta simgenin balonu (Windows 10'dan
+  itibaren bir bildirim kartı). Tray'i oluşturulmadan gönderilen bildirim onu bekler.
 - **Alan almayan yazılan metin**: bir tuşun yazdığı, `KeyDown`'ından sonra `text` ve `utf16CodePoint` taşıyan bir
   `KeyEventType.Unknown` tuş olayı olarak (Compose Desktop'un yazılan tuşları), içinde metin alanı olmayan odaklı bir
   düğüme gelir; her tuş olayında `nativeKeyCode` vardır. X11'de ve Wayland'de ölü tuşlar ve Compose tuşu masaüstünün

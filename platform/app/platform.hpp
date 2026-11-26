@@ -90,6 +90,12 @@ public:
         return false;
     }
     virtual bool traySupported() const { return false; }
+    // A notification sent through a tray icon's state (TrayState::sendNotification), shown by the
+    // desktop (Linux's notification server, Windows' notification area) for that icon. Where there is
+    // none, nothing.
+    virtual void trayNotification(const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification) {
+        (void)icon, (void)notification;
+    }
     // What Kompoz's title bar asks (Metrics::titleBar); (x, y): where, in points.
     virtual void windowAction(WindowAction action, float x, float y) { (void)action, (void)x, (void)y; }
     // The pointer and the keyboard; with `probe` (after the first frame: what tells may take a

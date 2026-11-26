@@ -19,6 +19,16 @@
 //   var popupAt by remember { mutableStateOf<WindowPopup?>(null) }
 //   Tray(icon = icon, onAction = { at -> popupAt = WindowPopup(anchor = at) })
 //
+// A notification of the desktop's, as Compose Desktop sends one through its tray icon's state:
+//
+//   val trayState = rememberTrayState()
+//   Tray(icon = icon, state = trayState, tooltip = "AirLink")
+//   Button(onClick = { trayState.sendNotification(Notification("AirLink", "3 dosya alındı", Notification.Type.Info)) }) { … }
+//
+// Shown by a Tray composed with that state (one sent before it is composed waits for it): on Linux
+// the desktop's notifications (org.freedesktop.Notifications: KDE's, GNOME's, mako, dunst; there
+// with no tray too), on Windows the icon's notification (a toast from Windows 10 on). Elsewhere none.
+//
 // With Application's onCloseRequest the app's window can be hidden instead of the app ending, and
 // shown again from here (setAppWindowVisible). Linux: a StatusNotifierItem (KDE; GNOME with the
 // AppIndicator extension), its menu over com.canonical.dbusmenu; Windows: Shell_NotifyIcon. Elsewhere
@@ -39,6 +49,47 @@
 
 namespace kompoz {
 
+// A desktop notification (Compose Desktop's): its title, its text, and its kind (the icon it shows
+// on Windows and Linux: none, information, a warning, an error; with None the tray icon's on Linux).
+struct Notification {
+    enum class Type { None, Info, Warning, Error };
+    std::string title;
+    std::string message;
+    Type type = Type::None;
+    Notification(std::string title, std::string message, Type type = Type::None)
+        : title(std::move(title)), message(std::move(message)), type(type) {}
+    bool operator==(const Notification&) const = default;
+};
+// (as Compose Desktop's: the notification made once where it is called)
+Notification rememberNotification(std::string title, std::string message, Notification::Type type = Notification::Type::None,
+                                  CallSite site = CallSite::current());
+
+namespace detail {
+// The notifications a TrayState was sent, waiting for the Tray composed with it (its app core shows
+// them, on its thread) and what wakes that app's loop for them.
+struct TrayNotifications {
+    std::vector<Notification> pending;
+    std::function<void()> wake;
+};
+} // namespace detail
+
+// A tray icon's state (Compose Desktop's TrayState), for its notifications: sendNotification shows
+// one through the Tray composed with it. From the composition's thread (its callbacks, effects).
+class TrayState {
+public:
+    TrayState() : notifications_(std::make_shared<detail::TrayNotifications>()) {}
+    void sendNotification(const Notification& notification) const {
+        notifications_->pending.push_back(notification);
+        if (notifications_->wake) notifications_->wake();
+    }
+    const std::shared_ptr<detail::TrayNotifications>& notifications() const { return notifications_; }
+    bool operator==(const TrayState& other) const { return notifications_ == other.notifications_; }
+
+private:
+    std::shared_ptr<detail::TrayNotifications> notifications_;
+};
+TrayState rememberTrayState(CallSite site = CallSite::current());
+
 namespace detail {
 // The tray icon the composition asks for: what the platform shows (KompozHost::trayRequests).
 struct TrayRequest {
@@ -48,10 +99,12 @@ struct TrayRequest {
     std::function<void(std::optional<IntOffset>)> onAction;  // (where the icon was clicked, if the platform knows)
     std::vector<MenuBarItem> menu;
     uint64_t version = 0;  // bumped as any of them changes
+    std::shared_ptr<TrayNotifications> notifications;  // its state's (none: no state given)
 };
 
 void Tray(ImageBitmap icon, std::string tooltip, std::function<void(std::optional<IntOffset>)> onAction,
-          const std::function<void(MenuScope&)>& menu, CallSite site = CallSite::current());
+          const std::function<void(MenuScope&)>& menu, std::optional<TrayState> state = std::nullopt,
+          CallSite site = CallSite::current());
 // onAction as a request keeps it: one taking the point given it, one taking nothing called without it.
 template <class F>
 std::function<void(std::optional<IntOffset>)> trayAction(F&& f) {
@@ -66,7 +119,7 @@ std::function<void(std::optional<IntOffset>)> trayAction(F&& f) {
     }
 }
 struct TrayImpl {
-    using P = Params<names::Icon, names::Tooltip, names::OnAction, BlockWith<MenuScope&>>;
+    using P = Params<names::Icon, names::State, names::Tooltip, names::OnAction, BlockWith<MenuScope&>>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -75,7 +128,7 @@ struct TrayImpl {
         std::function<void(std::optional<IntOffset>)> onAction;
         if constexpr (P::template given<names::OnAction, A...>()) onAction = trayAction(P::template arg<names::OnAction>(args...));
         Tray(P::get<names::Icon>(ImageBitmap(), args...), std::string(P::get<names::Tooltip>(std::string(), args...)), std::move(onAction),
-             menu, site);
+             menu, P::get<names::State>(std::optional<TrayState>(), args...), site);
     }
 };
 } // namespace detail

@@ -20,6 +20,9 @@ public:
     Win32Tray& operator=(const Win32Tray&) = delete;
 
     void sync(const std::vector<std::shared_ptr<kompoz::detail::TrayRequest>>& requests);
+    // A notification shown by an icon shown (sync): its balloon, a toast from Windows 10 on, the
+    // type's icon (none: the app's own, the tray icon's).
+    void notify(const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification);
 
 private:
     struct State;

@@ -620,6 +620,9 @@ public:
         return true;
     }
     bool traySupported() const override { return !secondary_; }
+    void trayNotification(const kompoz::detail::TrayRequest& icon, const kompoz::Notification& notification) override {
+        if (tray_) tray_->notify(icon, notification);
+    }
 
     void closeWindow() override {
         egl_.close();
