@@ -6,6 +6,10 @@
 #include <kompoz/testing.hpp>
 
 #include <atomic>
+#include <fcntl.h>
+#ifdef _WIN32
+#include <io.h>
+#endif
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -32918,6 +32922,289 @@ TEST(data_table_frozen_columns_stay_as_it_scrolls_sideways) {
     CHECK(near(rule.onNodeWithText("1/0").bounds().x, 16) && near(rule.onNodeWithText("başlık 0").bounds().x, 16));  // frozen
     auto semantics = detail::semanticsOf(rule.onNodeWithText("1/0").node()->parent->parent->modifier);
     CHECK(semantics && semantics->checked == true);  // the selected row, said so
+}
+
+TEST(size_in_modifiers_take_compose_names) {
+    KompozTestRule rule([] {
+        Column([] {
+            Box(Modifier().heightIn(kompoz::arg::max = 40.f).height(100).width(10).testTag("h"));
+            Box(Modifier().widthIn(kompoz::arg::min = 120.f).width(50).height(10).testTag("w"));
+            Box(Modifier().sizeIn(kompoz::arg::maxWidth = 30.f, kompoz::arg::minHeight = 20.f).size(100, 5).testTag("s"));
+        });
+    });
+    CHECK(near(rule.onNodeWithTag("h").bounds().height, 40) && near(rule.onNodeWithTag("w").bounds().width, 120));
+    CHECK(near(rule.onNodeWithTag("s").bounds().width, 30) && near(rule.onNodeWithTag("s").bounds().height, 20));
+}
+
+// The platform's file dialog, as a test gives it: what it was asked, and what it answers.
+struct FakeFileDialog {
+    std::vector<detail::FileDialogRequest> asked;
+    detail::FileDialogResult answer;
+    void install(KompozHost& host) {
+        host.setCallbacks({.fileDialog = [this](const detail::FileDialogRequest& r, std::function<void(detail::FileDialogResult)> done) {
+            asked.push_back(r);
+            done(answer);
+        }});
+    }
+};
+
+TEST(file_picker_launchers_ask_the_platform_and_give_back_what_it_chose) {
+    FakeFileDialog dialog;
+    std::vector<std::string> log;
+    auto showing = mutableStateOf(true);
+    std::optional<PickerResultLauncher> single, multiple, folder;
+    std::optional<SaverResultLauncher> saver;
+    KompozTestRule rule([&] {
+        if (!showing.get()) return;
+        single = rememberFilePickerLauncher(kompoz::arg::type = FileKitType::File("txt", "md"),
+                                            kompoz::arg::onError = [&](const FileKitDialogException& e) { log.push_back(std::string("error: ") + e.what()); },
+                                            [&](std::optional<PlatformFile> file) { log.push_back(file ? file->name() : "null"); });
+        multiple = rememberFilePickerLauncher(kompoz::arg::mode = FileKitMode::Multiple{2}, kompoz::arg::type = FileKitType::Image,
+                                              kompoz::dialogSettings = FileKitDialogSettings{.title = "Resimler"},
+                                              [&](std::optional<std::vector<PlatformFile>> files) {
+                                                  std::string s = files ? "" : "null";
+                                                  if (files)
+                                                      for (const auto& f : *files) s += f.name() + ";";
+                                                  log.push_back(s);
+                                              });
+        folder = rememberDirectoryPickerLauncher(kompoz::arg::directory = PlatformFile("/home/ada"),
+                                                 [&](std::optional<PlatformFile> d) { log.push_back("dir " + (d ? d->path() : std::string("null"))); });
+        saver = rememberFileSaverLauncher([&](std::optional<PlatformFile> f) { log.push_back("save " + (f ? f->path() : std::string("null"))); });
+    });
+    dialog.install(rule.host());
+    // One file of the extensions given: the first the platform gave back.
+    dialog.answer = {.files = {"/home/ada/a.txt", "/home/ada/b.md"}};
+    single->launch();
+    rule.waitForIdle();
+    CHECK(dialog.asked.size() == 1 && dialog.asked[0].kind == detail::FileDialogRequest::Kind::OpenFiles && !dialog.asked[0].multiple);
+    CHECK((dialog.asked[0].type.extensions == std::vector<std::string>{"txt", "md"}));
+    CHECK((log == std::vector<std::string>{"a.txt"}));
+    // Several, at most maxItems; images; the dialog's title.
+    dialog.answer = {.files = {"/p/1.png", "file:///p/2%20b.jpg", "/p/3.gif"}};
+    multiple->launch();
+    rule.waitForIdle();
+    CHECK(dialog.asked[1].multiple && dialog.asked[1].maxItems == 2 && dialog.asked[1].type.kind == FileKitType::Kind::Image);
+    CHECK(dialog.asked[1].title == std::optional<std::string>("Resimler"));
+    CHECK(log.back() == "1.png;2 b.jpg;");
+    // Closed without a choice: null; couldn't be shown: onError, then null.
+    dialog.answer = {};
+    multiple->launch();
+    single->launch();
+    dialog.answer = {.error = "no portal"};
+    single->launch();
+    rule.waitForIdle();
+    CHECK((std::vector<std::string>(log.end() - 4, log.end()) == std::vector<std::string>{"null", "null", "error: no portal", "null"}));
+    // A folder, opened where it is given; the save dialog with its suggested name.
+    dialog.answer = {.files = {"/home/ada/docs"}};
+    folder->launch();
+    dialog.answer = {.files = {"/home/ada/notes.txt"}};
+    saver->launch(kompoz::suggestedName = "notes", kompoz::defaultExtension = "txt", kompoz::allowedExtensions = std::vector<std::string>{"txt", "md"});
+    rule.waitForIdle();
+    CHECK(dialog.asked[5].kind == detail::FileDialogRequest::Kind::OpenDirectory && dialog.asked[5].directory == "/home/ada");
+    const detail::FileDialogRequest& save = dialog.asked[6];
+    CHECK(save.kind == detail::FileDialogRequest::Kind::SaveFile && save.suggestedName == "notes" && save.defaultExtension == std::optional<std::string>("txt"));
+    CHECK((save.allowedExtensions == std::vector<std::string>{"txt", "md"}));
+    CHECK((std::vector<std::string>(log.end() - 2, log.end()) == std::vector<std::string>{"dir /home/ada/docs", "save /home/ada/notes.txt"}));
+    // A launcher gone from the composition before its answer: nothing comes.
+    size_t before = log.size();
+    dialog.answer = {.files = {"/x.txt"}};
+    auto gone = *single;
+    showing.set(false);
+    rule.waitForIdle();
+    gone.launch();
+    rule.waitForIdle();
+    CHECK(log.size() == before);
+}
+
+TEST(file_picker_with_state_gives_the_files_as_they_come) {
+    FakeFileDialog dialog;
+    std::vector<std::string> states;
+    std::optional<PickerResultLauncher> launcher;
+    KompozTestRule rule([&] {
+        launcher = rememberFilePickerLauncher(kompoz::arg::mode = FileKitMode::MultipleWithState{}, [&](const FileKitPickerStateOf<std::vector<PlatformFile>>& state) {
+            if (kt::is<FileKitPickerState::Started>(state)) states.push_back("started " + std::to_string(kt::as<FileKitPickerState::Started>(state).total));
+            else if (kt::is<FileKitPickerState::Progress>(state)) states.push_back("progress " + std::to_string(kt::as<FileKitPickerState::Progress>(state).processed.size()));
+            else if (kt::is<FileKitPickerState::Completed>(state)) states.push_back("completed " + kt::as<FileKitPickerState::Completed>(state).result.back().name());
+            else if (kt::is<FileKitPickerState::Cancelled>(state)) states.push_back("cancelled");
+            else if (kt::is<FileKitPickerState::Failed>(state)) states.push_back(std::string("failed ") + kt::as<FileKitPickerState::Failed>(state).cause.what());
+        });
+    });
+    dialog.install(rule.host());
+    dialog.answer = {.files = {"/a.txt", "/b.txt"}};
+    launcher->launch();
+    dialog.answer = {};
+    launcher->launch();
+    dialog.answer = {.error = "no"};
+    launcher->launch();
+    rule.waitForIdle();
+    CHECK((states == std::vector<std::string>{"started 2", "progress 1", "progress 2", "completed b.txt", "cancelled", "failed no"}));
+}
+
+TEST(filekit_dialogs_in_a_coroutine) {
+    FakeFileDialog dialog;
+    std::optional<CoroutineScope> scope;
+    KompozTestRule rule([&] { scope = rememberCoroutineScope(); });
+    dialog.install(rule.host());
+    auto log = std::make_shared<std::vector<std::string>>();
+    dialog.answer = {.files = {"/a.txt", "/b.txt"}};
+    scope->launch([log]() -> Task {
+        std::optional<PlatformFile> one = co_await FileKit::openFilePicker(kompoz::arg::type = FileKitType::File(std::vector<std::string>{"txt"}));
+        log->push_back(one ? one->name() : "null");
+        std::optional<std::vector<PlatformFile>> all = co_await FileKit::openFilePicker(kompoz::arg::mode = FileKitMode::Multiple{});
+        log->push_back(std::to_string(all ? all->size() : 0));
+        std::optional<PlatformFile> saved = co_await FileKit::openFileSaver(kompoz::suggestedName = "x", kompoz::defaultExtension = "txt");
+        log->push_back(saved ? saved->path() : "null");
+    });
+    rule.waitForIdle();
+    CHECK((*log == std::vector<std::string>{"a.txt", "2", "/a.txt"}));
+    CHECK(dialog.asked.size() == 3 && dialog.asked[2].kind == detail::FileDialogRequest::Kind::SaveFile && dialog.asked[2].suggestedName == "x");
+    // Where the dialog can't be shown, it throws.
+    dialog.answer = {.error = "no portal"};
+    scope->launch([log]() -> Task {
+        try {
+            co_await FileKit::openDirectoryPicker();
+            log->push_back("shown");
+        } catch (const FileKitDialogException& e) {
+            log->push_back(e.what());
+        }
+    });
+    rule.waitForIdle();
+    CHECK(log->back() == "no portal");
+}
+
+TEST(file_dialogs_fail_where_the_platform_has_none) {
+    std::vector<std::string> log;
+    std::optional<PickerResultLauncher> launcher;
+    KompozTestRule rule([&] {
+        launcher = rememberDirectoryPickerLauncher(kompoz::arg::onError = [&](const FileKitDialogException&) { log.push_back("error"); },
+                                                   [&](std::optional<PlatformFile> d) { log.push_back(d ? "dir" : "null"); });
+    });
+    launcher->launch();
+    rule.waitForIdle();
+    CHECK((log == std::vector<std::string>{"error", "null"}));
+}
+
+TEST(platform_file_tells_reads_and_writes) {
+    namespace fs = std::filesystem;
+    fs::path root = fs::temp_directory_path() / "kompoz-platform-file-test";
+    fs::remove_all(root);
+    PlatformFile dir(root.string());
+    PlatformFile notes = dir / "sub" / "notes.txt";
+    CHECK(notes.name() == "notes.txt" && notes.extension() == "txt" && notes.nameWithoutExtension() == "notes");
+    CHECK(PlatformFile("/a/.hidden").extension() == "hidden" && PlatformFile("/a/README").extension().empty());
+    CHECK(!notes.exists() && notes.size() == -1 && notes.isAbsolute() && !PlatformFile("rel/x").isAbsolute());
+    CHECK(notes.parent() && notes.parent()->name() == "sub" && notes.parent()->parent()->path() == root.string());
+    CHECK(PlatformFile(dir, "x.md").path() == (root / "x.md").string());
+    CHECK(PlatformFile("file:///tmp/a%C3%A7%20b.txt").path() == "/tmp/aç b.txt");
+    std::optional<CoroutineScope> scope;
+    KompozTestRule rule([&] { scope = rememberCoroutineScope(); });
+    auto log = std::make_shared<std::vector<std::string>>();
+    scope->launch([log, notes, dir]() -> Task {
+        co_await notes.writeString("merhaba");  // (its folder made too)
+        log->push_back(co_await notes.readString());
+        PlatformFile bytes = dir / "b.bin";
+        co_await bytes.write(std::vector<uint8_t>{1, 2, 3});
+        std::vector<uint8_t> back = co_await bytes.readBytes();
+        log->push_back(std::to_string(back.size()) + ":" + std::to_string(back[2]));
+        PlatformFile copy = dir / "copy.txt";
+        co_await copy.write(notes);
+        log->push_back(co_await copy.readString());
+        try {
+            co_await (dir / "none.txt").readBytes();
+        } catch (const std::runtime_error&) {
+            log->push_back("missing");
+        }
+    });
+    rule.waitForIdle();
+    CHECK((*log == std::vector<std::string>{"merhaba", "3:3", "merhaba", "missing"}));
+    CHECK(notes.exists() && notes.isRegularFile() && !notes.isDirectory() && notes.size() == 7);
+    CHECK(notes.mimeType() == std::optional<std::string>("text/plain") && !dir.mimeType());
+    CHECK(notes.lastModified() > std::chrono::system_clock::now() - std::chrono::minutes(5));
+    std::vector<std::string> names;
+    for (const PlatformFile& f : dir.list()) names.push_back(f.name());
+    CHECK((names == std::vector<std::string>{"b.bin", "copy.txt", "sub"}));
+    notes.copyTo(dir / "sub");  // (into a folder: under its own name; it is there already)
+    PlatformFile deep = dir / "x" / "y";
+    deep.createDirectories();
+    CHECK(deep.isDirectory());
+    notes.copyTo(deep);
+    CHECK((deep / "notes.txt").size() == 7);
+    CHECK(PlatformFile::fromBookmarkData(notes.bookmarkData()) == notes);
+    (dir / "x").delete_();
+    CHECK(!deep.exists());
+    bool threw = false;
+    try {
+        (dir / "x").delete_();
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    (dir / "x").delete_(false);
+    CHECK(threw);
+    fs::remove_all(root);
+}
+
+TEST(platform_file_reaches_content_uris_through_the_platform) {
+    namespace fs = std::filesystem;
+    // A fake provider: content://t/<path under root>, a folder's children listed, files made.
+    fs::path root = fs::temp_directory_path() / "kompoz-content-test";
+    fs::remove_all(root);
+    fs::create_directories(root / "picked");
+    { std::ofstream(root / "picked" / "a.txt") << "abc"; }
+    auto at = [root](const std::string& uri) { return root / uri.substr(std::string("content://t/").size()); };
+    std::vector<std::string> persisted;
+    detail::setContentFiles({
+        .open = [at](const std::string& uri, const char* mode) {
+#ifdef _WIN32
+            return _open(at(uri).string().c_str(), (std::string(mode) == "r" ? _O_RDONLY : _O_WRONLY | _O_CREAT | _O_TRUNC) | _O_BINARY, 0644);
+#else
+            return ::open(at(uri).c_str(), std::string(mode) == "r" ? O_RDONLY : O_WRONLY | O_CREAT | O_TRUNC, 0644);
+#endif
+        },
+        .query = [at](const std::string& uri) -> std::optional<detail::ContentFileInfo> {
+            fs::path p = at(uri);
+            if (!fs::exists(p)) return std::nullopt;
+            bool d = fs::is_directory(p);
+            return detail::ContentFileInfo{.name = p.filename().string(), .size = d ? -1 : int64_t(fs::file_size(p)), .mimeType = d ? "" : "text/plain",
+                                           .lastModified = 1000, .directory = d};
+        },
+        .children = [at](const std::string& uri) {
+            std::vector<std::pair<std::string, std::string>> out;
+            for (const auto& e : fs::directory_iterator(at(uri))) out.emplace_back(uri + "/" + e.path().filename().string(), e.path().filename().string());
+            std::sort(out.begin(), out.end());
+            return out;
+        },
+        .create = [at](const std::string& parent, const std::string& name, bool directory) -> std::optional<std::string> {
+            fs::path p = at(parent) / name;
+            if (directory) fs::create_directories(p);
+            else std::ofstream{p};
+            return parent + "/" + name;
+        },
+        .remove = [at](const std::string& uri) { return fs::remove_all(at(uri)) > 0; },
+        .persist = [&persisted](const std::string& uri) { persisted.push_back(uri); },
+    });
+    PlatformFile picked("content://t/picked");
+    CHECK(picked.isDirectory() && picked.name() == "picked" && !picked.parent() && picked.isAbsolute());
+    std::vector<PlatformFile> children = picked.list();
+    CHECK(children.size() == 1 && children[0].name() == "a.txt" && children[0].size() == 3 && children[0].mimeType() == std::optional<std::string>("text/plain"));
+    CHECK(children[0].lastModified() == std::chrono::system_clock::time_point(std::chrono::seconds(1)));
+    CHECK(picked.bookmarkData().size() > 0 && persisted == std::vector<std::string>{"content://t/picked"});
+    std::optional<CoroutineScope> scope;
+    KompozTestRule rule([&] { scope = rememberCoroutineScope(); });
+    auto log = std::make_shared<std::vector<std::string>>();
+    scope->launch([log, picked]() -> Task {
+        log->push_back(co_await (picked / "a.txt").readString());
+        PlatformFile fresh = picked / "new" / "b.txt";  // (neither there yet: made as it is written)
+        log->push_back(fresh.name() + (fresh.exists() ? " there" : " not there"));
+        co_await fresh.writeString("yeni");
+        log->push_back(co_await (picked / "new" / "b.txt").readString());
+    });
+    rule.waitForIdle();
+    CHECK((*log == std::vector<std::string>{"abc", "b.txt not there", "yeni"}));
+    CHECK(fs::exists(root / "picked" / "new" / "b.txt"));
+    (picked / "new").delete_();
+    CHECK(!fs::exists(root / "picked" / "new"));
+    detail::setContentFiles({});
+    fs::remove_all(root);
 }
 
 int main(int argc, char** argv) {

@@ -43,7 +43,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "remember", "rememberSaveable", "derivedStateOf", "map", "mapNotNull", "mapIndexed", "filter", "filterNot",
     "filterIndexed", "sortedBy", "sortedByDescending", "any", "all", "none", "count", "first", "firstOrNull",
     "last", "lastOrNull", "find", "groupBy", "associateBy", "associateWith", "flatMap", "sumOf", "maxOf", "minOf",
-    "maxOfOrNull", "minOfOrNull", "check", "require", "joinToString",
+    "maxOfOrNull", "minOfOrNull", "check", "require", "joinToString", "withContext",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "kompozitionLocalOf",
@@ -62,6 +62,7 @@ const std::map<std::string, std::string, std::less<>> kTypes = {
     {"String", "std::string"},   {"Int", "int"},           {"Long", "long long"},     {"Short", "short"},
     {"Byte", "signed char"},     {"Float", "float"},       {"Double", "double"},      {"Boolean", "bool"},
     {"Char", "char32_t"},        {"Unit", "void"},         {"UInt", "unsigned"},      {"ULong", "unsigned long long"},
+    {"ByteArray", "std::vector<uint8_t>"},
     // (catch (e: Exception) catches C++'s exceptions too; the others are Kotlin's, kt's: what kt's functions throw)
     {"Exception", "std::exception"}, {"Throwable", "std::exception"}, {"Error", "::kompoz::kt::Error"},
     {"NotImplementedError", "::kompoz::kt::NotImplementedError"}, {"RuntimeException", "::kompoz::kt::RuntimeException"},
@@ -160,7 +161,7 @@ const std::set<std::string, std::less<>> kKtMembers = {
     "format", "indexOfFirst", "indexOfLast", "removeIf", "removeAll", "flatMap", "sortedByDescending", "maxByOrNull", "minByOrNull",
     "mapNotNull", "filterIndexed", "distinctBy", "takeUnless", "groupBy", "associateBy", "associateWith", "chunked", "partition",
     "ifEmpty", "ifBlank", "shuffle", "isDigit", "isLetter", "isLetterOrDigit", "isWhitespace", "isUpperCase", "isLowerCase",
-    "decodeToImageBitmap"};
+    "decodeToImageBitmap", "encodeToByteArray", "decodeToString"};
 
 // Kotlin's members that change nothing (what else a value's member call does may be anything: next(), add(x)).
 const std::set<std::string, std::less<>> kPureMembers = {
@@ -3579,6 +3580,12 @@ private:
         return true;
     }
 
+    // A type the file declares itself (a class, data class, sealed class, object, enum, interface, alias).
+    bool ownType(std::string_view name) const {
+        return module_.classes.contains(name) || module_.classDecls.contains(name) || module_.objects.contains(name) ||
+               module_.interfaces.contains(name) || module_.enums.contains(name) || module_.aliases.contains(name) || module_.sealeds.contains(name);
+    }
+
     // X.Companion is X.
     static const Node& companionless(const Node& n) {
         return n.kind == Node::Member && n.text == "Companion" ? companionless(*n.kids[0]) : n;
@@ -3721,7 +3728,8 @@ private:
                 out_->text("::kompoz::vector::Path");
                 return arguments(c, calleeName, false);
             }
-            if (module_.structs && !c.lambda && c.kids.size() > 1 && capitalized(callee.text) && !kKtFunctions.contains(callee.text))
+            if (module_.structs && !c.lambda && c.kids.size() > 1 && capitalized(callee.text) && !kKtFunctions.contains(callee.text) &&
+                !ownType(callee.text))  // (the file's own class of the name, not a header's struct: Failed(…))
                 if (const auto* fields = module_.structs->find(callee.text); fields && structCall(c, callee.text, *fields)) return;
             // topAppBarColors(containerColor = …): a colors object called without its XDefaults (Kotlin's
             // import of TopAppBarDefaults.topAppBarColors), when the name is one struct's alone. (Only a
@@ -3797,7 +3805,8 @@ private:
             if (qualifier(obj))  // UiState.Ready(items): a sealed class's nested data class, made as one is
                 if (auto k = module_.classes.find(dotted(callee)); k != module_.classes.end())
                     return construct(c, *k->second, qualified(dotted(obj)) + "::" + k->second->name);
-            if (module_.structs && !c.lambda && c.kids.size() > 1 && qualifier(obj)) {  // TextFieldDefaults.colors(…)
+            // TextFieldDefaults.colors(…); not a class's static function (FileKitType.File("txt"): a call).
+            if (module_.structs && !c.lambda && c.kids.size() > 1 && qualifier(obj) && !module_.structs->staticFunction(dotted(obj), callee.text)) {
                 std::string name = qualified(dotted(callee));
                 const auto* fields = module_.structs->find(name);  // (its own namespace's alias first: ListItemDefaults::colors)
                 if (!fields) fields = module_.structs->find(callee.text);

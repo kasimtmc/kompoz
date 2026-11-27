@@ -60,6 +60,8 @@ struct Strings {
     std::string expanded = "Expanded", collapsed = "Collapsed", expand = "Expand", collapse = "Collapse";
     // A data table's sorted column (DataTable).
     std::string sortedAscending = "Sorted ascending", sortedDescending = "Sorted descending";
+    // A file dialog's title where the platform's has none of its own (Linux's portal): FileKit's launchers.
+    std::string openFile = "Open File", openFiles = "Open Files", saveFile = "Save File", selectFolder = "Select Folder";
     // Pickers.
     DatePickerStrings datePicker = DatePickerStrings::english();
     std::string am = "AM", pm = "PM", hour = "Hour", minute = "Minute";  // TimePicker, TimeInput

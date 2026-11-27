@@ -7,6 +7,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
 
 #include <csignal>
@@ -57,6 +58,59 @@ int64_t steadyNow() { return std::chrono::duration_cast<std::chrono::nanoseconds
 std::string utf8(NSString* s) { return s ? std::string(s.UTF8String) : std::string(); }
 
 NSString* nsString(const std::string& s) { return [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSUTF8StringEncoding] ?: @""; }
+
+// A file dialog (FileKit's launchers): an NSOpenPanel or NSSavePanel, a sheet of the window where
+// there is one; `done` called on the main thread with what was chosen.
+void showPanel(NSWindow* window, const kompoz::detail::FileDialogRequest& r, std::function<void(kompoz::detail::FileDialogResult)> done) {
+    using Kind = kompoz::detail::FileDialogRequest::Kind;
+    NSSavePanel* panel = nil;
+    if (r.kind == Kind::SaveFile) {
+        NSSavePanel* save = [NSSavePanel savePanel];
+        std::string name = r.suggestedName;
+        if (r.defaultExtension && !r.defaultExtension->empty()) name += "." + *r.defaultExtension;
+        save.nameFieldStringValue = nsString(name);
+        save.allowsOtherFileTypes = YES;
+        panel = save;
+    } else {
+        NSOpenPanel* open = [NSOpenPanel openPanel];
+        open.canChooseFiles = r.kind == Kind::OpenFiles;
+        open.canChooseDirectories = r.kind == Kind::OpenDirectory;
+        open.allowsMultipleSelection = r.kind == Kind::OpenFiles && r.multiple;
+        if (r.macOS.resolvesAliases) open.resolvesAliases = *r.macOS.resolvesAliases;
+        panel = open;
+    }
+    panel.canCreateDirectories = r.macOS.canCreateDirectories;
+    if (r.title) panel.message = nsString(*r.title);  // (FileKit's title: the panel's message)
+    if (!r.directory.empty()) panel.directoryURL = [NSURL fileURLWithPath:nsString(r.directory) isDirectory:YES];
+    if (@available(macOS 11.0, *)) {
+        NSMutableArray<UTType*>* types = [NSMutableArray array];
+        auto add = [&](const std::vector<std::string>& extensions) {
+            for (const std::string& e : extensions)
+                if (UTType* t = [UTType typeWithFilenameExtension:nsString(e)]) [types addObject:t];
+        };
+        if (r.kind == Kind::SaveFile) add(r.allowedExtensions);
+        else if (r.kind == Kind::OpenFiles) switch (r.type.kind) {
+            case FileKitType::Kind::File: add(r.type.extensions); break;
+            case FileKitType::Kind::Image: [types addObject:UTTypeImage]; break;
+            case FileKitType::Kind::Video: [types addObject:UTTypeMovie]; break;
+            case FileKitType::Kind::ImageAndVideo: [types addObjectsFromArray:@[UTTypeImage, UTTypeMovie]]; break;
+            }
+        if (types.count) panel.allowedContentTypes = types;
+    }
+    auto finish = [panel, done](NSModalResponse response) {
+        kompoz::detail::FileDialogResult result;
+        if (response == NSModalResponseOK) {
+            if ([panel isKindOfClass:NSOpenPanel.class]) {
+                for (NSURL* url in static_cast<NSOpenPanel*>(panel).URLs) result.files.push_back(utf8(url.path));
+            } else if (panel.URL) {
+                result.files.push_back(utf8(panel.URL.path));
+            }
+        }
+        done(std::move(result));
+    };
+    if (window) [panel beginSheetModalForWindow:window completionHandler:^(NSModalResponse response) { finish(response); }];
+    else [panel beginWithCompletionHandler:^(NSModalResponse response) { finish(response); }];
+}
 
 // ---- What a pasteboard holds (the clipboard's, a drag's) as a clip ----------------------------
 // Files are file URLs (an item each); text, HTML and an image (PNG, or TIFF turned to PNG, as a
@@ -418,6 +472,9 @@ public:
         callbacks.openUri = [self](const std::string& uri) {
             NSURL* url = [NSURL URLWithString:[NSString stringWithUTF8String:uri.c_str()]];
             if (!url || ![NSWorkspace.sharedWorkspace openURL:url]) self->log("kompoz: can't open " + uri);
+        };
+        callbacks.fileDialog = [self](const kompoz::detail::FileDialogRequest& r, std::function<void(kompoz::detail::FileDialogResult)> done) {
+            showPanel(self->window_, r, std::move(done));
         };
     }
 

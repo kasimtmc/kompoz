@@ -4,6 +4,7 @@
 #include "../../common/clip_formats.hpp"
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
+#include "../file_chooser.hpp"
 #include "../../common/egl_window.hpp"
 #include "../key_text.hpp"
 #include "../media_devices.hpp"
@@ -16,6 +17,7 @@
 #include "generated/text-input-unstable-v3-client-protocol.h"
 #include "generated/viewporter-client-protocol.h"
 #include "generated/xdg-activation-v1-client-protocol.h"
+#include "generated/xdg-foreign-unstable-v2-client-protocol.h"
 #include "generated/wayland-client-protocol.h"
 #include "generated/xdg-decoration-unstable-v1-client-protocol.h"
 #include "generated/xdg-shell-client-protocol.h"
@@ -96,7 +98,7 @@ public:
         destroy(layerShell_), destroy(xdgOutputs_);
         destroy(compositor_), destroy(wmBase_), destroy(decorations_), destroy(fractionalManager_), destroy(viewporter_);
         destroy(shm_), destroy(subcompositor_);
-        destroy(cursorShapes_), destroy(textInputs_), destroy(dataDevices_), destroy(idleInhibits_), destroy(activation_), destroy(registry_);
+        destroy(cursorShapes_), destroy(textInputs_), destroy(dataDevices_), destroy(idleInhibits_), destroy(activation_), destroy(exported_), destroy(exporter_), destroy(registry_);
         if (xkbState_) xkb_state_unref(xkbState_);
         if (keymap_) xkb_keymap_unref(keymap_);
         if (xkb_) xkb_context_unref(xkb_);
@@ -259,6 +261,14 @@ public:
         xdg_toplevel_add_listener(toplevel_, &kToplevel, this);
         xdg_toplevel_set_title(toplevel_, title_.c_str());
         xdg_toplevel_set_app_id(toplevel_, "dev.kompoz.app");
+        // Exported (xdg-foreign) for the desktop portal's dialogs to be this window's own: over it, modal.
+        if (exporter_) {
+            exported_ = zxdg_exporter_v2_export_toplevel(exporter_, surface_);
+            static const zxdg_exported_v2_listener kExported = {
+                .handle = [](void* data, zxdg_exported_v2*, const char* handle) { static_cast<WaylandPlatform*>(data)->exportedHandle_ = handle; },
+            };
+            zxdg_exported_v2_add_listener(exported_, &kExported, this);
+        }
         // The compositor's decorations where it has them (unless KOMPOZ_DECORATIONS=kompoz), else
         // Kompoz's own: as the decoration's configure says. A popup without layer-shell: none at all.
         if (decorations_) {
@@ -341,6 +351,8 @@ public:
             if (decoration_) zxdg_toplevel_decoration_v1_destroy(std::exchange(decoration_, nullptr));
             // wl_proxy_destroy only releases the client proxy. The server-side xdg_toplevel
             // survives it, so each reopen otherwise leaves another visible window behind.
+            if (exported_) zxdg_exported_v2_destroy(std::exchange(exported_, nullptr));
+            exportedHandle_.clear();
             if (toplevel_) xdg_toplevel_destroy(std::exchange(toplevel_, nullptr));
             if (xdgSurface_) xdg_surface_destroy(std::exchange(xdgSurface_, nullptr));
             wl_surface_attach(surface_, nullptr, 0, 0);
@@ -508,6 +520,9 @@ public:
             return m.mimeTypes.empty() ? std::nullopt : std::optional(m);
         };
         callbacks.openUri = [](const std::string& uri) { openUri(uri); };
+        callbacks.fileDialog = [self, &h](const kompoz::detail::FileDialogRequest& r, std::function<void(kompoz::detail::FileDialogResult)> done) {
+            showFileChooser(self->exportedHandle_.empty() ? std::string() : "wayland:" + self->exportedHandle_, h.strings(), r, std::move(done));
+        };
     }
 
     void handled(KompozHost& h, const Event& e) override { desktop_.handled(h, e); }
@@ -537,6 +552,9 @@ private:
     wl_data_device_manager* dataDevices_ = nullptr;
     zwp_idle_inhibit_manager_v1* idleInhibits_ = nullptr;
     xdg_activation_v1* activation_ = nullptr;
+    zxdg_exporter_v2* exporter_ = nullptr;
+    zxdg_exported_v2* exported_ = nullptr;
+    std::string exportedHandle_;  // the window's, exported: the portal's dialogs' parent
     zwlr_layer_shell_v1* layerShell_ = nullptr;
     zxdg_output_manager_v1* xdgOutputs_ = nullptr;
     zwlr_layer_surface_v1* layerSurface_ = nullptr;  // a popup's role, instead of an xdg_toplevel
@@ -1697,6 +1715,8 @@ const wl_registry_listener WaylandPlatform::kRegistry = {
             p.idleInhibits_ = bind<zwp_idle_inhibit_manager_v1>(registry, name, &zwp_idle_inhibit_manager_v1_interface, version, 1);
         else if (i == xdg_activation_v1_interface.name)
             p.activation_ = bind<xdg_activation_v1>(registry, name, &xdg_activation_v1_interface, version, 1);
+        else if (i == zxdg_exporter_v2_interface.name)
+            p.exporter_ = bind<zxdg_exporter_v2>(registry, name, &zxdg_exporter_v2_interface, version, 1);
         else if (i == zwlr_layer_shell_v1_interface.name)
             p.layerShell_ = bind<zwlr_layer_shell_v1>(registry, name, &zwlr_layer_shell_v1_interface, version, 4);
         else if (i == zxdg_output_manager_v1_interface.name)

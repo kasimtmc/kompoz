@@ -8,6 +8,7 @@
 
 #include "../app/app_core.hpp"
 #include "../common/system.hpp"
+#include "android_files.hpp"
 #include "android_ime.hpp"
 #include "android_performance.hpp"
 
@@ -143,6 +144,7 @@ public:
             return bytes;
         });
         setCacheDirectory(cache);
+        android_files::init(e);  // (content:// files: what FileKit's pickers give)
 
         // Work from other threads (callbacks.wake) and a coroutine's delay wake the UI thread's looper.
         looper_ = ALooper_forThread();
@@ -516,6 +518,9 @@ public:
             e->DeleteLocalRef(bytes);
             check(e);
             if (!opened) self->log("kompoz: nothing opens " + uri);
+        };
+        callbacks.fileDialog = [self](const kompoz::detail::FileDialogRequest& r, std::function<void(kompoz::detail::FileDialogResult)> done) {
+            android_files::show(env(), self->activity_, r, std::move(done));
         };
         callbacks.hapticFeedback = [](HapticFeedbackType type) { android_ime::performHapticFeedback(int(type)); };
         callbacks.hideSoftwareKeyboard = [] { android_ime::hide(); };

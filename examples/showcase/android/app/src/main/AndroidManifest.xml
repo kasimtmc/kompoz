@@ -37,5 +37,11 @@
                 <data android:scheme="kompoz" />
             </intent-filter>
         </activity>
+        <!-- Kompoz's file dialogs (FileKit's launchers) are shown from it. -->
+        <activity
+            android:name="dev.kompoz.KompozFiles"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 </manifest>

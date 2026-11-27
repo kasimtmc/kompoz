@@ -10,6 +10,7 @@
 #include "channel.hpp"
 #include "coroutines.hpp"
 #include "datatable.hpp"
+#include "filekit.hpp"
 #include "disk_cache.hpp"
 #include "display_list.hpp"
 #include "draw.hpp"

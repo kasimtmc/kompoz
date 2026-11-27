@@ -122,7 +122,8 @@ add_library(kompoz_core STATIC
     src/widgets.cpp
     src/window.cpp
     src/tray.cpp
-    src/tree.cpp)
+    src/tree.cpp
+    src/filekit.cpp)
 target_include_directories(kompoz_core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                                               $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 set_target_properties(kompoz_core PROPERTIES EXPORT_NAME core)
@@ -294,7 +295,7 @@ if(KOMPOZ_BUILD_APP)
             target_sources(kompoz_app PRIVATE platform/macos/macos_platform.mm)
             set_source_files_properties(platform/macos/macos_platform.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
             target_compile_definitions(kompoz_app PRIVATE KOMPOZ_MACOS=1)
-            target_link_libraries(kompoz_app PUBLIC "-framework AppKit" "-framework IOKit" "-framework AVFoundation")
+            target_link_libraries(kompoz_app PUBLIC "-framework AppKit" "-framework IOKit" "-framework AVFoundation" "-weak_framework UniformTypeIdentifiers")
         endif()
     endif()
     if(NOT APPLE AND NOT EMSCRIPTEN)
@@ -357,7 +358,7 @@ if(KOMPOZ_BUILD_APP)
                                 "xkbcommon's, for a platform to run apps on (see docs/guide/en/setup.md), or -DKOMPOZ_BUILD_APP=OFF")
         endif()
         if(kompoz_linux_platform)
-            target_sources(kompoz_app PRIVATE platform/linux/desktop_services.cpp platform/common/egl_window.cpp platform/linux/media_devices.cpp
+            target_sources(kompoz_app PRIVATE platform/linux/desktop_services.cpp platform/linux/file_chooser.cpp platform/common/egl_window.cpp platform/linux/media_devices.cpp
                            platform/linux/key_text.cpp)
             target_include_directories(kompoz_app PRIVATE ${KOMPOZ_XKBCOMMON_INCLUDE_DIR})
         endif()
@@ -372,7 +373,7 @@ if(KOMPOZ_BUILD_APP)
     endif()
     if(ANDROID)
         target_sources(kompoz_app PRIVATE platform/android/android_ime.cpp  # + platform/android/java
-                                           platform/android/android_performance.cpp)
+                                           platform/android/android_files.cpp platform/android/android_performance.cpp)
         target_link_libraries(kompoz_app PUBLIC android log EGL ${CMAKE_DL_LIBS})
     elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         # The desktop's accent color from the XDG portal (libdbus loaded at run time): dynamic color.
@@ -385,9 +386,9 @@ if(KOMPOZ_BUILD_APP)
         # Windows' accent color (DWM's, in the registry): dynamic color. Screen readers read the
         # semantics tree through UI Automation. Kompoz's Win32 platform (platform/windows).
         target_sources(kompoz_app PRIVATE platform/windows/desktop_accent.cpp platform/windows/uia_bridge.cpp
-                       platform/windows/win32_platform.cpp platform/windows/win32_tray.cpp platform/common/egl_window.cpp)
+                       platform/windows/win32_platform.cpp platform/windows/win32_tray.cpp platform/windows/file_dialog.cpp platform/common/egl_window.cpp)
         target_compile_definitions(kompoz_app PRIVATE KOMPOZ_DESKTOP_ACCENT=1 KOMPOZ_UIA=1 KOMPOZ_WIN32=1)
-        target_link_libraries(kompoz_app PUBLIC uiautomationcore oleaut32 dwmapi imm32 winmm cfgmgr32 shell32 uuid)
+        target_link_libraries(kompoz_app PUBLIC uiautomationcore ole32 oleaut32 dwmapi imm32 winmm cfgmgr32 shell32 uuid)
     endif()
     # Kompoz's headless platform on the desktops (KOMPOZ_HEADLESS=1: tests, scripted runs, CI).
     if(NOT kompoz_mobile)

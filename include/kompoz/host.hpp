@@ -5,6 +5,7 @@
 // calls frame() and draw(), and gets callbacks for the few things only it can do.
 // (Compose equivalents: ComposeScene on desktop, AndroidComposeView on Android.)
 
+#include "file_dialog.hpp"
 #include "gestures.hpp"
 #include "layout.hpp"
 #include "lifecycle.hpp"
@@ -107,6 +108,9 @@ public:
         // An asset's bytes (vectorResource's XML): the app's assets (the APK's on Android), or a
         // file next to the binary; empty if there is none.
         std::function<std::vector<uint8_t>(std::string_view path)> readAsset;
+        // A file dialog (FileKit's, filekit.hpp) shown over the window: `done` called once, from any
+        // thread, with the files chosen (none: closed without a choice) or why it couldn't be shown.
+        std::function<void(const detail::FileDialogRequest& request, std::function<void(detail::FileDialogResult)> done)> fileDialog;
     };
 
     KompozHost(TextMeasurer& measurer, Content content);
@@ -137,6 +141,7 @@ public:
     void setLayoutDirection(LayoutDirection direction);
     // The library's texts in the system language (Strings::forLanguage): LocalStrings at the root.
     void setStrings(Strings strings);
+    const Strings& strings() const { return strings_; }
     void setDensity(Density density);            // read via LocalDensity
     Density density() const { return density_; }
     // The system's wallpaper palette (Android 12+), read via dynamicLightColorScheme(); none elsewhere.
@@ -236,6 +241,9 @@ public:
     // What it holds, unread (none: empty).
     std::optional<ClipMetadata> clipMetadata() const;
     // The platform services (platform.hpp).
+    // A file dialog (filekit.hpp's launchers), `done` called on the UI thread; where the platform
+    // has none, at once with an error.
+    void showFileDialog(detail::FileDialogRequest request, std::function<void(detail::FileDialogResult)> done);
     void openUri(const std::string& uri);  // the app's own links in it, others by the platform
     void performHapticFeedback(HapticFeedbackType type) {
         if (callbacks_.hapticFeedback) callbacks_.hapticFeedback(type);

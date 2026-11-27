@@ -443,7 +443,11 @@ void Structs::readText(std::string_view src) {
                     std::string f = functionName(st);
                     if (!f.empty() && f != name) {
                         members.names.insert(f);
-                        if (startsWithWord(st, "static")) members.staticFunctions.insert(f);
+                        // (static after a template's head too: template <class... S> static X File(…))
+                        size_t at = st.find(f + "(");
+                        size_t word = st.find("static ");
+                        if (startsWithWord(st, "static") || (startsWithWord(st, "template") && word != std::string::npos && word < at))
+                            members.staticFunctions.insert(f);
                     }
                 } else {
                     for (auto& n : fieldsOf(st, name, constructor)) members.names.insert(n);

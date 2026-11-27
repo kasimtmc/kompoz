@@ -1211,6 +1211,18 @@ std::string trimIndent(const C& c, A&&... args) {
         return out;
     }
 }
+// Kotlin's String.encodeToByteArray() and ByteArray.decodeToString() (UTF-8; a ByteArray is a std::vector<uint8_t>).
+template <class C, class... A>
+std::vector<uint8_t> encodeToByteArray(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(encodeToByteArray()) {
+        std::string_view s(c);
+        return std::vector<uint8_t>(s.begin(), s.end());
+    }
+}
+template <class C, class... A>
+std::string decodeToString(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(decodeToString()) { return std::string(std::begin(c), std::end(c)); }
+}
 template <class C, class... A>
 std::string uppercase(const C& c, A&&... args) {
     KOMPOZ_KT_OWN(uppercase()) {
@@ -2118,6 +2130,17 @@ template <class T, class... A>
 inline constexpr bool alternativeOf<T, std::variant<A...>> = (std::is_same_v<T, A> || ...);
 template <class V>
 concept Sealed = requires(const V& v) { v.kompoz_value; };
+// The alternative a name stands for in a sealed value: itself, or what the name gives for that value's type
+// (FileKitPickerState::Completed in a FileKitPickerStateOf<R>: its CompletedOf<R>).
+template <class T, class U>
+struct AlternativeIn {
+    using type = T;
+};
+template <class T, class U>
+    requires requires { typename T::template kompoz_alternative<U>; }
+struct AlternativeIn<T, U> {
+    using type = typename T::template kompoz_alternative<U>;
+};
 
 // A type with an object that interfaces reach (a kompozc class's handle, an interface's, a data class or an
 // object implementing one): its Object type, and it made again from such an object (T::kompoz_from).
@@ -2158,7 +2181,8 @@ bool is(const V& value) {
     const auto& v = deref(value);
     using U = std::remove_cvref_t<decltype(v)>;
     if constexpr (detail::Sealed<U>) {
-        if constexpr (detail::alternativeOf<T, decltype(v.kompoz_value)>) return std::holds_alternative<T>(v.kompoz_value);
+        using A = typename detail::AlternativeIn<T, U>::type;
+        if constexpr (detail::alternativeOf<A, decltype(v.kompoz_value)>) return std::holds_alternative<A>(v.kompoz_value);
         else return std::is_same_v<T, U>;
     } else if constexpr (std::is_same_v<T, U> || std::is_base_of_v<T, U>) {
         return true;
@@ -2190,9 +2214,10 @@ decltype(auto) as(const V& value) {
     } else {
     const auto& v = deref(value);
     using U = std::remove_cvref_t<decltype(v)>;
-    if constexpr (detail::Sealed<U> && detail::alternativeOf<T, decltype(v.kompoz_value)>) {
-        if (!std::holds_alternative<T>(v.kompoz_value)) throw ClassCastException();
-        return std::get<T>(v.kompoz_value);
+    using A = typename detail::AlternativeIn<T, U>::type;
+    if constexpr (detail::Sealed<U> && detail::alternativeOf<A, decltype(v.kompoz_value)>) {
+        if (!std::holds_alternative<A>(v.kompoz_value)) throw ClassCastException();
+        return std::get<A>(v.kompoz_value);
     }
     else return static_cast<T>(v);
     }

@@ -628,6 +628,18 @@ struct HeaderHeight {};
 struct RowHeight {};
 struct HorizontalPadding {};
 struct HeaderBackgroundColor {};
+// File dialogs (filekit.hpp).
+struct Type {};
+struct Mode {};
+struct Directory {};
+struct DialogSettings {};
+struct OnResult {};
+struct SuggestedName {};
+struct DefaultExtension {};
+struct AllowedExtensions {};
+// widthIn(min = …, max = …), heightIn's.
+struct Min {};
+struct Max {};
 // Trees (tree.hpp).
 struct Tree {};
 struct TreeState {};
@@ -1122,6 +1134,11 @@ inline constexpr Param<detail::names::FrozenColumns> frozenColumns;
 inline constexpr Param<detail::names::HeaderHeight> headerHeight;
 inline constexpr Param<detail::names::RowHeight> rowHeight;
 inline constexpr Param<detail::names::HorizontalPadding> horizontalPadding;
+inline constexpr Param<detail::names::DialogSettings> dialogSettings;
+inline constexpr Param<detail::names::OnResult> onResult;
+inline constexpr Param<detail::names::SuggestedName> suggestedName;
+inline constexpr Param<detail::names::DefaultExtension> defaultExtension;
+inline constexpr Param<detail::names::AllowedExtensions> allowedExtensions;
 inline constexpr Param<detail::names::HeaderBackgroundColor> headerBackgroundColor;
 // Trees (tree.hpp).
 inline constexpr Param<detail::names::TreeState> treeState;
@@ -1152,6 +1169,13 @@ inline constexpr Param<detail::names::List> list;
 // (names too common to take from you: LazyTree's tree = …, addNode's id = …)
 inline constexpr Param<detail::names::Tree> tree;
 inline constexpr Param<detail::names::Id> id;
+// (names too common to take from you: the file dialogs' type = …, mode = …, directory = …)
+inline constexpr Param<detail::names::Type> type;
+inline constexpr Param<detail::names::Mode> mode;
+inline constexpr Param<detail::names::Directory> directory;
+// (words too common to take from you: widthIn's and heightIn's min = …, max = …)
+inline constexpr Param<detail::names::Min> min;
+inline constexpr Param<detail::names::Max> max;
 // (NavigationSuiteScaffoldDefaults::navigationSuiteType(…) is the function: this is NavigationSuiteItem's and the scaffold's argument)
 inline constexpr Param<detail::names::NavigationSuiteType> navigationSuiteType;
 // (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)

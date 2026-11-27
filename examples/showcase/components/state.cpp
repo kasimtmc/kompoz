@@ -576,3 +576,70 @@ fun PlatformServicesSection() {
         }
     }
 }
+
+// The system's file dialogs, with FileKit's API: a text opened and saved, images picked, a folder's
+// files listed (on Android the picked files are content:// URIs, read and written all the same).
+@Kompozable
+fun FileDialogsSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf("Kompoz'dan merhaba!") }
+    var status by remember { mutableStateOf("") }
+    val images = remember { mutableStateListOf<ImageBitmap>() }
+    val entries = remember { mutableStateListOf<String>() }
+    val openText = rememberFilePickerLauncher(type = FileKitType.File("txt", "md", "json", "csv"),
+                                              onError = { status = "Açılamadı: ${it.message}" }) { file ->
+        if (file != null) scope.launch {
+            text = file.readString().take(4000)
+            status = "${file.name} açıldı (${file.size()} bayt)"
+        }
+    }
+    val save = rememberFileSaverLauncher(onError = { status = "Kaydedilemedi: ${it.message}" }) { file ->
+        if (file != null) scope.launch {
+            file.writeString(text)
+            status = "${file.name} kaydedildi"
+        }
+    }
+    val pickImages = rememberFilePickerLauncher(type = FileKitType.Image, mode = FileKitMode.Multiple(maxItems = 6)) { files ->
+        if (files != null) scope.launch {
+            images.clear()
+            for (file in files) images.add(file.readBytes().decodeToImageBitmap())
+            status = "${files.size} resim seçildi"
+        }
+    }
+    val pickFolder = rememberDirectoryPickerLauncher { folder ->
+        if (folder != null) scope.launch {
+            val names = withContext(Dispatchers.IO) {
+                folder.list().map { if (it.isDirectory()) "${it.name}/" else it.name }.sorted()
+            }
+            entries.clear()
+            entries.addAll(names.take(40))
+            status = "${folder.name}: ${names.size} öğe"
+        }
+    }
+    Section("FileKit · dosya aç · kaydet · klasör seç") {
+        Text("Sistemin kendi diyalogları: Linux'ta masaüstü portalı (GNOME, KDE), Windows'ta ortak dosya diyaloğu, macOS'ta " +
+                 "NSOpenPanel, Android'de belge ve fotoğraf seçici, web'de tarayıcınınki. Seçilen dosya PlatformFile olarak gelir; " +
+                 "readString, readBytes, writeString ile okunup yazılır.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth().heightIn(max = 160.dp),
+                          label = { Text("Metin") })
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { openText.launch() }) { Text("Metin aç") }
+            Button(onClick = { save.launch(suggestedName = "kompoz-not", defaultExtension = "txt") }) { Text("Kaydet") }
+            OutlinedButton(onClick = { pickImages.launch() }) { Text("Resim seç") }
+            OutlinedButton(onClick = { pickFolder.launch() }) { Text("Klasör seç") }
+        }
+        if (status.isNotEmpty()) Text(status, color = cs.primary, style = typography.bodyMedium)
+        if (images.isNotEmpty()) {
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (image in images) {
+                    Image(bitmap = image, contentDescription = null, contentScale = ContentScale.Crop,
+                          modifier = Modifier.size(88.dp).clip(RoundedCornerShape(12.dp)))
+                }
+            }
+        }
+        for (entry in entries) Text(entry, style = typography.bodySmall, maxLines = 1)
+    }
+}

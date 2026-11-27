@@ -358,6 +358,44 @@ BackgroundAwaiter<std::invoke_result_t<F&>> withBackground(F work) {
     return {std::function<std::invoke_result_t<F&>()>(std::move(work))};
 }
 
+// Kotlin's withContext(Dispatchers.IO) { … } (or Default): the block on a worker thread, as withBackground;
+// withContext(Dispatchers.Main) { … }: here, at once (a coroutine here is on the UI thread already).
+namespace Dispatchers {
+struct BackgroundDispatcher {};
+struct MainDispatcher {};
+inline constexpr BackgroundDispatcher IO{}, Default{};
+inline constexpr MainDispatcher Main{};
+} // namespace Dispatchers
+template <class F>
+BackgroundAwaiter<std::invoke_result_t<F&>> withContext(Dispatchers::BackgroundDispatcher, F work) {
+    return withBackground(std::move(work));
+}
+namespace detail {
+template <class T>
+struct DoneAwaiter {
+    T value;
+    bool await_ready() const noexcept { return true; }
+    void await_suspend(std::coroutine_handle<>) const noexcept {}
+    T await_resume() { return std::move(value); }
+};
+template <>
+struct DoneAwaiter<void> {
+    bool await_ready() const noexcept { return true; }
+    void await_suspend(std::coroutine_handle<>) const noexcept {}
+    void await_resume() const noexcept {}
+};
+} // namespace detail
+template <class F>
+auto withContext(Dispatchers::MainDispatcher, F work) {
+    using T = std::invoke_result_t<F&>;
+    if constexpr (std::is_void_v<T>) {
+        work();
+        return detail::DoneAwaiter<void>{};
+    } else {
+        return detail::DoneAwaiter<T>{work()};
+    }
+}
+
 // A launched coroutine (Kotlin's Job): cancel it, ask how it is, or co_await job.join() for it to
 // end (completed or cancelled).
 class Job {

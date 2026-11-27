@@ -26,6 +26,32 @@ Color Color::copy(A&&... args) const {
     else return copy(a);
 }
 
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::widthIn(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Min, n::Max>;
+    static_assert(P::check<A...>());
+    return widthIn(P::get<n::Min>(0.f, args...), P::get<n::Max>(kInfinity, args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::heightIn(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::Min, n::Max>;
+    static_assert(P::check<A...>());
+    return heightIn(P::get<n::Min>(0.f, args...), P::get<n::Max>(kInfinity, args...));
+}
+template <class... A>
+    requires(detail::anyNamedArgument<A...>)
+Modifier Modifier::sizeIn(A&&... args) const {
+    namespace n = detail::names;
+    using P = detail::Params<n::MinWidth, n::MinHeight, n::MaxWidth, n::MaxHeight>;
+    static_assert(P::check<A...>());
+    return sizeIn(P::get<n::MinWidth>(0.f, args...), P::get<n::MinHeight>(0.f, args...), P::get<n::MaxWidth>(kInfinity, args...),
+                  P::get<n::MaxHeight>(kInfinity, args...));
+}
+
 // padding(all), padding(horizontal, vertical) or padding(start, top, end, bottom): the form of the
 // names given.
 template <class... A>

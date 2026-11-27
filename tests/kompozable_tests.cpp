@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -3881,6 +3883,94 @@ TEST(data_table_as_compose_data_table_writes_it) {
     CHECK(rule.onNodeWithText("Ali").bounds().y < rule.onNodeWithText("Ayşe").bounds().y);  // youngest first
     rule.onNodeWithText("Yaş").performClick();
     CHECK(rule.onNodeWithText("Cem").bounds().y < rule.onNodeWithText("Ayşe").bounds().y);  // oldest first
+}
+
+// Files opened and saved as FileKit writes it: launchers, a mode's result, the WithState states, the
+// coroutine API, and a file's text and bytes.
+@Kompozable
+fun Notes(folder: String) {
+    var text by remember { mutableStateOf("") }
+    var picked by remember { mutableStateOf("yok") }
+    val scope = rememberCoroutineScope()
+    val open = rememberFilePickerLauncher(type = FileKitType.File("txt", "md")) { file ->
+        if (file != null) scope.launch {
+            picked = file.name
+            text = file.readString()
+        }
+    }
+    val many = rememberFilePickerLauncher(mode = FileKitMode.Multiple(maxItems = 2), type = FileKitType.ImageAndVideo) { files ->
+        picked = files?.joinToString { it.nameWithoutExtension } ?: "yok"
+    }
+    val save = rememberFileSaverLauncher(dialogSettings = FileKitDialogSettings(title = "Kaydet")) { file ->
+        if (file != null) scope.launch { file.writeString(text + "!") }
+    }
+    val states = rememberFilePickerLauncher(mode = FileKitMode.SingleWithState, onError = { picked = it.message ?: "" }) { state ->
+        when (state) {
+            is FileKitPickerState.Started -> picked = "${state.total} başladı"
+            is FileKitPickerState.Completed -> picked = state.result.extension
+            else -> {}
+        }
+    }
+    Column {
+        Text("metin: $text")
+        Text("seçilen: $picked")
+        Button(onClick = { open.launch() }) { Text("Aç") }
+        Button(onClick = { many.launch() }) { Text("Çok") }
+        Button(onClick = { save.launch(suggestedName = "notlar", defaultExtension = "txt") }) { Text("Kaydet") }
+        Button(onClick = { states.launch() }) { Text("Durum") }
+        Button(onClick = {
+            scope.launch {
+                val dir = FileKit.openDirectoryPicker(directory = PlatformFile(folder))
+                if (dir != null) {
+                    val file = PlatformFile(dir, "b.bin")
+                    file.write("bayt".encodeToByteArray())
+                    val bytes: ByteArray = file.readBytes()
+                    picked = "${bytes.size} ${bytes.decodeToString()} ${dir.list().size}"
+                }
+            }
+        }) { Text("Klasör") }
+    }
+}
+
+TEST(file_dialogs_as_filekit_writes_them) {
+    namespace fs = std::filesystem;
+    fs::path root = fs::temp_directory_path() / "kompoz-filekit-kotlin";
+    fs::remove_all(root);
+    fs::create_directories(root);
+    { std::ofstream(root / "a.txt") << "merhaba"; }
+    std::vector<kompoz::detail::FileDialogRequest> asked;
+    kompoz::detail::FileDialogResult answer;
+    KompozTestRule rule([&] { Notes(root.string()); });
+    rule.host().setCallbacks({.fileDialog = [&](const kompoz::detail::FileDialogRequest& r, std::function<void(kompoz::detail::FileDialogResult)> done) {
+        asked.push_back(r);
+        done(answer);
+    }});
+    answer = {.files = {(root / "a.txt").string()}};
+    rule.onNodeWithText("Aç").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("metin: merhaba").exists() && rule.onNodeWithText("seçilen: a.txt").exists());
+    CHECK((asked.back().type.extensions == std::vector<std::string>{"txt", "md"}));
+    answer = {.files = {"/p/x.png", "/p/y.mp4", "/p/z.png"}};
+    rule.onNodeWithText("Çok").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("seçilen: x, y").exists() && asked.back().maxItems == 2 && asked.back().type.kind == FileKitType::Kind::ImageAndVideo);
+    answer = {.files = {(root / "notlar.txt").string()}};
+    rule.onNodeWithText("Kaydet").performClick();
+    rule.waitForIdle();
+    CHECK(asked.back().suggestedName == "notlar" && asked.back().title == std::optional<std::string>("Kaydet"));
+    std::ifstream saved(root / "notlar.txt");
+    std::string content((std::istreambuf_iterator<char>(saved)), std::istreambuf_iterator<char>());
+    CHECK(content == "merhaba!");
+    answer = {.files = {"/p/q.pdf"}};
+    rule.onNodeWithText("Durum").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("seçilen: pdf").exists());
+    answer = {.files = {root.string()}};
+    rule.onNodeWithText("Klasör").performClick();
+    rule.waitForIdle();
+    CHECK(asked.back().directory == root.string() && asked.back().kind == kompoz::detail::FileDialogRequest::Kind::OpenDirectory);
+    CHECK(rule.onNodeWithText("seçilen: 4 bayt 3").exists());
+    fs::remove_all(root);
 }
 
 int main(int argc, char** argv) {

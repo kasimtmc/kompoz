@@ -1178,6 +1178,17 @@
   settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
   that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
   `DragIndicator`.
+- **File dialogs** (Compose has none), with FileKit's API: `rememberFilePickerLauncher(type, mode, directory,
+  dialogSettings, onError) { result -> }`, `rememberFileSaverLauncher` (`launch(suggestedName, defaultExtension,
+  allowedExtensions, directory)`), `rememberDirectoryPickerLauncher`, and in a coroutine `FileKit.openFilePicker`,
+  `openFileSaver`, `openDirectoryPicker`. `FileKitType` (File, Image, Video, ImageAndVideo) and `FileKitMode` (Single,
+  Multiple, the WithState modes' `FileKitPickerState`). The system's own dialogs: the desktop portal on Linux (zenity or
+  kdialog where there is none), the common item dialogs on Windows, NSOpenPanel / NSSavePanel on macOS, the document and
+  photo pickers on Android (from `dev.kompoz.KompozFiles`, declared in the manifest), the browser's file input on the web
+  (and `FileKit.download`). `PlatformFile` reads and writes them (`readBytes`, `readString`, `write`, `writeString`;
+  Android's content:// URIs too), lists folders and keeps them across runs (`bookmarkData`).
+- Kotlin: `ByteArray` (`encodeToByteArray`, `decodeToString`) and `withContext(Dispatchers.IO) { … }` (a worker thread's);
+  `Modifier.widthIn(min = …, max = …)`, `heightIn` and `sizeIn` by their names.
 - **Data tables** (Compose has none), with compose-data-table's API and what big tables need: `DataTable(columns,
   sortColumnIndex, sortAscending, frozenColumns, state, headerHeight, rowHeight, horizontalPadding, backgroundColor,
   headerBackgroundColor) { items(list, key) { row(selected, onClick) { cell { … } } } }`, `DataColumn(alignment, width, onSort, resizable) { header }`,

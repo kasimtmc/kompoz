@@ -7,6 +7,7 @@
 #include "../common/image_codec.hpp"
 #include "../common/system.hpp"
 #include "../common/wallpaper_colors.hpp"
+#include "file_dialog.hpp"
 #include "uia_bridge.hpp"
 #include "win32_tray.hpp"
 
@@ -737,6 +738,9 @@ public:
         callbacks.openUri = [self](const std::string& uri) {
             if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", wide(uri).c_str(), nullptr, nullptr, SW_SHOWNORMAL)) <= 32)
                 self->log("kompoz: can't open " + uri);
+        };
+        callbacks.fileDialog = [self](const kompoz::detail::FileDialogRequest& r, std::function<void(kompoz::detail::FileDialogResult)> done) {
+            showWin32FileDialog(self->hwnd_, r, std::move(done));
         };
     }
 

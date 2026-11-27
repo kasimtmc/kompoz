@@ -13,6 +13,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -197,6 +199,59 @@ EM_JS(void, web_set_hash, (const char* path), {
 });
 EM_JS_DEPS(web_hash, "$stringToNewUTF8,$UTF8ToString");
 
+// A file dialog (FileKit's launchers): the browser's file input; what was chosen written into the
+// virtual file system (/tmp/picked/<n>/<name>, a folder's files under their paths in it) and named
+// back to kompoz_web_picked (null: closed without a choice).
+EM_JS(void, web_pick_files, (int id, const char* accept, int multiple, int directory), {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = UTF8ToString(accept);
+    input.multiple = !!multiple;
+    if (directory) input.webkitdirectory = true;
+    let answered = false;
+    const answer = (paths) => {
+        if (answered) return;
+        answered = true;
+        if (paths === null) return _kompoz_web_picked(id, 0);
+        const p = stringToNewUTF8(paths.join('\n'));
+        _kompoz_web_picked(id, p);
+        _free(p);
+    };
+    input.addEventListener('change', async () => {
+        const dir = '/tmp/picked/' + (Module.kompozPicks = (Module.kompozPicks || 0) + 1);
+        const paths = [];
+        for (const file of input.files) {
+            const path = dir + '/' + (directory && file.webkitRelativePath ? file.webkitRelativePath : file.name);
+            FS.mkdirTree(path.substring(0, path.lastIndexOf('/')));
+            FS.writeFile(path, new Uint8Array(await file.arrayBuffer().catch(() => new ArrayBuffer(0))));
+            paths.push(path);
+        }
+        // (a folder: the one picked, the first part of its files' paths; empty, none)
+        if (directory) answer(paths.length ? [dir + '/' + paths[0].substring(dir.length + 1).split('/')[0]] : []);
+        else answer(paths);
+    });
+    input.addEventListener('cancel', () => answer(null));
+    input.click();
+});
+EM_JS_DEPS(web_pick, "$stringToNewUTF8,$UTF8ToString,$FS");
+
+std::map<int, std::function<void(kompoz::detail::FileDialogResult)>> gPicks;
+int gNextPick = 1;
+
+// What the browser's input accepts for the type: its extensions (".pdf,.md"), or images, videos.
+std::string acceptOf(const kompoz::detail::FileDialogRequest& r) {
+    if (r.kind != kompoz::detail::FileDialogRequest::Kind::OpenFiles) return "";
+    switch (r.type.kind) {
+    case FileKitType::Kind::Image: return "image/*";
+    case FileKitType::Kind::Video: return "video/*";
+    case FileKitType::Kind::ImageAndVideo: return "image/*,video/*";
+    case FileKitType::Kind::File: break;
+    }
+    std::string out;
+    for (const std::string& e : r.type.extensions) out += (out.empty() ? "." : ",.") + e;
+    return out;
+}
+
 // A key's name (KeyboardEvent.key: the layout's letter, else its name) as Kompoz's key.
 Key keyOf(std::string_view key) {
     if (key.size() == 1) {
@@ -345,6 +400,14 @@ public:
         callbacks.getClipEntry = [self] { return self->clipboard_.items.empty() ? std::nullopt : std::optional(self->clipboard_); };
         callbacks.setClipEntry = [self](const std::optional<ClipEntry>& entry) { self->writeClipboard(entry.value_or(ClipEntry{})); };
         callbacks.openUri = [](const std::string& uri) { web_open(uri.c_str()); };
+        callbacks.fileDialog = [](const kompoz::detail::FileDialogRequest& r, std::function<void(kompoz::detail::FileDialogResult)> done) {
+            using Kind = kompoz::detail::FileDialogRequest::Kind;
+            if (r.kind == Kind::SaveFile)  // (as FileKit: the web has no save dialog)
+                return done({.error = "kompoz: the web has no save dialog: FileKit::download saves bytes"});
+            int id = gNextPick++;
+            gPicks.emplace(id, std::move(done));
+            web_pick_files(id, acceptOf(r).c_str(), r.kind == Kind::OpenFiles && r.multiple, r.kind == Kind::OpenDirectory);
+        };
         callbacks.locationChanged = [](const std::string& path) { web_set_hash(path.c_str()); };
         callbacks.hapticFeedback = [](HapticFeedbackType type) {
             using T = HapticFeedbackType;  // (a press is felt longer than a tick)
@@ -657,6 +720,19 @@ EMSCRIPTEN_KEEPALIVE const char* kompoz_web_clipboard() { return gPlatform->clip
 EMSCRIPTEN_KEEPALIVE const char* kompoz_web_clipboard_html() { return gPlatform->clipboardHtml(); }
 EMSCRIPTEN_KEEPALIVE void kompoz_web_drop(int kind, float x, float y, const char* data) { gPlatform->dropped(kind, x, y, data); }
 EMSCRIPTEN_KEEPALIVE void kompoz_web_changed(int what) { gPlatform->changed(what); }
+EMSCRIPTEN_KEEPALIVE void kompoz_web_picked(int id, const char* paths) {
+    auto it = gPicks.find(id);
+    if (it == gPicks.end()) return;
+    auto done = std::move(it->second);
+    gPicks.erase(it);
+    kompoz::detail::FileDialogResult result;
+    for (std::string_view rest = paths ? paths : ""; !rest.empty();) {
+        size_t end = rest.find('\n');
+        result.files.emplace_back(rest.substr(0, end));
+        rest = end == std::string_view::npos ? std::string_view() : rest.substr(end + 1);
+    }
+    done(std::move(result));
+}
 }
 
 int runWeb(int argc, char* argv[]) {

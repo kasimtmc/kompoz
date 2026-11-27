@@ -4,6 +4,7 @@
 #include "../../common/clip_formats.hpp"
 #include "../../common/system.hpp"
 #include "../desktop_services.hpp"
+#include "../file_chooser.hpp"
 #include "../../common/egl_window.hpp"
 #include "../key_text.hpp"
 #include "../media_devices.hpp"
@@ -372,7 +373,7 @@ public:
         return info;
     }
 
-    void attach(KompozHost&, KompozHost::Callbacks& callbacks) override {
+    void attach(KompozHost& h, KompozHost::Callbacks& callbacks) override {
         X11Platform* self = this;
         desktop_.start(title_, [self] { self->wake(); });
         callbacks.wake = [self] { self->wake(); };
@@ -396,6 +397,11 @@ public:
             return m.mimeTypes.empty() ? std::nullopt : std::optional(m);
         };
         callbacks.openUri = [](const std::string& uri) { openUri(uri); };
+        callbacks.fileDialog = [self, &h](const kompoz::detail::FileDialogRequest& r, std::function<void(kompoz::detail::FileDialogResult)> done) {
+            char parent[32];
+            std::snprintf(parent, sizeof parent, "x11:%lx", static_cast<unsigned long>(self->window_));
+            showFileChooser(self->window_ ? parent : "", h.strings(), r, std::move(done));
+        };
     }
 
     void handled(KompozHost& h, const Event& e) override { desktop_.handled(h, e); }

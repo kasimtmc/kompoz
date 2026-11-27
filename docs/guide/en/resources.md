@@ -118,6 +118,64 @@ fun ShareRow(link: String) {
 | `LocalSoftwareKeyboardController.current.hide()`, `show()` | Hides or shows the focused field's soft keyboard. |
 | `LocalFocusManager.current.clearFocus()` | Takes focus away (see [Gestures](gestures.md#focus)). |
 
+## Files
+
+Files are opened and saved through the system's own dialogs with the API of FileKit, Compose Multiplatform's file picker (Compose has none). A launcher is remembered in the composition; `launch()` shows its dialog over the app's window, and its block is called with what was chosen, or `null` when the dialog was closed without a choice:
+
+```kotlin
+@Kompozable
+fun Notes() {
+    var text by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val open = rememberFilePickerLauncher(type = FileKitType.File("txt", "md")) { file ->
+        if (file != null) scope.launch { text = file.readString() }
+    }
+    val save = rememberFileSaverLauncher { file ->
+        if (file != null) scope.launch { file.writeString(text) }
+    }
+    Column {
+        TextField(value = text, onValueChange = { text = it })
+        Row {
+            Button(onClick = { open.launch() }) { Text("Open") }
+            Button(onClick = { save.launch(suggestedName = "notes", defaultExtension = "txt") }) { Text("Save") }
+        }
+    }
+}
+```
+
+`rememberFilePickerLauncher` takes the `type` of files offered and a `mode`. The type is `FileKitType.File("pdf", "docx")` (any file with no extensions), or `Image`, `Video` or `ImageAndVideo`, which come from the photo picker on Android. The modes:
+
+- `FileKitMode.Single` gives a `PlatformFile?`.
+- `Multiple(maxItems = 10)` gives a `List<PlatformFile>?`.
+- `SingleWithState` / `MultipleWithState` give a `FileKitPickerState` as the files come: `Started`, `Progress`, then `Completed` with the `result`; or `Cancelled`, `Failed`.
+
+The other parameters:
+
+- `directory`: where the dialog opens.
+- `dialogSettings = FileKitDialogSettings(title = …, macOS = FileKitMacOSSettings(canCreateDirectories = false))`: the dialog's title and macOS's settings.
+- `onError = { e -> … }`: called where the dialog can't be shown.
+
+`rememberDirectoryPickerLauncher` picks a folder. `rememberFileSaverLauncher`'s `launch(suggestedName, defaultExtension, allowedExtensions, directory)` gives the file to write, not written yet. In a coroutine, `FileKit.openFilePicker(…)`, `openFileSaver(…)` and `openDirectoryPicker()` give the same back, and throw a `FileKitDialogException` where the dialog can't be shown:
+
+```kotlin body
+#! var count by remember { mutableStateOf(0) }
+#! val scope = rememberCoroutineScope()
+scope.launch {
+    val folder = FileKit.openDirectoryPicker()
+    if (folder != null) count = withContext(Dispatchers.IO) { folder.list().count { it.isRegularFile() } }
+}
+```
+
+A `PlatformFile` tells its `name`, `extension`, `nameWithoutExtension`, `path`, `size()`, `exists()`, `isDirectory()`, `mimeType()`, `lastModified()` and `parent()`, and reaches others with `resolve("a/b.txt")` or `/`. `readBytes()`, `readString()`, `write(bytes)` (or another file), and `writeString(text)` are suspend functions that run on a worker thread. `list()`, `copyTo`, `createDirectories()` and `delete()` run where they are called; put them in `withContext(Dispatchers.IO) { }` for big folders. `bookmarkData()` keeps a file to open again in a later run (`PlatformFile.fromBookmarkData(bytes)`); on Android, it also keeps the app's access to it.
+
+| Platform | The dialogs |
+|---|---|
+| Linux | The desktop portal's (`org.freedesktop.portal.FileChooser`: GNOME's, KDE's), over the app's window; zenity's or kdialog's where there is no portal (`KOMPOZ_FILE_DIALOG=zenity` picks one). |
+| Windows | The common item dialogs (`IFileOpenDialog`, `IFileSaveDialog`), owned by the window. |
+| macOS | `NSOpenPanel` and `NSSavePanel`, as sheets of the window; the title is the panel's message. |
+| Android | The system's document picker (`ACTION_OPEN_DOCUMENT`, `ACTION_CREATE_DOCUMENT`, `ACTION_OPEN_DOCUMENT_TREE`), and the photo picker for images and videos on Android 13+. A file is a `content://` URI, read and written like any other file. The app's manifest declares `dev.kompoz.KompozFiles` (see [Setup](setup.md#android)). |
+| Web | The browser's file input. The files chosen are copied into the page's virtual file system. There is no save dialog: `FileKit.download(bytes, fileName)` saves through the browser's downloads. |
+
 ## See also
 
 - [Graphics](graphics.md): images and vectors in depth.

@@ -1995,6 +1995,16 @@ public:
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     Modifier padding(A&&... args) const;
+    // widthIn(max = 320), heightIn(min = 48, max = 160), sizeIn(maxWidth = 200, …).
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier widthIn(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier heightIn(A&&... args) const;
+    template <class... A>
+        requires(detail::anyNamedArgument<A...>)
+    Modifier sizeIn(A&&... args) const;
     template <class... A>
         requires(detail::anyNamedArgument<A...>)
     Modifier background(A&&... args) const;

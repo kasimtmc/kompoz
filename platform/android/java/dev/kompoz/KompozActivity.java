@@ -48,6 +48,7 @@ public class KompozActivity extends Activity {
         view = new KompozView(this);
         setContentView(view);
         view.requestFocus();
+        KompozFiles.context = getApplicationContext();
         nativeCreate(this, getAssets(), getFilesDir().getAbsolutePath(), dir(getExternalFilesDir(null)), getCacheDir().getAbsolutePath());
         if (previous != null && previous != this) previous.finish();
         DisplayManager displays = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);

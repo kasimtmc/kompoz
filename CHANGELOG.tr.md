@@ -1217,6 +1217,17 @@
   (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
   Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
   `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **Dosya diyalogları** (Compose'da yok), FileKit'in API'siyle: `rememberFilePickerLauncher(type, mode, directory,
+  dialogSettings, onError) { sonuç -> }`, `rememberFileSaverLauncher` (`launch(suggestedName, defaultExtension,
+  allowedExtensions, directory)`), `rememberDirectoryPickerLauncher`; bir coroutine'de de `FileKit.openFilePicker`,
+  `openFileSaver`, `openDirectoryPicker`. `FileKitType` (File, Image, Video, ImageAndVideo) ve `FileKitMode` (Single,
+  Multiple, WithState kiplerinin `FileKitPickerState`'i). Sistemin kendi diyalogları: Linux'ta masaüstü portalı (olmadığı
+  yerde zenity ya da kdialog), Windows'ta ortak öğe diyalogları, macOS'ta NSOpenPanel / NSSavePanel, Android'de belge ve
+  fotoğraf seçicileri (manifest'te bildirilen `dev.kompoz.KompozFiles`'tan), web'de tarayıcının dosya girdisi (ve
+  `FileKit.download`). `PlatformFile` onları okuyup yazar (`readBytes`, `readString`, `write`, `writeString`; Android'in
+  content:// URI'leri de), klasörleri listeler ve onları çalıştırmalar arasında saklar (`bookmarkData`).
+- Kotlin: `ByteArray` (`encodeToByteArray`, `decodeToString`) ve `withContext(Dispatchers.IO) { … }` (bir işçi iş parçacığınınki);
+  adlarıyla `Modifier.widthIn(min = …, max = …)`, `heightIn` ve `sizeIn`.
 - **Veri tabloları** (Compose'da yok), compose-data-table'ın API'siyle ve büyük tabloların gerektirdikleriyle:
   `DataTable(columns, sortColumnIndex, sortAscending, frozenColumns, state, headerHeight, rowHeight, horizontalPadding,
   backgroundColor, headerBackgroundColor) { items(list, key) { row(selected, onClick) { cell { … } } } }`, `DataColumn(alignment, width, onSort,
