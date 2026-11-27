@@ -90,6 +90,48 @@ fun SplitPaneSection() {
     }
 }
 
+// A tree the user opens and selects in (Jewel's LazyTree): a project's files; "çok" makes its
+// thousand children when first opened.
+@Kompozable
+fun TreeSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val tree = remember {
+        buildTree {
+            addNode("kompoz") {
+                addNode("include") {
+                    addLeaf("kompoz.hpp")
+                    addLeaf("tree.hpp")
+                }
+                addNode("src") {
+                    addLeaf("lazy.cpp")
+                    addLeaf("tree.cpp")
+                    addNode("çok") { for (i in 1..1000) addLeaf("dosya $i.cpp") }
+                }
+                addLeaf("CMakeLists.txt")
+            }
+            addLeaf("README.md")
+        }
+    }
+    val treeState = rememberTreeState()
+    var picked by remember { mutableStateOf(0) }
+    var opened by remember { mutableStateOf("—") }
+    Section("LazyTree · buildTree · TreeState") {
+        Text("Okla ya da çift tıklayarak açın; Ctrl/Shift ile birden çok seçin; odaktayken oklar, Home/End, Enter. " +
+                 "Seçili: $picked · son açılan: $opened",
+             color = cs.onSurfaceVariant, style = typography.bodySmall)
+        LazyTree(tree = tree, treeState = treeState, onSelectionChange = { picked = it.size }, onElementDoubleClick = { opened = it.data },
+                 modifier = Modifier.fillMaxWidth().height(260.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp))
+                     .clip(RoundedCornerShape(12.dp)).padding(4.dp)) { element ->
+            Text(element.data, style = typography.bodyMedium, color = if (element.isNode()) cs.primary else cs.onSurface, maxLines = 1)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { treeState.openNodes(listOf("kompoz", "include", "src")) }) { Text("Hepsini aç") }
+            TextButton(onClick = { treeState.clearSelection(); picked = 0 }) { Text("Seçimi temizle") }
+        }
+    }
+}
+
 // A main pane with a supporting one: side by side on a wide window, slid in on a narrow one.
 @Kompozable
 fun SupportingPaneSection() {

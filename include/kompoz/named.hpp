@@ -617,6 +617,15 @@ struct Exit {};
 struct TargetState {};
 struct TransitionSpec {};
 struct ContentKey {};
+// Trees (tree.hpp).
+struct Tree {};
+struct TreeState {};
+struct SelectionMode {};
+struct OnElementClick {};
+struct OnElementDoubleClick {};
+struct OnSelectionChange {};
+struct IndentSize {};
+struct Id {};
 // Split panes (splitpane.hpp).
 struct MinSize {};
 struct InitialPositionPercentage {};
@@ -1092,6 +1101,13 @@ inline constexpr Param<detail::names::DragGestureDetector> dragGestureDetector;
 inline constexpr Param<detail::names::LazyListState> lazyListState;
 inline constexpr Param<detail::names::LazyGridState> lazyGridState;
 inline constexpr Param<detail::names::LazyStaggeredGridState> lazyStaggeredGridState;
+// Trees (tree.hpp).
+inline constexpr Param<detail::names::TreeState> treeState;
+inline constexpr Param<detail::names::SelectionMode> selectionMode;
+inline constexpr Param<detail::names::OnElementClick> onElementClick;
+inline constexpr Param<detail::names::OnElementDoubleClick> onElementDoubleClick;
+inline constexpr Param<detail::names::OnSelectionChange> onSelectionChange;
+inline constexpr Param<detail::names::IndentSize> indentSize;
 // Split panes (splitpane.hpp).
 inline constexpr Param<detail::names::MinSize> minSize;
 inline constexpr Param<detail::names::InitialPositionPercentage> initialPositionPercentage;
@@ -1111,6 +1127,9 @@ inline constexpr Param<detail::names::ContentType> contentType;
 inline constexpr Param<detail::names::Items> items;
 // (a name too common to take from you: ReorderableColumn's list = …)
 inline constexpr Param<detail::names::List> list;
+// (names too common to take from you: LazyTree's tree = …, addNode's id = …)
+inline constexpr Param<detail::names::Tree> tree;
+inline constexpr Param<detail::names::Id> id;
 // (NavigationSuiteScaffoldDefaults::navigationSuiteType(…) is the function: this is NavigationSuiteItem's and the scaffold's argument)
 inline constexpr Param<detail::names::NavigationSuiteType> navigationSuiteType;
 // (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)

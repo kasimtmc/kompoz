@@ -258,6 +258,33 @@ LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(2), modifier = Modi
 
 `span = StaggeredGridItemSpan.FullLine` verilen bir öğe, en uzun şeridin altında, tüm şeritleri bir başlık gibi kaplar. `Modifier.animateItem()` burada da çalışır.
 
+## Ağaçlar
+
+Kullanıcının açıp kapattığı bir ağaç (dosyalar ve klasörler, bir ana hat) bir `LazyTree`'dir: Compose'da yoktur; Kompoz'da JetBrains'in Jewel'ının (IntelliJ'nin Compose arayüzü) API'si vardır. `buildTree { }` onu `addNode(data) { çocuklar }` ve `addLeaf(data)` ile kurar; bir düğümün bloğu ilk açıldığında çalışır, böylece büyük bir ağaç (bir disk) bakıldıkça kurulur:
+
+```kotlin body
+val tree = remember {
+    buildTree {
+        addNode("src") {
+            addLeaf("main.cpp")
+            addNode("ui") { addLeaf("list.cpp") }
+        }
+        addLeaf("README.md")
+    }
+}
+val treeState = rememberTreeState()
+LazyTree(tree = tree, treeState = treeState, modifier = Modifier.fillMaxSize(),
+         onElementDoubleClick = { println("açıldı " + it.data) }) { element ->
+    Text(element.data)
+}
+```
+
+Bir satır, öğesinin içeriğidir; önünde onu açıp kapatan bir ok vardır ve derinliği kadar içeri girer (`indentSize`, 20 dp). Yalnızca görünen satırlar kompoze edilir; bir düğüm açılınca satırları belirerek gelir. Tıklama bir satırı seçer; `selectionMode = SelectionMode.Multiple` ile (varsayılan) Ctrl birini ekler ya da çıkarır, Shift bir aralık seçer; çift tıklama bir düğümü açar ya da kapatır ve `onElementDoubleClick`'i çağırır. `onElementClick` ve `onSelectionChange`'e de haber verilir.
+
+Ağaç klavye odağını tek parça olarak alır: Yukarı ve Aşağı seçimi taşır (Shift genişletir), Sağ bir düğümü açar ya da ilk çocuğuna gider, Sol kapatır ya da üst öğesine gider, Home ve End uçlara gider, Enter bir çift tıklamadır, Ctrl+A hepsini seçer. Erişilebilirlik hizmetlerine her satır seçili ve açık olup olmadığını söyler; onu açan ve kapatan eylemler sunar.
+
+Bir öğenin kimliği, verilmedikçe verisidir (`addNode(data, id = …)`); `treeState.toggleNode(id)`, `openNodes(listOf(…))`, `closeNode(id)`, `selectOnly(id)` ve `clearSelection()` ağacı koddan değiştirir, `isNodeOpen(id)` ve `isSelected(id)` okur. `rememberTreeState()` uygulamanın durumuyla birlikte kaydedilir. Bir öğenin `data`, `depth`, `parent`, `isNode()`, `isLeaf()` ve `children()`'ı vardır; metin olmayan veri için `buildTree<Item> { }`.
+
 ## Pager'lar
 
 `HorizontalPager` ve `VerticalPager`, Compose'un pager'ları gibi bir seferde bir sayfa gösterir ve kullanıcı kaydırdıkça sayfalara yakalanır:

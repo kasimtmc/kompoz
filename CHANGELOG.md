@@ -1178,6 +1178,12 @@
   settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
   that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
   `DragIndicator`.
+- **Trees** (Compose has none), with JetBrains Jewel's LazyTree API: `buildTree { addNode(data) { … }; addLeaf(data) }`
+  (a node's block runs when it is first opened), `LazyTree(tree, treeState, selectionMode, onElementClick,
+  onElementDoubleClick, onSelectionChange, indentSize) { element -> … }`, `rememberTreeState` (open nodes and selection by
+  id; saved). Rows composed as they come into view and fading in as a node opens; Ctrl and Shift selection; one keyboard
+  stop (arrows, Home/End, Enter, Ctrl+A); rows say to accessibility services whether they are selected and open, with
+  actions that open and close them (`Strings`' `expanded`, `collapsed`, `expand`, `collapse`).
 - **Split panes** (Compose has none), with Compose Multiplatform's SplitPane API: `HorizontalSplitPane` and
   `VerticalSplitPane` with `first(minSize) { }`, `second(minSize) { }` and `splitter { visiblePart { }; handle { } }`,
   `Modifier.markAsHandle()`, `cursorForHorizontalResize()` / `cursorForVerticalResize()`, `rememberSplitPaneState`

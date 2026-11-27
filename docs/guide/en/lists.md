@@ -258,6 +258,33 @@ LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(2), modifier = Modi
 
 An item with `span = StaggeredGridItemSpan.FullLine` crosses all the lanes, below the longest one, like a header. `Modifier.animateItem()` works here too.
 
+## Trees
+
+A tree the user opens and closes (files and folders, an outline) is a `LazyTree`: Compose has none; Kompoz has the API of JetBrains' Jewel (IntelliJ's Compose UI). `buildTree { }` makes it with `addNode(data) { children }` and `addLeaf(data)`; a node's block runs when it is first opened, so a big tree (a disk) is built as it is looked at:
+
+```kotlin body
+val tree = remember {
+    buildTree {
+        addNode("src") {
+            addLeaf("main.cpp")
+            addNode("ui") { addLeaf("list.cpp") }
+        }
+        addLeaf("README.md")
+    }
+}
+val treeState = rememberTreeState()
+LazyTree(tree = tree, treeState = treeState, modifier = Modifier.fillMaxSize(),
+         onElementDoubleClick = { println("open " + it.data) }) { element ->
+    Text(element.data)
+}
+```
+
+A row is its element's content after an arrow that opens and closes it, indented by its depth (`indentSize`, 20 dp); only the rows in view are composed, and opening a node fades its rows in. A click selects a row; with `selectionMode = SelectionMode.Multiple` (the default) Ctrl adds or takes one away and Shift selects a range; a double click opens or closes a node and calls `onElementDoubleClick`. `onElementClick` and `onSelectionChange` are told too.
+
+The tree takes the keyboard focus as one: Up and Down move the selection (Shift extends it), Right opens a node or goes to its first child, Left closes it or goes to its parent, Home and End go to the ends, Enter is a double click, Ctrl+A selects all. To accessibility services each row says whether it is selected and open, with actions that open and close it.
+
+An element's id is its data unless given (`addNode(data, id = …)`); `treeState.toggleNode(id)`, `openNodes(listOf(…))`, `closeNode(id)`, `selectOnly(id)` and `clearSelection()` change the tree from code, `isNodeOpen(id)` and `isSelected(id)` read it. `rememberTreeState()` is saved with the app's state. An element has `data`, `depth`, `parent`, `isNode()`, `isLeaf()` and `children()`; `buildTree<Item> { }` for data other than text.
+
 ## Pagers
 
 `HorizontalPager` and `VerticalPager` show one page at a time and snap to pages as the user swipes, like Compose's pagers:

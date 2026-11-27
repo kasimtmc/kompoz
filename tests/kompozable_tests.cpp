@@ -3812,6 +3812,46 @@ TEST(split_pane_as_compose_multiplatform_writes_it) {
     CHECK(rule.onNodeWithText("yer: 0.00").exists());
 }
 
+// A tree as Jewel's LazyTree writes it: built with buildTree, opened and double-clicked.
+@Kompozable
+fun FileTree() {
+    val tree = remember {
+        buildTree {
+            addNode("src") {
+                addLeaf("main.cpp")
+                addLeaf("app.hpp", id = "başlık")
+            }
+            addLeaf("README.md")
+        }
+    }
+    val treeState = rememberTreeState()
+    var opened by remember { mutableStateOf("") }
+    Column {
+        Text("açılan: $opened")
+        LazyTree(tree = tree, treeState = treeState, modifier = Modifier.height(300.dp), onElementDoubleClick = { opened = it.data }) { element ->
+            Text(if (element.isNode()) "${element.data}/" else element.data)
+        }
+        Button(onClick = { treeState.openNodes(listOf("src")) }) { Text("Aç") }
+    }
+}
+
+TEST(lazy_tree_as_jewel_writes_it) {
+    KompozTestRule rule([] { FileTree(); }, {400, 800});
+    CHECK(rule.onNodeWithText("src/").exists() && !rule.onNodeWithText("main.cpp").exists());
+    rule.onNodeWithText("Aç").performClick();
+    CHECK(rule.onNodeWithText("main.cpp").exists() && rule.onNodeWithText("app.hpp").exists());
+    Rect r = rule.onNodeWithText("README.md").bounds();
+    Offset at{r.x + r.width / 2, r.y + r.height / 2};
+    for (int i = 0; i < 2; ++i) {  // a double click
+        rule.host().pointerDown(at, -1, 0, KompozHost::PointerType::Mouse);
+        rule.advanceFrame();
+        rule.host().pointerUp(at);
+        rule.advanceFrame();
+    }
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("açılan: README.md").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

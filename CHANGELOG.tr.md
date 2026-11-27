@@ -1217,6 +1217,13 @@
   (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
   Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
   `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **Ağaçlar** (Compose'da yok), JetBrains Jewel'ın LazyTree API'siyle: `buildTree { addNode(data) { … }; addLeaf(data) }`
+  (bir düğümün bloğu ilk açıldığında çalışır), `LazyTree(tree, treeState, selectionMode, onElementClick,
+  onElementDoubleClick, onSelectionChange, indentSize) { element -> … }`, `rememberTreeState` (açık düğümler ve seçim
+  kimlikle; kaydedilir). Satırlar göründükçe kompoze edilir, bir düğüm açılınca belirerek gelir; Ctrl ve Shift ile seçim;
+  tek klavye durağı (oklar, Home/End, Enter, Ctrl+A); satırlar erişilebilirlik hizmetlerine seçili ve açık olup
+  olmadıklarını söyler, onları açan ve kapatan eylemler sunar (`Strings`'in `expanded`, `collapsed`, `expand`,
+  `collapse`'ı).
 - **Bölünmüş paneller** (Compose'da yok), Compose Multiplatform'un SplitPane API'siyle: `first(minSize) { }`,
   `second(minSize) { }` ve `splitter { visiblePart { }; handle { } }` alan `HorizontalSplitPane` ve `VerticalSplitPane`,
   `Modifier.markAsHandle()`, `cursorForHorizontalResize()` / `cursorForVerticalResize()`, `rememberSplitPaneState`

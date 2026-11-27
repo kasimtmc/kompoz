@@ -56,6 +56,8 @@ struct Strings {
     std::string pullToRefresh = "Pull to refresh", refreshing = "Refreshing";
     // The title bar Kompoz draws where the desktop leaves a window undecorated (its close button: `close`).
     std::string minimize = "Minimize", maximize = "Maximize", restore = "Restore";
+    // A tree's rows (LazyTree): a node's state and the actions that open and close it.
+    std::string expanded = "Expanded", collapsed = "Collapsed", expand = "Expand", collapse = "Collapse";
     // Pickers.
     DatePickerStrings datePicker = DatePickerStrings::english();
     std::string am = "AM", pm = "PM", hour = "Hour", minute = "Minute";  // TimePicker, TimeInput

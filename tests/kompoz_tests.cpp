@@ -32714,6 +32714,114 @@ TEST(split_pane_state_is_saved) {
     CHECK(back && near(back->positionPercentage(), 0.4f) && !back->moveEnabled());
 }
 
+// ---- Trees (tree.hpp) ----
+
+TEST(lazy_tree_opens_selects_and_takes_keys) {
+    int made = 0;  // how many times a node's block ran
+    Tree<> tree = buildTree([&made] {
+        addNode("src", [&made] {
+            ++made;
+            addLeaf("main.cpp");
+            addNode("ui", [] { addLeaf("list.cpp"); });
+        });
+        addLeaf("README.md");
+    });
+    TreeState state;
+    std::vector<std::string> doubles;
+    size_t chosen = 0;
+    KompozTestRule rule([&] {
+        LazyTree(tree, Modifier().fillMaxSize(), kompoz::treeState = state,
+                 kompoz::onElementDoubleClick = [&](const Tree<>::Element& e) { doubles.push_back(e.data()); },
+                 kompoz::onSelectionChange = [&](const std::vector<std::shared_ptr<const Tree<>::Element>>& s) { chosen = s.size(); },
+                 [](const Tree<>::Element& e) { Text(e.data()); });
+    }, {300, 600});
+    CHECK(rule.onNodeWithText("src").exists() && rule.onNodeWithText("README.md").exists() && !rule.onNodeWithText("main.cpp").exists());
+    CHECK(made == 0);  // not opened yet: its children not made
+    KompozHost& host = rule.host();
+    auto doubleClick = [&](const char* text) {  // two clicks 50 ms apart
+        Rect r = rule.onNodeWithText(text).bounds();
+        Offset at{r.x + r.width / 2, r.y + r.height / 2};
+        for (int i = 0; i < 2; ++i) {
+            host.pointerDown(at, -1, 0, KompozHost::PointerType::Mouse);
+            rule.advanceFrame();
+            host.pointerUp(at);
+            rule.advanceFrame();
+            rule.advanceFrame();
+        }
+    };
+    doubleClick("src");  // opens it
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("main.cpp").exists() && made == 1 && doubles == std::vector<std::string>{"src"});
+    CHECK(state.isNodeOpen("src") && state.isSelected("src") && chosen == 1);
+    CHECK(near(rule.onNodeWithText("main.cpp").bounds().x - rule.onNodeWithText("src").bounds().x, LazyTreeDefaults::IndentSize));
+    // To accessibility services: open, with an action that closes it.
+    auto semantics = detail::semanticsOf(rule.onNodeWithText("src").node()->parent->modifier);
+    CHECK(semantics && semantics->stateDescription == "Expanded" && semantics->customActions.size() == 1 &&
+          semantics->customActions[0].label == "Collapse" && semantics->checked == true);
+    // The keys: down the rows, into ui (Right opens it, Right again goes in), back out (Left, Left closes it).
+    auto key = [&](Key k, KeyModifiers m = {}) {
+        host.keyDown(k, m);
+        rule.waitForIdle();
+    };
+    key(Key::Down);
+    CHECK(state.isSelected("main.cpp") && !state.isSelected("src"));
+    key(Key::Down);
+    key(Key::Right);
+    CHECK(rule.onNodeWithText("list.cpp").exists());
+    key(Key::Right);
+    CHECK(state.isSelected("list.cpp"));
+    key(Key::Left);
+    CHECK(state.isSelected("ui"));
+    key(Key::Left);
+    CHECK(!rule.onNodeWithText("list.cpp").exists() && !state.isNodeOpen("ui"));
+    key(Key::End);
+    CHECK(state.isSelected("README.md"));
+    key(Key::Enter);
+    CHECK((doubles == std::vector<std::string>{"src", "README.md"}));
+    // Several: Shift+Up extends from README.md, Ctrl+click adds one, Ctrl+A all.
+    key(Key::Up, {.shift = true});
+    CHECK(state.isSelected("README.md") && state.isSelected("ui") && chosen == 2);
+    host.setKeyboardModifiers({.ctrl = true});
+    rule.advanceTimeBy(400);  // (not a double click)
+    rule.onNodeWithText("src").performClick();
+    host.setKeyboardModifiers({});
+    CHECK(state.isSelected("src") && chosen == 3);
+    key(Key::A, {.ctrl = true});
+    CHECK(chosen == 4 && state.selectedKeys().size() == 4);
+    // From code: open and close by id.
+    state.toggleNode("src");
+    rule.waitForIdle();
+    CHECK(!rule.onNodeWithText("main.cpp").exists());
+    state.openNodes(std::vector<std::string>{"src", "ui"});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("list.cpp").exists() && made == 1);
+    auto saved = Saver<TreeState>::restore(Saver<TreeState>::save(state));
+    CHECK(saved && saved->isNodeOpen("ui") && saved->isSelected("README.md"));
+}
+
+TEST(lazy_tree_arrow_opens_and_the_name_beside_it_selects) {
+    Tree<> tree = buildTree([] {
+        addNode("src", [] { addLeaf("main.cpp"); });
+        addLeaf("README.md");
+    });
+    TreeState state;
+    KompozTestRule rule([&] {
+        LazyTree(tree, Modifier().fillMaxSize(), kompoz::treeState = state, [](const Tree<>::Element& e) { Text(e.data()); });
+    }, {400, 600});
+    auto touch = [&](Offset at) {
+        rule.host().pointerDown(at, -1, 0, KompozHost::PointerType::Touch);
+        rule.advanceFrame();
+        rule.host().pointerUp(at);
+        rule.waitForIdle();
+        rule.advanceTimeBy(400);  // (not a double tap)
+    };
+    Rect name = rule.onNodeWithText("src").bounds();
+    touch({name.x - 12, name.y + name.height / 2});  // the arrow: opens it, selects nothing
+    CHECK(state.isNodeOpen("src") && state.selectedKeys().empty());
+    touch({name.x + 2, name.y + name.height / 2});  // the name's first letter, within the arrow's 48 dp touch reach
+    CHECK(state.isNodeOpen("src") && state.isSelected("src"));
+}
+
 int main(int argc, char** argv) {
     detail::setLayoutCheck(true);
     detail::setKeepCheck(true);
