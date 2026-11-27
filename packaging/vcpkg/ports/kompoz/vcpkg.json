@@ -46,6 +46,9 @@
       "dependencies": [
         {
           "name": "libjpeg-turbo",
+          "features": [
+            "turbojpeg"
+          ],
           "platform": "!windows"
         }
       ]

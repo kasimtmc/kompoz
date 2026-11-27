@@ -3744,6 +3744,47 @@ TEST(surfaces_as_compose_writes_them) {
     CHECK(std::find(canvas.rectColors.begin(), canvas.rectColors.end(), tinted) != canvas.rectColors.end());
 }
 
+// A grid the user reorders, as Compose apps write it with the Reorderable library.
+@Kompozable
+fun PhotoOrder() {
+    val photos = remember { listOf(1, 2, 3, 4, 5, 6).toMutableStateList() }
+    val gridState = rememberLazyGridState()
+    val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
+        photos.add(to.index, photos.removeAt(from.index))
+    }
+    Column {
+        Text("fotoğraflar: ${photos.joinToString(",")}")
+        LazyVerticalGrid(columns = GridCells.Fixed(3), state = gridState, modifier = Modifier.height(300.dp)) {
+            items(photos, key = { it }) { photo ->
+                ReorderableItem(reorderState, key = photo) { isDragging ->
+                    Box(modifier = Modifier.fillMaxWidth().height(60.dp).longPressDraggableHandle().testTag("foto $photo")) {
+                        Text(if (isDragging) "$photo tutuluyor" else "$photo")
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST(reorderable_grid_as_compose_apps_write_it) {
+    KompozTestRule rule([] { PhotoOrder(); }, {300, 800});
+    Rect first = rule.onNodeWithTag("foto 1").bounds();
+    KompozHost& host = rule.host();
+    float x = first.x + 50, y = first.y + 30;
+    host.pointerDown({x, y});
+    rule.advanceTimeBy(600);  // held: picked up
+    CHECK(rule.onNodeWithText("1 tutuluyor").exists());
+    for (int d = 0; d <= 110; d += 10) {  // onto photo 2
+        rule.advanceFrame();
+        host.pointerMove({x + float(d), y});
+    }
+    rule.advanceFrame();
+    rule.advanceFrame();
+    host.pointerUp({x + 110, y});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("fotoğraflar: 2,1,3,4,5,6").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

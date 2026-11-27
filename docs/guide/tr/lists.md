@@ -133,6 +133,24 @@ Sürüklenen öğe parmağı izler ve ötekilerin üstünde çizilir; ötekiler 
 
 İkisi de `enabled`, `interactionSource` (sürüklemeyi duyar), `onDragStarted = { startedPosition -> … }` ve `onDragStopped = { … }` alır; dokunsal geri bildirim için bir yer. `onMove` bir `suspend` lambda olabilir (yeni sırayı kaydeden): sonraki taşıma onu bekler. `ReorderableItem(…, enabled = false)` öğesinin üstünden hiç geçilmez.
 
+Izgaralar da aynı yolla sıralanır: `LazyVerticalGrid` ve `LazyHorizontalGrid` için `rememberReorderableLazyGridState(gridState) { from, to -> … }`, kademeli olanlar için `rememberReorderableLazyStaggeredGridState(staggeredGridState) { from, to -> … }` (`from` ve `to` onların öğe bilgileridir). Izgarada sürüklenen öğe serbestçe hareket eder ve ortasının altındaki öğenin yerine geçer:
+
+```kotlin body
+val photos = remember { listOf("a.jpg", "b.jpg", "c.jpg", "d.jpg").toMutableStateList() }
+val gridState = rememberLazyGridState()
+val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
+    photos.add(to.index, photos.removeAt(from.index))
+}
+LazyVerticalGrid(columns = GridCells.Adaptive(96.dp), state = gridState) {
+    items(photos, key = { it }) { photo ->
+        ReorderableItem(reorderState, key = photo) { isDragging ->
+            AsyncImage(model = photo, contentDescription = null, contentScale = ContentScale.Crop,
+                       modifier = Modifier.aspectRatio(1f).longPressDraggableHandle())
+        }
+    }
+}
+```
+
 Tembel olmayan kısa bir liste `ReorderableColumn`'a (ya da `ReorderableRow`'a) girer: sürüklerken sıra ekranda değişir, her adımda `onMove` çağrılır ve öğe bırakılınca taşıma `onSettle(fromIndex, toIndex)`'e gelir. Her elemanın `ReorderableItem`'ı kendi `key`'i içine girer:
 
 ```kotlin body
@@ -223,7 +241,8 @@ LazyVerticalGrid(
 
 - `GridCells.Fixed(3)` üç sütun verir; `GridCells.Adaptive(120.dp)` en az 120 dp'lik sütunlardan sığabildiği kadar.
 - Bir öğe birkaç hücreye yayılabilir: ızgara boyunca uzanan bir başlık için `item(span = { GridItemSpan(maxLineSpan) })`, bir listenin her biri için `items(list, span = { item -> GridItemSpan(2) })`.
-- `rememberLazyGridState()` listenin durumu gibi çalışır.
+- `rememberLazyGridState()` listenin durumu gibi çalışır; `reverseLayout = true` ilk satırı en alta koyar.
+- Bir öğenin kökündeki `Modifier.animateItem()` onu ızgarada da listedeki gibi canlandırır: başka bir satıra ya da sütuna taşınan öğe oraya kayar, yenisi belirir, çıkarılanı solar.
 
 `LazyVerticalStaggeredGrid` ve `LazyHorizontalStaggeredGrid` farklı boyutlardaki öğeleri, bir masonry yerleşimi gibi kendi sütunlarına (ya da satırlarına) yerleştirir: her öğe en kısa sütuna gider.
 
@@ -237,7 +256,7 @@ LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(2), modifier = Modi
 }
 ```
 
-`span = StaggeredGridItemSpan.FullLine` verilen bir öğe, en uzun şeridin altında, tüm şeritleri bir başlık gibi kaplar.
+`span = StaggeredGridItemSpan.FullLine` verilen bir öğe, en uzun şeridin altında, tüm şeritleri bir başlık gibi kaplar. `Modifier.animateItem()` burada da çalışır.
 
 ## Pager'lar
 

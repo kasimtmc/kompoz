@@ -32472,6 +32472,157 @@ TEST(reorderable_lists_reversed_and_right_to_left) {
     CHECK(near(rule.onNodeWithTag("sütun1").bounds().x, 200));
 }
 
+// ---- Lazy grids: their cells as the list's children (moving lines with their state), animateItem ----
+
+TEST(grid_cell_keeps_its_state_moving_to_another_line) {
+    auto items = mutableStateListOf<int>({1, 2, 3, 4, 5, 6});
+    KompozTestRule rule([&] {
+        LazyVerticalGrid(GridCells::Fixed(3), Modifier().fillMaxSize(), [=] {
+            kompoz::items(items.items(), [](int v) { return v; }, [](int v) {
+                auto taps = remember([] { return mutableStateOf(0); });
+                Box(Modifier().height(50).clickable([taps] { taps.set(taps.get() + 1); }).testTag("hücre" + std::to_string(v)),
+                    [=] { Text(std::to_string(v) + ":" + std::to_string(taps.get())); });
+            });
+        });
+    }, {300, 800});
+    rule.onNodeWithTag("hücre5").performClick();
+    CHECK(rule.onNodeWithText("5:1").exists());
+    items.removeAt(4);
+    items.add(0, 5);  // from the second line to the first: the same cell, its taps with it
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("5:1").exists());
+    CHECK(near(rule.onNodeWithTag("hücre5").bounds().x, 0) && near(rule.onNodeWithTag("hücre5").bounds().y, 0));
+    CHECK(near(rule.onNodeWithTag("hücre3").bounds().x, 0) && near(rule.onNodeWithTag("hücre3").bounds().y, 50));
+}
+
+TEST(grid_animate_item_glides_across_lines_and_fades) {
+    auto items = mutableStateListOf<int>({1, 2, 3, 4, 5, 6});
+    KompozTestRule rule([&] {
+        LazyVerticalGrid(GridCells::Fixed(3), Modifier().fillMaxSize(), [=] {
+            kompoz::items(items.items(), [](int v) { return v; }, [](int v) {
+                Box(Modifier().animateItem(tween(200, 0, LinearEasing)).height(50).testTag("hücre" + std::to_string(v)));
+            });
+        });
+    }, {300, 800});
+    CHECK(near(rule.onNodeWithTag("hücre4").bounds().x, 0) && near(rule.onNodeWithTag("hücre4").bounds().y, 50));
+    items.removeAt(0);  // 4 goes from the start of line 2 to the end of line 1
+    rule.advanceTimeBy(112);
+    Rect mid = rule.onNodeWithTag("hücre4").bounds();
+    CHECK(mid.x > 40 && mid.x < 160 && mid.y > 5 && mid.y < 45);
+    testing::RecordingCanvas fading;
+    rule.host().draw(fading);
+    CHECK(fading.layers >= 1);  // item 1 fading out where it was
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("hücre4").bounds().x, 200) && near(rule.onNodeWithTag("hücre4").bounds().y, 0));
+    CHECK(!rule.onNodeWithTag("hücre1").exists());
+    items.add(0, 9);  // new: fades in, the others glide on
+    rule.advanceTimeBy(48);
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(canvas.layers >= 1);
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("hücre4").bounds().x, 0) && near(rule.onNodeWithTag("hücre4").bounds().y, 50));
+}
+
+TEST(staggered_grid_animate_item_glides_and_fades) {
+    auto items = mutableStateListOf<int>({1, 2, 3, 4});
+    KompozTestRule rule([&] {
+        LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxSize(), [=] {
+            kompoz::items(items.items(), [](int v) { return v; }, [](int v) {
+                Box(Modifier().animateItem(tween(200, 0, LinearEasing)).height(float(40 + 20 * v)).testTag("kart" + std::to_string(v)));
+            });
+        });
+    }, {300, 800});
+    // 1 (60) left, 2 (80) right, 3 (100) under 1, 4 (120) under 2.
+    CHECK(near(rule.onNodeWithTag("kart3").bounds().y, 60) && near(rule.onNodeWithTag("kart3").bounds().x, 0));
+    items.removeAt(0);  // 2 left, 3 right, 4 under 2
+    rule.advanceTimeBy(112);
+    Rect mid = rule.onNodeWithTag("kart3").bounds();
+    CHECK(mid.x > 30 && mid.x < 120 && mid.y > 5 && mid.y < 55);
+    testing::RecordingCanvas fading;
+    rule.host().draw(fading);
+    CHECK(fading.layers >= 1);
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("kart3").bounds().x, 150) && near(rule.onNodeWithTag("kart3").bounds().y, 0));
+    CHECK(!rule.onNodeWithTag("kart1").exists());
+    items.add(0, 9);
+    rule.advanceTimeBy(48);
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(canvas.layers >= 1);
+    rule.waitForIdle();
+}
+
+TEST(grid_reverse_layout) {
+    KompozTestRule rule([] {
+        LazyVerticalGrid(GridCells::Fixed(2), Modifier().fillMaxWidth().height(200), kompoz::reverseLayout = true, [] {
+            kompoz::items(4, [](int i) { Box(Modifier().height(50).testTag("ters" + std::to_string(i))); });
+        });
+    }, {300, 800});
+    CHECK(near(rule.onNodeWithTag("ters0").bounds().y, 150) && near(rule.onNodeWithTag("ters0").bounds().x, 0));
+    CHECK(near(rule.onNodeWithTag("ters2").bounds().y, 100) && near(rule.onNodeWithTag("ters3").bounds().x, 150));
+}
+
+TEST(reorderable_grids_move_cells_across_lines_and_lanes) {
+    auto cells = mutableStateListOf<int>({1, 2, 3, 4, 5, 6});
+    auto cards = mutableStateListOf<int>({1, 2, 3, 4});
+    auto move = [](SnapshotStateList<int> list) {
+        return [list](const auto& from, const auto& to) {
+            int v = list.items()[size_t(from.index)];
+            list.removeAt(size_t(from.index));
+            list.add(size_t(to.index), v);
+        };
+    };
+    KompozTestRule rule([&] {
+        Column(Modifier().fillMaxSize(), [=] {
+            LazyGridState gridState = rememberLazyGridState();
+            ReorderableLazyGridState reorder = rememberReorderableLazyGridState(gridState, move(cells));
+            LazyVerticalGrid(GridCells::Fixed(3), Modifier().fillMaxWidth().height(200), kompoz::state = gridState, [=] {
+                kompoz::items(cells.items(), [](int v) { return v; }, [=](int v) {
+                    ReorderableItem(reorder, kompoz::arg::key = v, [=](bool isDragging) {
+                        Box(Modifier().draggableHandle().fillMaxWidth().height(50).testTag("h" + std::to_string(v)),
+                            [=] { Text(isDragging ? "taşınıyor" : std::to_string(v)); });
+                    });
+                });
+            });
+            LazyStaggeredGridState staggered = rememberLazyStaggeredGridState();
+            ReorderableLazyStaggeredGridState reorderCards = rememberReorderableLazyStaggeredGridState(staggered, move(cards));
+            LazyVerticalStaggeredGrid(StaggeredGridCells::Fixed(2), Modifier().fillMaxWidth().height(300), kompoz::state = staggered, [=] {
+                kompoz::items(cards.items(), [](int v) { return v; }, [=](int v) {
+                    ReorderableItem(reorderCards, kompoz::arg::key = v, [=] {
+                        Box(Modifier().draggableHandle().fillMaxWidth().height(float(40 + 20 * v)).testTag("k" + std::to_string(v)));
+                    });
+                });
+            });
+        });
+    }, {300, 800});
+    KompozHost& host = rule.host();
+    auto path = [&](std::vector<Offset> points) {
+        host.pointerDown(points[0]);
+        for (size_t i = 1; i < points.size(); ++i)
+            for (int k = 1; k <= 6; ++k) {
+                rule.advanceFrame();
+                Offset a = points[i - 1], b = points[i];
+                host.pointerMove({a.x + (b.x - a.x) * float(k) / 6, a.y + (b.y - a.y) * float(k) / 6});
+                rule.advanceFrame();
+            }
+    };
+    // Cell 1 right over cell 2, then down over cell 5 (on the next line): the same drag all the way.
+    path({{50, 25}, {160, 25}, {160, 80}});
+    CHECK((cells.items() == std::vector<int>{2, 3, 4, 5, 1, 6}));
+    CHECK(rule.onNodeWithText("taşınıyor").exists());
+    host.pointerUp({160, 80});
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("h1").bounds().x, 100) && near(rule.onNodeWithTag("h1").bounds().y, 50));
+    CHECK(near(rule.onNodeWithTag("h2").bounds().x, 0) && near(rule.onNodeWithTag("h2").bounds().y, 0));
+    // Card 1 (left lane) over card 2 (right lane).
+    path({{75, 230}, {225, 230}});
+    host.pointerUp({225, 230});
+    rule.waitForIdle();
+    CHECK((cards.items() == std::vector<int>{2, 1, 3, 4}));
+    CHECK(near(rule.onNodeWithTag("k1").bounds().x, 150));
+}
+
 int main(int argc, char** argv) {
     detail::setLayoutCheck(true);
     detail::setKeepCheck(true);

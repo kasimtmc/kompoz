@@ -1178,6 +1178,16 @@
   settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
   that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
   `DragIndicator`.
+- **The vcpkg port** asks for libjpeg-turbo's `turbojpeg` feature: vcpkg's libjpeg-turbo builds TurboJPEG, which
+  AsyncImage decodes with, only with it now (Kompoz's configure stopped: JPEG required but not found). CI tries the
+  port with today's vcpkg on every runner.
+- **Grids the user reorders**: `rememberReorderableLazyGridState(gridState) { from, to -> … }` and
+  `rememberReorderableLazyStaggeredGridState`, the dragged item moving freely and taking the place of the item under
+  its middle.
+- **Lazy grids as Compose's**: `Modifier.animateItem()` in `LazyVerticalGrid`, `LazyHorizontalGrid` and the staggered
+  grids (an item moved to another line, column or lane glides there, a new one fades in, a removed one fades out where
+  it was); a grid's cells are the lazy layout's own nodes, so that one moved to another line keeps its state (it was
+  composed again in the new line's node), and `zIndex` orders them; `reverseLayout` for the grids.
 - **A lazy item's `zIndex`** orders it among the items, as in Compose (each item's node in the list takes it).
 - **LazyStaggeredGridLayoutInfo's `orientation`**, as Compose's.
 - **Surface as Compose's**, its four forms: plain (it takes the touches on it from what is under it), `onClick`,

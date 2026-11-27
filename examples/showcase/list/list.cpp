@@ -163,6 +163,18 @@ fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, lik
         }
     }
     val rows = remember { List(10000) { it } }
+    // The grids' tiles and cards, reordered by a long press and a drag (item 0 is the title).
+    val tiles = remember { List(10000) { it }.toMutableStateList() }
+    val cards = remember { List(10000) { it }.toMutableStateList() }
+    val haptics = LocalHapticFeedback.current
+    val reorderTiles = rememberReorderableLazyGridState(gridState) { from, to ->
+        tiles.add(to.index - 1, tiles.removeAt(from.index - 1))
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+    }
+    val reorderCards = rememberReorderableLazyStaggeredGridState(staggeredScroll) { from, to ->
+        cards.add(to.index - 1, cards.removeAt(from.index - 1))
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+    }
     val cs = MaterialTheme.colorScheme
     Column(modifier = modifier) {
         LazyRow(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 4.dp),
@@ -220,9 +232,16 @@ fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, lik
                                  contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 88.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
                                  horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text("10.000 kare", modifier = Modifier.padding(4.dp, 0.dp, 0.dp, 4.dp), style = MaterialTheme.typography.titleMedium)
+                        Text("10.000 kare · uzun basıp sürükleyin", modifier = Modifier.padding(4.dp, 0.dp, 0.dp, 4.dp),
+                             style = MaterialTheme.typography.titleMedium)
                     }
-                    items(rows, key = { it }) { GridTile(it) }
+                    items(tiles, key = { it }) { tile ->
+                        ReorderableItem(reorderTiles, key = tile) { isDragging ->
+                            val scale by animateFloatAsState(if (isDragging) 1.08f else 1f)
+                            Box(modifier = Modifier.scale(scale).longPressDraggableHandle(
+                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) })) { GridTile(tile) }
+                        }
+                    }
                 }
             }
         } else if (mode == 3) {
@@ -243,10 +262,16 @@ fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, lik
                                       state = staggeredScroll, contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 88.dp),
                                       verticalItemSpacing = 8.dp, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item(span = StaggeredGridItemSpan.FullLine) {
-                    Text("10.000 kart, kendi yükseklikleriyle", modifier = Modifier.padding(4.dp, 0.dp, 0.dp, 4.dp),
+                    Text("10.000 kart, kendi yükseklikleriyle · uzun basıp sürükleyin", modifier = Modifier.padding(4.dp, 0.dp, 0.dp, 4.dp),
                          style = MaterialTheme.typography.titleMedium)
                 }
-                items(rows, key = { it }) { StaggeredTile(it) }
+                items(cards, key = { it }) { card ->
+                    ReorderableItem(reorderCards, key = card) { isDragging ->
+                        val scale by animateFloatAsState(if (isDragging) 1.05f else 1f)
+                        Box(modifier = Modifier.scale(scale).longPressDraggableHandle(
+                            onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) })) { StaggeredTile(card) }
+                    }
+                }
             }
         }
     }

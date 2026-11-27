@@ -42,22 +42,49 @@ struct LazyListState::Data {
         return it == sticky.begin() ? -1 : *std::prev(it);
     }
 
-    // animateItem(): where each animated item was shown and at which index, and its running animations.
+    // A lazy grid's: its lines are the list's items, and each holds the cells (the grid's items)
+    // in it, which are the list node's children one by one (so that a cell moved to another line
+    // is the same node, its state and gestures going with it).
+    struct Grid {
+        std::vector<int> lineStart;              // the first cell of each line, then the cell count
+        std::vector<std::pair<int, int>> place;  // each cell's column and span
+        std::vector<size_t> keys, types;         // each cell's key and content type
+        int columns = 1;
+        float within = 0;                        // between the cells of a line
+        std::function<void(int)> composeAt;      // composes a cell
+        MutableState<float> across{0.f};         // a line's length (Adaptive cells count by it)
+        struct Cell {
+            size_t key = 0;
+            int column = 0;
+            float across = 0, acrossSize = 0, alongSize = 0;
+        };
+        std::unordered_map<int, Cell> cells;  // laid out, by index (the grid state's layoutInfo)
+    };
+    std::shared_ptr<Grid> grid;
+    // From the last composition: each composed item's first child (then the children's count),
+    // and each child's item (a grid's: its cell).
+    std::vector<int> unitStart, childItem;
+    size_t childKey(int item) const { return grid ? grid->keys[size_t(item)] : keys[size_t(item)]; }
+
+    // animateItem(): where each animated item (a grid's cell) was shown and at which index, and
+    // its running animations. Positions are {along the list, across it}.
     struct ItemAnimation {
-        int index = -1;
-        float shown = 0;  // main-axis position on screen at the last layout
-        float from = 0;   // offset the move animation starts at
+        int index = -1, column = -1;
+        float width = 0;  // across (a cell's: to fade out as wide)
+        Offset shown;     // where it was placed at the last layout
+        Offset from;   // the offset the move animation starts at
         int64_t moveStart = -1, appearStart = -1;
     };
     std::unordered_map<size_t, ItemAnimation> itemAnimations;
-    std::unordered_set<size_t> previousKeys;  // all keys before the last composition (to spot insertions)
+    std::unordered_set<size_t> previousKeys, currentKeys;  // all keys before the last composition (to spot insertions), and in it
     bool animatesItems = false;
     // Items whose data is gone, fading out where they were shown; their nodes are the children
     // after the composed ones, kept as they were (Kompozer::keepGroup).
     struct Leaving {
         size_t key;
         int64_t start;
-        float shown;  // main-axis position on screen
+        Offset shown;  // {along, across}
+        float width = 0;
         bool done = false;
     };
     std::vector<Leaving> leaving;
@@ -472,12 +499,14 @@ float itemZIndex(const LayoutNode& container) {
 }
 
 // Every item gets one container node (laid out by detail::stackPolicy), so the list maps items
-// to children one to one.
+// to children one to one; a grid's line, one per cell.
 
 MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions options) {
     return [state, vertical, options](LayoutNode& node, const Constraints& c) {
         LazyListState::Data& d = *state.data_;
         detail::recordRead(&d);  // scrolled (scrollBy, scrollToItem): measured again
+        LazyListState::Data::Grid* grid = d.grid.get();
+        bool probe = detail::isProbeMeasure();
         PaddingValues p = detail::paddingNow(options.contentPadding);
         bool reverse = options.reverseLayout;  // laid out from the start edge as usual, then mirrored
         float before = vertical ? p.top : p.start, after = vertical ? p.bottom : p.end;
@@ -489,46 +518,71 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
         auto mainOf = [&](Size s) { return vertical ? s.height : s.width; };
         auto crossOf = [&](Size s) { return vertical ? s.width : s.height; };
 
-        // Child j shows item composed[j]: the items start..start+n in order, maybe a pinned
-        // header after them. Positions below are per child.
+        // Unit u (an item; a grid's line) shows item composed[u] with children
+        // unitStart[u]..unitStart[u + 1]: the items start..start+n in order, maybe a pinned header
+        // after them. Positions below are per unit.
         int start = d.composedStart;
-        size_t children = std::min(node.children.size(), d.composed.size());
-        bool hasPinned = d.pinned >= 0 && children > 0 && d.composed[children - 1] == d.pinned;
-        int n = int(children) - (hasPinned ? 1 : 0);  // the in-order ones (the range without the pinned header)
-        std::vector<float> mains(children), crosses(children);
+        size_t units = d.composed.size();
+        if (d.unitStart.size() != units + 1) {  // (composed before the units were kept: one child each)
+            d.unitStart.resize(units + 1);
+            for (size_t u = 0; u <= units; ++u) d.unitStart[u] = int(u);
+        }
+        size_t children = std::min(node.children.size(), size_t(d.unitStart[units]));
+        auto firstChild = [&](size_t u) { return size_t(d.unitStart[u]); };
+        auto endChild = [&](size_t u) { return std::min(children, size_t(d.unitStart[u + 1])); };
+        bool hasPinned = d.pinned >= 0 && units > 0 && d.composed[units - 1] == d.pinned;
+        int n = int(units) - (hasPinned ? 1 : 0);  // the in-order ones (the range without the pinned header)
+        std::vector<float> mains(units), crosses(children), childMains(children), cellAt(children);
         float crossSize = 0;
         // fillParentMaxWidth / Height in the items: of the list (its viewport, past the padding).
         auto finite = [](float v) { return v == kInfinity ? NAN : v; };
         float mainAvailable = finite(mainMax - before - after);
         detail::LazyParentScope parent(vertical ? Size{finite(crossAvailable), mainAvailable} : Size{mainAvailable, finite(crossAvailable)});
-        for (size_t j = 0; j < children; ++j) {
-            Constraints cc = vertical ? Constraints{0, crossAvailable, 0, kInfinity}
-                                      : Constraints{0, kInfinity, 0, crossAvailable};
-            Size s = node.children[j]->measure(cc);
-            mains[j] = mainOf(s);
-            crosses[j] = crossOf(s);
-            crossSize = std::max(crossSize, crosses[j]);
-            d.recordSize(d.keys[size_t(d.composed[j])], mains[j]);
+        float cellSize = 0;
+        if (grid) {
+            float line = crossAvailable == kInfinity ? 0 : crossAvailable;
+            if (!probe) grid->across.set(line);  // Adaptive cells follow the size (same frame)
+            cellSize = std::max(0.f, (line - grid->within * float(grid->columns - 1)) / float(grid->columns));
+            crossSize = line;
         }
-        // A header pinned at the top that also falls in the composed range is the last child,
-        // out of order: its place in the range is laid out from its size.
-        int pinnedChild = hasPinned ? int(children) - 1 : -1;
+        for (size_t u = 0; u < units; ++u) {
+            float main = 0;
+            for (size_t j = firstChild(u); j < endChild(u); ++j) {
+                Constraints cc = vertical ? Constraints{0, crossAvailable, 0, kInfinity} : Constraints{0, kInfinity, 0, crossAvailable};
+                if (grid) {  // its cells, as wide as their spans
+                    auto [column, span] = grid->place[size_t(d.childItem[j])];
+                    float width = cellSize * float(span) + grid->within * float(span - 1);
+                    cc = vertical ? Constraints{width, width, 0, kInfinity} : Constraints{0, kInfinity, width, width};
+                    cellAt[j] = float(column) * (cellSize + grid->within);
+                }
+                Size s = node.children[j]->measure(cc);
+                childMains[j] = mainOf(s);
+                crosses[j] = crossOf(s);
+                main = std::max(main, childMains[j]);
+                if (!grid) crossSize = std::max(crossSize, crosses[j]);
+            }
+            mains[u] = main;
+            d.recordSize(d.keys[size_t(d.composed[u])], main);
+        }
+        // A header pinned at the top that also falls in the composed range is the last unit, out
+        // of order: its place in the range is laid out from its size.
+        int pinnedUnit = hasPinned ? int(units) - 1 : -1;
         int pinnedIndex = hasPinned ? d.pinned : -1;
         bool pinnedInRange = pinnedIndex >= start && pinnedIndex < d.composedEnd;
         int range = n + (pinnedInRange ? 1 : 0);  // items start..start+range, back to back
-        auto childAt = [&](int k) {  // the child showing item start+k
-            if (pinnedInRange && start + k == pinnedIndex) return pinnedChild;
+        auto unitAt = [&](int k) {  // the unit showing item start+k
+            if (pinnedInRange && start + k == pinnedIndex) return pinnedUnit;
             return pinnedInRange && start + k > pinnedIndex ? k - 1 : k;
         };
         d.spacing = options.spacing;
         float content = before + after;
-        for (int k = 0; k < range; ++k) content += mains[size_t(childAt(k))] + options.spacing;
+        for (int k = 0; k < range; ++k) content += mains[size_t(unitAt(k))] + options.spacing;
         float viewport = mainMax == kInfinity ? content : mainMax;  // unbounded: no virtualization
         d.viewport = viewport;
 
         // Positions from the first visible item; then don't leave a gap after the last one.
         std::vector<float> pos(static_cast<size_t>(range));  // per item start+k
-        auto mainAt = [&](int k) { return mains[size_t(childAt(k))]; };
+        auto mainAt = [&](int k) { return mains[size_t(unitAt(k))]; };
         auto layoutFrom = [&] {
             int first = std::clamp(d.first(), start, std::max(start, start + range - 1)) - start;
             if (range == 0) return;
@@ -567,7 +621,7 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
                 for (int k = 0; k < range; ++k) pos[size_t(k)] = before + at[size_t(k)];
             }
         }
-        if (!detail::isProbeMeasure()) {
+        if (!probe) {
             d.laidStart = start;
             d.laidPos = pos;
             d.laidBefore = before;
@@ -583,64 +637,69 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
         auto onScreen = [&](float main, float size) { return reverse ? extent - main - size : main; };
         int64_t now = node.host()->frameTime();
         std::unordered_set<size_t> animated;
-        auto placeChild = [&](int j, float main) {
-            main = onScreen(main, mains[size_t(j)]);
-            float cross = crossBefore + (space - crosses[size_t(j)]) / 2 * (1 + options.crossAxisBias);
-            LayoutNode& child = *node.children[size_t(j)];
-            if (vertical)
-                child.place(cross, main, itemZIndex(child));
-            else
-                child.place(main, cross, itemZIndex(child));
+        auto crossOfChild = [&](size_t j) {
+            return grid ? crossBefore + cellAt[j] : crossBefore + (space - crosses[j]) / 2 * (1 + options.crossAxisBias);
         };
-        for (int k = 0; k < range; ++k) {
-            int j = childAt(k);
-            float main = pos[size_t(k)];
-            LayoutNode* carrier = nullptr;
-            if (auto* e = animatedItem(*node.children[size_t(j)], &carrier); e && !detail::isProbeMeasure()) {
-                // Indices only change when the data does (scrolling keeps them): then glide from
-                // where the item was shown. A key that wasn't in the data before fades in.
-                d.animatesItems = true;
-                size_t key = d.keys[size_t(start + k)];
-                animated.insert(key);
-                auto& a = d.itemAnimations[key];
-                int index = start + k;
-                if (a.index >= 0 && a.index != index) {
-                    a.from = a.shown - main;
-                    a.moveStart = now;
+        auto placeAt = [&](LayoutNode& child, float main, float cross) {
+            if (vertical) child.place(cross, main, itemZIndex(child));
+            else child.place(main, cross, itemZIndex(child));
+        };
+        // A unit's children where its item (line) is: each glides there with animateItem() when
+        // its data moved it (its index or its column changed: scrolling keeps both), and fades in
+        // when it is new to the data.
+        auto placeUnit = [&](int u, float main, bool animate) {
+            for (size_t j = firstChild(size_t(u)); j < endChild(size_t(u)); ++j) {
+                LayoutNode& child = *node.children[j];
+                Offset at{main, crossOfChild(j)};
+                LayoutNode* carrier = nullptr;
+                if (auto* e = animatedItem(child, &carrier); e && animate && !probe) {
+                    d.animatesItems = true;
+                    int index = grid ? d.childItem[j] : d.composed[size_t(u)];
+                    int column = grid ? grid->place[size_t(index)].first : 0;
+                    size_t key = d.childKey(index);
+                    animated.insert(key);
+                    auto& a = d.itemAnimations[key];
+                    if (a.index >= 0 && (a.index != index || a.column != column)) {
+                        a.from = {a.shown.x - at.x, a.shown.y - at.y};
+                        a.moveStart = now;
+                    }
+                    if (a.index < 0 && !d.previousKeys.empty() && !d.previousKeys.count(key)) a.appearStart = now;
+                    Offset offset;
+                    bool finished = true;
+                    if (a.moveStart >= 0) {
+                        float pr = e->placementSpec.progress(float(now - a.moveStart) / 1e6f, finished);
+                        offset = {a.from.x * (1 - pr), a.from.y * (1 - pr)};
+                        if (finished) a.moveStart = -1;
+                    }
+                    float alpha = 1;
+                    if (a.appearStart >= 0) {
+                        bool done = true;
+                        alpha = std::clamp(e->fadeInSpec.progress(float(now - a.appearStart) / 1e6f, done), 0.f, 1.f);
+                        if (done) a.appearStart = -1;
+                        finished = finished && done;
+                    }
+                    if (alpha != e->alpha) e->alpha = alpha, carrier->invalidateDraw();  // (drawn faded)
+                    if (!finished) node.host()->requestLayoutFrame();
+                    a.index = index;
+                    a.column = column;
+                    a.width = crosses[j];
+                    at = {at.x + offset.x, at.y + offset.y};
+                    a.shown = at;
                 }
-                if (a.index < 0 && !d.previousKeys.empty() && !d.previousKeys.count(key)) a.appearStart = now;
-                float offset = 0;
-                bool finished = true;
-                if (a.moveStart >= 0) {
-                    float p = e->placementSpec.progress(float(now - a.moveStart) / 1e6f, finished);
-                    offset = a.from * (1 - p);
-                    if (finished) a.moveStart = -1;
-                }
-                float alpha = 1;
-                if (a.appearStart >= 0) {
-                    bool done = true;
-                    alpha = std::clamp(e->fadeInSpec.progress(float(now - a.appearStart) / 1e6f, done), 0.f, 1.f);
-                    if (done) a.appearStart = -1;
-                    finished = finished && done;
-                }
-                if (alpha != e->alpha) e->alpha = alpha, carrier->invalidateDraw();  // (drawn faded)
-                if (!finished) node.host()->requestLayoutFrame();
-                a.index = index;
-                main += offset;
-                a.shown = main;
+                placeAt(child, onScreen(at.x, childMains[j]), at.y);
             }
-            placeChild(j, main);
-        }
+        };
+        for (int k = 0; k < range; ++k) placeUnit(unitAt(k), pos[size_t(k)], true);
         // The section's header stays at the top edge until the next header pushes it up.
         float pinnedTop = 0;
-        if (pinnedChild >= 0) {
+        if (pinnedUnit >= 0) {
             float top = pinnedInRange ? std::max(0.f, pos[size_t(pinnedIndex - start)]) : 0.f;
             auto next = std::upper_bound(d.sticky.begin(), d.sticky.end(), pinnedIndex);
             if (next != d.sticky.end() && *next >= start && *next < start + range)
-                top = std::min(top, pos[size_t(*next - start)] - mains[size_t(pinnedChild)]);
-            placeChild(pinnedChild, pinnedTop = top);
+                top = std::min(top, pos[size_t(*next - start)] - mains[size_t(pinnedUnit)]);
+            placeUnit(pinnedUnit, pinnedTop = top, false);
         }
-        if (!detail::isProbeMeasure()) {  // what is in view, for layoutInfo()
+        if (!probe) {  // what is in view, for layoutInfo()
             LazyListLayoutInfo info;
             info.totalItemsCount = d.count;
             info.viewportStartOffset = -before;
@@ -657,21 +716,31 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
                     info.visibleItemsInfo.push_back({index, d.keys[size_t(index)], offset, size,
                                                      size_t(index) < d.contentTypes.size() ? d.contentTypes[size_t(index)] : 0});
             };
-            if (pinnedChild >= 0) add(pinnedIndex, pinnedTop, mains[size_t(pinnedChild)]);
+            if (pinnedUnit >= 0) add(pinnedIndex, pinnedTop, mains[size_t(pinnedUnit)]);
             for (int k = 0; k < range; ++k)
                 if (start + k != pinnedIndex) add(start + k, pos[size_t(k)], mainAt(k));
+            if (grid) {  // the grid's cells, for its state's layoutInfo
+                grid->cells.clear();
+                for (int k = 0; k < range; ++k)
+                    for (size_t j = firstChild(size_t(unitAt(k))); j < endChild(size_t(unitAt(k))); ++j) {
+                        int cell = d.childItem[j];
+                        grid->cells[cell] = {grid->keys[size_t(cell)], grid->place[size_t(cell)].first, cellAt[j], crosses[j], childMains[j]};
+                    }
+            }
             if (!(info == d.layoutInfo.peek())) d.layoutInfo.set(std::move(info));
         }
         // Removed items fade out where they were; the composition lets one go once it is done.
         for (size_t l = 0; l < d.leaving.size() && children + l < node.children.size(); ++l) {
             LayoutNode& child = *node.children[children + l];
-            Constraints cc = vertical ? Constraints{0, crossAvailable, 0, kInfinity} : Constraints{0, kInfinity, 0, crossAvailable};
-            Size s = child.measure(cc);
-            float cross = crossBefore + (space - crossOf(s)) / 2 * (1 + options.crossAxisBias);
             LazyListState::Data::Leaving& gone = d.leaving[l];
-            float main = onScreen(gone.shown, mainOf(s));
-            if (vertical) child.place(cross, main);
-            else child.place(main, cross);
+            Constraints cc = vertical ? Constraints{0, crossAvailable, 0, kInfinity} : Constraints{0, kInfinity, 0, crossAvailable};
+            if (grid) {  // as wide as it was
+                float width = std::max(0.f, gone.width);
+                cc = vertical ? Constraints{width, width, 0, kInfinity} : Constraints{0, kInfinity, width, width};
+            }
+            Size s = child.measure(cc);
+            float cross = grid ? gone.shown.y : crossBefore + (space - crossOf(s)) / 2 * (1 + options.crossAxisBias);
+            placeAt(child, onScreen(gone.shown.x, mainOf(s)), cross);
             LayoutNode* carrier = nullptr;
             auto* e = animatedItem(child, &carrier);
             bool done = true;
@@ -681,15 +750,15 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
                 if (alpha != e->alpha) e->alpha = alpha, carrier->invalidateDraw();  // (drawn faded)
                 e->leaving = true;
             }
-            if (detail::isProbeMeasure()) continue;
+            if (probe) continue;
             if (!done) node.host()->requestLayoutFrame();
             else if (!gone.done) gone.done = true, d.window.set(d.window.peek() + 1);
         }
-        if (!detail::isProbeMeasure() && d.headerFor(d.first()) != d.pinned) d.window.set(d.window.peek() + 1);
-        if (d.animatesItems && !detail::isProbeMeasure())  // forget items that left the view
+        if (!probe && d.headerFor(d.first()) != d.pinned) d.window.set(d.window.peek() + 1);
+        if (d.animatesItems && !probe)  // forget items that left the view
             std::erase_if(d.itemAnimations, [&](const auto& entry) { return !animated.count(entry.first); });
         d.requestWindowIfNeeded();
-        if (!detail::isProbeMeasure() && node.host()) d.requestPrefetch(*node.host(), state.data_);
+        if (!probe && node.host()) d.requestPrefetch(*node.host(), state.data_);
         return own;
     };
 }
@@ -713,8 +782,9 @@ Modifier Modifier::animateItem(const AnimationSpec& fadeInSpec, const AnimationS
 
 namespace {
 
+// A list, or (with `grid`) a lazy grid's lines: its items are the lines, its children the cells.
 void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& given, const LazyListContent& content,
-              const CallSite& site) {
+              const CallSite& site, std::shared_ptr<LazyListState::Data::Grid> grid = nullptr) {
     KompozableScope scope(site);
     LazyListOptions options = given;
     if (options.arrangement) options.spacing = options.arrangement->spacing;
@@ -723,21 +793,26 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
 
     LazyListScope list;
     content(list);
-    if (d.animatesItems) d.previousKeys = std::unordered_set<size_t>(d.keys.begin(), d.keys.end());
+    // The keys of what is animated: the items, or a grid's cells.
+    auto animatedKeys = [&] { return grid ? std::unordered_set<size_t>(grid->keys.begin(), grid->keys.end()) : std::unordered_set<size_t>(d.keys.begin(), d.keys.end()); };
+    d.grid = grid;
     d.count = list.size();
     d.keys.resize(size_t(d.count));
     d.contentTypes.resize(size_t(d.count));
     for (int i = 0; i < d.count; ++i) d.keys[size_t(i)] = list.keyAt(i), d.contentTypes[size_t(i)] = list.contentTypeAt(i);
     auto& kompozer = detail::Kompozer::require();
+    // The keys before this composition (to spot insertions) and now.
+    std::unordered_set<size_t> now = animatedKeys();
+    if (d.animatesItems) d.previousKeys = std::exchange(d.currentKeys, now);
+    else d.currentKeys = now;
     if (d.animatesItems) {
         // Animated items shown last time whose data is gone start fading out; one that is back
         // (or done) is no longer leaving.
-        std::unordered_set<size_t> now(d.keys.begin(), d.keys.end());
         std::erase_if(d.leaving, [&](const LazyListState::Data::Leaving& l) { return l.done || now.count(l.key); });
         for (const auto& [key, a] : d.itemAnimations)
             if (a.index >= 0 && !now.count(key) &&
                 std::none_of(d.leaving.begin(), d.leaving.end(), [&](const LazyListState::Data::Leaving& l) { return l.key == key; }))
-                d.leaving.push_back({key, kompozer.frameTimeNanos(), a.shown});
+                d.leaving.push_back({key, kompozer.frameTimeNanos(), a.shown, a.width});
     }
     if (d.count > 0 && d.firstIndex.peek() >= d.count) d.setFirst(d.count - 1, 0);  // the list shrank
 
@@ -770,7 +845,7 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
     // One container node per item (by key), its content in a group of its own: composed from
     // the data, or kept as it was for an item fading out after its data went.
     const uint64_t contentGroup = detail::keyOf(CallSite::current());
-    auto item = [&](size_t itemKey, int index) {
+    auto item = [&](size_t itemKey, std::function<void()> compose) {  // (no compose: a leaving one, kept)
         key(itemKey, [&] {
             kompozer.emit(
                 detail::keyOf(CallSite::current()),
@@ -780,9 +855,9 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
                     node.drawContent = {};
                 },
                 [&] {
-                    if (index < 0) return kompozer.keepGroup(contentGroup);
+                    if (!compose) return kompozer.keepGroup(contentGroup);
                     kompozer.startGroup(contentGroup);
-                    saveable.SaveableStateProvider(std::to_string(itemKey), [&] { list.composeAt(index); });
+                    saveable.SaveableStateProvider(std::to_string(itemKey), compose);
                     kompozer.endGroup();
                 });
         });
@@ -795,8 +870,22 @@ void lazyList(bool vertical, const Modifier& modifier, const LazyListOptions& gi
             node.drawContent = {};
         },
         [&] {
-            for (int i : d.composed) item(d.keys[size_t(i)], i);
-            for (const LazyListState::Data::Leaving& l : d.leaving) item(l.key, -1);  // after the others (and a pinned header)
+            d.unitStart.clear();
+            d.childItem.clear();
+            for (int i : d.composed) {
+                d.unitStart.push_back(int(d.childItem.size()));
+                if (grid) {  // the line's cells, each a child of its own
+                    for (int cell = grid->lineStart[size_t(i)]; cell < grid->lineStart[size_t(i) + 1]; ++cell) {
+                        d.childItem.push_back(cell);
+                        item(grid->keys[size_t(cell)], [&grid, cell] { grid->composeAt(cell); });
+                    }
+                } else {
+                    d.childItem.push_back(i);
+                    item(d.keys[size_t(i)], [&list, i] { list.composeAt(i); });
+                }
+            }
+            d.unitStart.push_back(int(d.childItem.size()));
+            for (const LazyListState::Data::Leaving& l : d.leaving) item(l.key, {});  // after the others (and a pinned header)
         });
 }
 
@@ -843,12 +932,7 @@ struct LazyGridState::Data {
     int columns = 1;
     bool vertical = true;
     std::optional<std::pair<int, float>> pending;  // a scroll to an item before its line was known
-    struct Cell {
-        size_t key = 0;
-        int column = 0;
-        float across = 0, acrossSize = 0, alongSize = 0;
-    };
-    std::unordered_map<int, Cell> cells;  // laid-out items, by index
+    std::shared_ptr<LazyListState::Data::Grid> grid = std::make_shared<LazyListState::Data::Grid>();  // the cells, laid out
 
     int lineOf(int item) const {
         if (lineStart.size() < 2) return 0;
@@ -902,9 +986,9 @@ LazyGridLayoutInfo LazyGridState::layoutInfo() const {
     for (const LazyListItemInfo& line : lines.visibleItemsInfo) {
         if (size_t(line.index) + 1 >= d.lineStart.size()) continue;
         for (int i = d.lineStart[size_t(line.index)]; i < d.lineStart[size_t(line.index) + 1]; ++i) {
-            auto cell = d.cells.find(i);
-            if (cell == d.cells.end()) continue;
-            const Data::Cell& c = cell->second;
+            auto cell = d.grid->cells.find(i);
+            if (cell == d.grid->cells.end()) continue;
+            const LazyListState::Data::Grid::Cell& c = cell->second;
             LazyGridItemInfo info{i, c.key};
             if (d.vertical) {
                 info.row = line.index, info.column = c.column;
@@ -940,84 +1024,40 @@ int LazyGridScope::spanAt(int index, int columns) const {
 
 namespace {
 
-// One grid line: a row of cells of equal width (a column of cells of equal height in a
-// horizontal grid), plus spacing for spans, aligned to its start.
-void gridRow(const LazyGridScope& grid, int from, int to, int columns, float spacing, MutableState<float> width,
-             const std::shared_ptr<LazyGridState::Data>& state, bool vertical = true) {
-    std::vector<std::pair<int, int>> cells;  // column, span
-    for (int i = from, column = 0; i < to; ++i) {
-        int span = grid.spanAt(i, columns);
-        cells.push_back({column, span});
-        column += span;
-    }
-    detail::Kompozer::require().emit(
-        detail::keyOf(CallSite::current()),
-        [&](LayoutNode& node) {
-            node.modifier = vertical ? Modifier().fillMaxWidth() : Modifier().fillMaxHeight();
-            std::vector<size_t> keys;
-            for (int i = from; i < to; ++i) keys.push_back(grid.keyAt(i));
-            node.measurePolicy = [cells, columns, spacing, width, vertical, state, from, keys](LayoutNode& n, const Constraints& c) {
-                float line = vertical ? (c.hasBoundedWidth() ? c.maxWidth : 0) : (c.hasBoundedHeight() ? c.maxHeight : 0);
-                if (!detail::isProbeMeasure()) width.set(line);  // Adaptive cells follow the size (same frame)
-                float cell = std::max(0.f, (line - spacing * float(columns - 1)) / float(columns)), across = 0;
-                for (size_t k = 0; k < n.children.size() && k < cells.size(); ++k) {
-                    auto [column, span] = cells[k];
-                    float cw = cell * float(span) + spacing * float(span - 1);
-                    Size s = n.children[k]->measure(vertical ? Constraints{cw, cw, 0, kInfinity} : Constraints{0, kInfinity, cw, cw});
-                    float at = float(column) * (cell + spacing);
-                    n.children[k]->place(vertical ? at : 0, vertical ? 0 : at, itemZIndex(*n.children[k]));
-                    across = std::max(across, vertical ? s.height : s.width);
-                    if (!detail::isProbeMeasure())  // for the state's layoutInfo
-                        state->cells[from + int(k)] = {keys[k], column, at, cw, vertical ? s.height : s.width};
-                }
-                return c.constrain(vertical ? Size{line, across} : Size{across, line});
-            };
-            node.drawContent = {};
-        },
-        [&] {
-            for (int i = from; i < to; ++i)
-                key(grid.keyAt(i), [&] {
-                    // One node per cell, whatever the item emits.
-                    detail::Kompozer::require().emit(
-                        detail::keyOf(CallSite::current()),
-                        [](LayoutNode& cellNode) {
-                            cellNode.modifier = {};
-                            cellNode.measurePolicy = {};  // stacks its content
-                            cellNode.drawContent = {};
-                        },
-                        [&] { grid.composeAt(i); });
-                });
-        });
-}
-
-} // namespace
-
-namespace {
-
-// Lines of cells (rows of a vertical grid, columns of a horizontal one) in a lazy list.
+// Lines of cells (rows of a vertical grid, columns of a horizontal one): the lines are a lazy
+// list's items, scrolled and composed as they come into view, the cells its children.
 void lazyGrid(GridCells cells, const Modifier& modifier, const LazyGridOptions& options,
               const std::function<void(LazyGridScope&)>& content, bool vertical) {
-    auto size = remember([] { return mutableStateOf(0.f); });  // across the lines: the grid's width (height)
-    int count = cells.count(size.get(), vertical ? options.horizontalSpacing : options.verticalSpacing);
+    auto own = remember([] { return LazyGridState(); });
+    LazyGridState state = options.state ? *options.state : own;
+    auto d = state.data_;
+    std::shared_ptr<LazyListState::Data::Grid> g = d->grid;
+    float within = vertical ? options.horizontalSpacing : options.verticalSpacing;
+    int count = cells.count(g->across.get(), within);  // across the lines: the grid's width (height)
     LazyGridScope grid;
     content(grid);
     std::vector<int> lineStart;  // first item of each line, then the item count
+    g->place.clear();
     for (int i = 0, at = 0; i < grid.size(); ++i) {
         int span = grid.spanAt(i, count);
         if (i == 0 || at + span > count) {
             lineStart.push_back(i);
             at = 0;
         }
+        g->place.push_back({at, span});
         at += span;
     }
     lineStart.push_back(grid.size());
     int lines = int(lineStart.size()) - 1;
     float between = vertical ? options.verticalSpacing : options.horizontalSpacing;
-    float within = vertical ? options.horizontalSpacing : options.verticalSpacing;
+    g->lineStart = lineStart;
+    g->columns = count;
+    g->within = within;
+    g->keys.resize(size_t(grid.size()));
+    g->types.resize(size_t(grid.size()));
+    for (int i = 0; i < grid.size(); ++i) g->keys[size_t(i)] = grid.keyAt(i), g->types[size_t(i)] = grid.contentTypeAt(i);
+    g->composeAt = [&grid](int cell) { grid.composeAt(cell); };
     // The state maps items to the lines underneath; a scroll to an item made before goes now.
-    auto own = remember([] { return LazyGridState(); });
-    LazyGridState state = options.state ? *options.state : own;
-    auto d = state.data_;
     d->lineStart = lineStart;
     d->columns = count;
     d->vertical = vertical;
@@ -1026,17 +1066,13 @@ void lazyGrid(GridCells cells, const Modifier& modifier, const LazyGridOptions& 
     list.flingBehavior = options.flingBehavior;  // a snapping grid snaps its lines
     list.userScrollEnabled = options.userScrollEnabled;
     list.overscrollEffect = options.overscrollEffect;
+    list.reverseLayout = options.reverseLayout;
+    // A line is keyed by its first cell's, of its first cell's content type.
     auto items = [&](LazyListScope& scope) {
-        scope.items(
-            lines, std::function<size_t(int)>([&](int r) { return grid.keyAt(lineStart[size_t(r)]); }),
-            std::function<void(int)>([&](int r) {
-                gridRow(grid, lineStart[size_t(r)], lineStart[size_t(r) + 1], count, within, size, d, vertical);
-            }));
+        scope.countItems(lines, std::function<size_t(int)>([&](int r) { return g->keys[size_t(lineStart[size_t(r)])]; }),
+                         std::function<size_t(int)>([&](int r) { return g->types[size_t(lineStart[size_t(r)])]; }), [](int) {});
     };
-    if (vertical)
-        detail::LazyColumn(modifier, list, items);
-    else
-        detail::LazyRow(modifier, list, items);
+    lazyList(vertical, modifier, list, items, CallSite::current(), g);
 }
 
 } // namespace
@@ -1140,6 +1176,25 @@ struct StaggeredData {
     std::vector<bool> fullLine;
     std::vector<int> nodes;  // the item each child node shows
     float viewport = 0;
+    // animateItem(), as a lazy list's: where each animated item was placed (in the content, which
+    // scrolls as one) and at which index, its running animations; the removed ones fading out.
+    struct ItemAnimation {
+        int index = -1, lane = -1;
+        Offset shown, from;
+        Size size;
+        int64_t moveStart = -1, appearStart = -1;
+    };
+    std::unordered_map<size_t, ItemAnimation> itemAnimations;
+    std::unordered_set<size_t> previousKeys;
+    bool animatesItems = false;
+    struct Leaving {
+        size_t key;
+        int64_t start;
+        Offset shown;
+        Size size;
+        bool done = false;
+    };
+    std::vector<Leaving> leaving;
     std::unordered_map<size_t, float> heights;  // measured (widths in a horizontal grid), by key
     float heightSum = 0;
     int heightCount = 0;
@@ -1177,6 +1232,7 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
     LazyGridScope grid;
     content(grid);
     int count = grid.size();
+    if (d->animatesItems) d->previousKeys = std::unordered_set<size_t>(d->keys.begin(), d->keys.end());
     d->keys.resize(size_t(count));
     d->contentTypes.resize(size_t(count));
     d->fullLine.resize(size_t(count));
@@ -1184,6 +1240,15 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
         d->keys[size_t(i)] = grid.keyAt(i);
         d->contentTypes[size_t(i)] = grid.contentTypeAt(i);
         d->fullLine[size_t(i)] = grid.spanAt(i, LazyGridScope::FullLine) > 1;
+    }
+    auto& kompozer = detail::Kompozer::require();
+    if (d->animatesItems) {  // animated items whose data is gone fade out where they were (as a list's)
+        std::unordered_set<size_t> now(d->keys.begin(), d->keys.end());
+        std::erase_if(d->leaving, [&](const StaggeredData::Leaving& l) { return l.done || now.count(l.key); });
+        for (const auto& [key, a] : d->itemAnimations)
+            if (a.index >= 0 && !now.count(key) &&
+                std::none_of(d->leaving.begin(), d->leaving.end(), [&](const StaggeredData::Leaving& l) { return l.key == key; }))
+                d->leaving.push_back({key, kompozer.frameTimeNanos(), a.shown, a.size});
     }
     d->window.get();  // recompose when scrolling needs items that aren't composed
     auto [start, end] = d->laidOut ? d->composed : std::pair{0, 24};  // before the first layout: a screenful, say
@@ -1233,12 +1298,70 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
             }
         }
         float total = (n ? *std::max_element(ends.begin(), ends.end()) - mainGap : mainPadStart) + mainPadEnd;
+        // Placed where they go; with animateItem(), gliding there when the data moved them (their
+        // index or lane changed), fading in when new to the data.
+        int64_t now = node.host() ? node.host()->frameTime() : 0;
+        std::unordered_set<size_t> animated;
+        auto placeAt = [&](LayoutNode& child, Offset at) { child.place(at.x, at.y, itemZIndex(child)); };
         for (size_t k = 0; k < node.children.size() && k < d->nodes.size(); ++k) {
-            const Place& p = places[size_t(d->nodes[k])];
+            int i = d->nodes[k];
+            const Place& p = places[size_t(i)];
             LayoutNode& child = *node.children[k];
-            if (horizontal) child.place(p.main, p.cross, itemZIndex(child));
-            else child.place(p.cross, p.main, itemZIndex(child));
+            Offset at = horizontal ? Offset{p.main, p.cross} : Offset{p.cross, p.main};
+            LayoutNode* carrier = nullptr;
+            if (auto* e = animatedItem(child, &carrier); e && !probe) {
+                d->animatesItems = true;
+                size_t key = d->keys[size_t(i)];
+                animated.insert(key);
+                auto& a = d->itemAnimations[key];
+                if (a.index >= 0 && (a.index != i || a.lane != p.lane)) {
+                    a.from = {a.shown.x - at.x, a.shown.y - at.y};
+                    a.moveStart = now;
+                }
+                if (a.index < 0 && !d->previousKeys.empty() && !d->previousKeys.count(key)) a.appearStart = now;
+                bool finished = true;
+                if (a.moveStart >= 0) {
+                    float pr = e->placementSpec.progress(float(now - a.moveStart) / 1e6f, finished);
+                    at = {at.x + a.from.x * (1 - pr), at.y + a.from.y * (1 - pr)};
+                    if (finished) a.moveStart = -1;
+                }
+                float alpha = 1;
+                if (a.appearStart >= 0) {
+                    bool done = true;
+                    alpha = std::clamp(e->fadeInSpec.progress(float(now - a.appearStart) / 1e6f, done), 0.f, 1.f);
+                    if (done) a.appearStart = -1;
+                    finished = finished && done;
+                }
+                if (alpha != e->alpha) e->alpha = alpha, carrier->invalidateDraw();
+                if (!finished && node.host()) node.host()->requestLayoutFrame();
+                a.index = i;
+                a.lane = p.lane;
+                a.shown = at;
+                a.size = child.size();
+            }
+            placeAt(child, at);
         }
+        // Removed items fade out where they were; the composition lets one go once it is done.
+        size_t composedChildren = std::min(node.children.size(), d->nodes.size());
+        for (size_t l = 0; l < d->leaving.size() && composedChildren + l < node.children.size(); ++l) {
+            LayoutNode& child = *node.children[composedChildren + l];
+            StaggeredData::Leaving& gone = d->leaving[l];
+            child.measure(Constraints{gone.size.width, gone.size.width, gone.size.height, gone.size.height});
+            placeAt(child, gone.shown);
+            LayoutNode* carrier = nullptr;
+            auto* e = animatedItem(child, &carrier);
+            bool done = true;
+            float fade = e ? e->fadeOutSpec.progress(float(now - gone.start) / 1e6f, done) : 1.f;
+            if (e) {
+                float alpha = std::clamp(1 - fade, 0.f, 1.f);
+                if (alpha != e->alpha) e->alpha = alpha, carrier->invalidateDraw();
+                e->leaving = true;
+            }
+            if (probe) continue;
+            if (!done && node.host()) node.host()->requestLayoutFrame();
+            else if (done && !gone.done) gone.done = true, d->window.set(d->window.peek() + 1);
+        }
+        if (d->animatesItems && !probe) std::erase_if(d->itemAnimations, [&](const auto& entry) { return !animated.count(entry.first); });
         if (!probe) {
             // The items in view must be composed; when they aren't, compose them and half a view
             // more on each side, so that small scrolls don't need a recomposition.
@@ -1373,17 +1496,28 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
                     node.drawContent = {};
                 },
                 [&] {
-                    for (int i = start; i < end; ++i)
-                        key(grid.keyAt(i), [&] {
-                            detail::Kompozer::require().emit(
+                    // One node per item (by key), its content in a group of its own: composed from
+                    // the data, or kept as it was for an item fading out after its data went.
+                    const uint64_t contentGroup = detail::keyOf(CallSite::current());
+                    auto item = [&](size_t itemKey, int index) {
+                        key(itemKey, [&] {
+                            kompozer.emit(
                                 detail::keyOf(CallSite::current()),
                                 [](LayoutNode& cell) {
                                     cell.modifier = {};
                                     cell.measurePolicy = {};  // stacks its content
                                     cell.drawContent = {};
                                 },
-                                [&] { grid.composeAt(i); });
+                                [&] {
+                                    if (index < 0) return kompozer.keepGroup(contentGroup);
+                                    kompozer.startGroup(contentGroup);
+                                    grid.composeAt(index);
+                                    kompozer.endGroup();
+                                });
                         });
+                    };
+                    for (int i = start; i < end; ++i) item(grid.keyAt(i), i);
+                    for (const StaggeredData::Leaving& l : d->leaving) item(l.key, -1);  // after the others
                 });
         });
 }

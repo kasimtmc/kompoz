@@ -1217,6 +1217,16 @@
   (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
   Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
   `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **vcpkg paketi** libjpeg-turbo'nun `turbojpeg` özelliğini istiyor: vcpkg'nin libjpeg-turbo'su AsyncImage'ın JPEG
+  çözdüğü TurboJPEG'i artık yalnızca onunla derliyor (Kompoz'un yapılandırması "JPEG gerekli ama bulunamadı" diye
+  duruyordu). CI paketi her runner'da güncel vcpkg ile deniyor.
+- **Kullanıcının sıraladığı ızgaralar**: `rememberReorderableLazyGridState(gridState) { from, to -> … }` ve
+  `rememberReorderableLazyStaggeredGridState`; sürüklenen öğe serbestçe hareket eder ve ortasının altındaki öğenin
+  yerine geçer.
+- **Compose'daki gibi tembel ızgaralar**: `LazyVerticalGrid`, `LazyHorizontalGrid` ve kademeli ızgaralarda
+  `Modifier.animateItem()` (başka satıra, sütuna ya da şeride taşınan öğe oraya kayar, yenisi belirir, çıkarılanı
+  yerinde solar); ızgaranın hücreleri tembel düzenin kendi düğümleri, böylece başka satıra geçen hücre durumunu korur
+  (yeni satırın düğümünde yeniden kompoze ediliyordu) ve `zIndex` onları sıralar; ızgaralar için `reverseLayout`.
 - **Tembel bir öğenin `zIndex`'i** onu öğeler arasında sıralar, Compose'daki gibi (listedeki her öğenin düğümü onu alır).
 - Compose'daki gibi **LazyStaggeredGridLayoutInfo'nun `orientation`'ı**.
 - **Compose'daki gibi Surface**, dört biçimiyle: düz (üstüne gelen dokunuşları altındakinden alır), `onClick`,

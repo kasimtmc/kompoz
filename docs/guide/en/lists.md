@@ -133,6 +133,24 @@ The dragged item follows the finger, drawn over the others, which glide out of i
 
 Both take `enabled`, `interactionSource` (it hears the drag), `onDragStarted = { startedPosition -> … }` and `onDragStopped = { … }`, a place for haptic feedback. `onMove` may be a `suspend` lambda (one that saves the new order): the next move waits for it. `ReorderableItem(…, enabled = false)` is never moved past.
 
+Grids reorder the same way: `rememberReorderableLazyGridState(gridState) { from, to -> … }` for `LazyVerticalGrid` and `LazyHorizontalGrid`, `rememberReorderableLazyStaggeredGridState(staggeredGridState) { from, to -> … }` for the staggered ones (`from` and `to` are their item infos). In a grid the dragged item moves freely and goes to the place of the item under its middle:
+
+```kotlin body
+val photos = remember { listOf("a.jpg", "b.jpg", "c.jpg", "d.jpg").toMutableStateList() }
+val gridState = rememberLazyGridState()
+val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
+    photos.add(to.index, photos.removeAt(from.index))
+}
+LazyVerticalGrid(columns = GridCells.Adaptive(96.dp), state = gridState) {
+    items(photos, key = { it }) { photo ->
+        ReorderableItem(reorderState, key = photo) { isDragging ->
+            AsyncImage(model = photo, contentDescription = null, contentScale = ContentScale.Crop,
+                       modifier = Modifier.aspectRatio(1f).longPressDraggableHandle())
+        }
+    }
+}
+```
+
 A short list that isn't lazy goes in a `ReorderableColumn` (or `ReorderableRow`): the order changes on the screen while dragging, `onMove` is called at each step, and `onSettle(fromIndex, toIndex)` gets the move once the item is let go. Each element's `ReorderableItem` goes in a `key` of its own:
 
 ```kotlin body
@@ -223,7 +241,8 @@ LazyVerticalGrid(
 
 - `GridCells.Fixed(3)` gives three columns; `GridCells.Adaptive(120.dp)` as many columns of at least 120 dp as fit.
 - An item can span several cells: `item(span = { GridItemSpan(maxLineSpan) })` for a header across the grid, `items(list, span = { item -> GridItemSpan(2) })` for each of a list.
-- `rememberLazyGridState()` works like the list's state.
+- `rememberLazyGridState()` works like the list's state; `reverseLayout = true` puts the first line at the bottom.
+- `Modifier.animateItem()` on an item's root animates it in a grid as in a list: an item moved to another line or column glides there, a new one fades in, a removed one fades out.
 
 `LazyVerticalStaggeredGrid` and `LazyHorizontalStaggeredGrid` place items of different sizes in columns (or rows) of their own, like a masonry layout: each item goes in the shortest column.
 
@@ -237,7 +256,7 @@ LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(2), modifier = Modi
 }
 ```
 
-An item with `span = StaggeredGridItemSpan.FullLine` crosses all the lanes, below the longest one, like a header.
+An item with `span = StaggeredGridItemSpan.FullLine` crosses all the lanes, below the longest one, like a header. `Modifier.animateItem()` works here too.
 
 ## Pagers
 

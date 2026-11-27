@@ -582,6 +582,8 @@ struct LazyGridOptions {
     std::optional<LazyGridState> state;
     PaddingValues contentPadding;
     float verticalSpacing = 0, horizontalSpacing = 0;
+    // The first line at the bottom (a horizontal grid's: at the right end), as a list's.
+    bool reverseLayout = false;
     // Snapping (rememberSnapFlingBehavior(gridState)): a fling settles with a line of items
     // lined up — a row of a vertical grid, a column of a horizontal one.
     std::optional<FlingBehavior> flingBehavior;
@@ -597,7 +599,7 @@ namespace detail {
 void LazyVerticalGrid(GridCells columns, const Modifier& modifier, const LazyGridOptions& options,
                       const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
 struct LazyVerticalGridImpl {
-    using P = Params<names::Columns, names::Modifier, names::State, names::ContentPadding, names::VerticalArrangement, names::HorizontalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    using P = Params<names::Columns, names::Modifier, names::State, names::ContentPadding, names::ReverseLayout, names::VerticalArrangement, names::HorizontalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -606,6 +608,7 @@ struct LazyVerticalGridImpl {
         LazyGridOptions options;
         P::set<names::State>(options.state, args...);
         P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::ReverseLayout>(options.reverseLayout, args...);
         P::set<names::FlingBehavior>(options.flingBehavior, args...);
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
         setOverscroll<P>(options.overscrollEffect, args...);
@@ -622,7 +625,7 @@ namespace detail {
 void LazyHorizontalGrid(GridCells rows, const Modifier& modifier, const LazyGridOptions& options,
                         const std::function<void(LazyGridScope&)>& content, CallSite site = CallSite::current());
 struct LazyHorizontalGridImpl {
-    using P = Params<names::Rows, names::Modifier, names::State, names::ContentPadding, names::HorizontalArrangement, names::VerticalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
+    using P = Params<names::Rows, names::Modifier, names::State, names::ContentPadding, names::ReverseLayout, names::HorizontalArrangement, names::VerticalArrangement, names::FlingBehavior, names::UserScrollEnabled, names::OverscrollEffect, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -631,6 +634,7 @@ struct LazyHorizontalGridImpl {
         LazyGridOptions options;
         P::set<names::State>(options.state, args...);
         P::set<names::ContentPadding>(options.contentPadding, args...);
+        P::set<names::ReverseLayout>(options.reverseLayout, args...);
         P::set<names::FlingBehavior>(options.flingBehavior, args...);
         P::set<names::UserScrollEnabled>(options.userScrollEnabled, args...);
         setOverscroll<P>(options.overscrollEffect, args...);

@@ -327,11 +327,16 @@ jobs:
           echo "CXX=g++-14" >> "$GITHUB_ENV"
       - name: vcpkg
         run: |
-          if [ -z "$VCPKG_INSTALLATION_ROOT" ] || { [ ! -x "$VCPKG_INSTALLATION_ROOT/vcpkg" ] && [ ! -x "$VCPKG_INSTALLATION_ROOT/vcpkg.exe" ]; }; then
-            git clone --depth 1 https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
+          # Today's vcpkg, on every runner: the port is tried against the registry as it is now (the
+          # runners' own vcpkg lags behind, each by its own amount: libjpeg-turbo's TurboJPEG became a
+          # feature in one and not yet in another).
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
+          if [ "$RUNNER_OS" = Windows ]; then
+            cmd //c "$(cygpath -w "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.bat")" -disableMetrics
+          else
             "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
-            echo "VCPKG_INSTALLATION_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
           fi
+          echo "VCPKG_INSTALLATION_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
           mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
       - uses: actions/cache@v4
         with:
