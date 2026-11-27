@@ -38,6 +38,10 @@ bool same(const PathStroke& a, const PathStroke& b) {
 }
 
 bool empty(const Rect& r) { return r.width <= 0 || r.height <= 0; }
+// What is left of a shape in the clip, thinner than this, changes no pixel: counted as nothing, so that
+// the same shape moved (a node kept, replayed further on) and drawn afresh there, a float's rounding
+// apart at the clip's edge, come out the same.
+bool invisible(const Rect& area, float pixel) { return area.width <= pixel / 256 || area.height <= pixel / 256; }
 bool overlaps(const Rect& a, const Rect& b) { return a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom(); }
 Rect grown(const Rect& r, float by) { return {r.x - by, r.y - by, r.width + 2 * by, r.height + 2 * by}; }
 Rect united(const Rect& a, const Rect& b) {
@@ -295,7 +299,7 @@ DisplayList::Command* DisplayList::draw(Kind kind, const Rect& local, float pad)
     Rect reach = grown(local, pad);
     // Two pixels more: anti-aliased edges, and backends snapping to whole pixels.
     Rect area = grown(s.m.map(reach), 2 * pixel_).intersect(s.clip);
-    if (empty(area) && !shows(reach)) {  // clipped away: it changes no pixel (kept in a layer if it shows there at rest)
+    if (invisible(area, pixel_) && !shows(reach)) {  // clipped away: it changes no pixel (kept in a layer if it shows there at rest)
         // (A shadow's reach is from the light, not moved with its node.)
         if (keepNodes_) recordingEvents_.push_back({kind == Kind::ElevationShadow ? Event::Light : Event::Culled, uint32_t(recording_.size()), 0, nullptr, reach});
         return nullptr;
@@ -308,7 +312,7 @@ DisplayList::Command* DisplayList::draw(Kind kind, const Rect& local, float pad)
 
 bool DisplayList::shows(const Rect& reach) const {
     const State& s = states_.back();
-    return !empty(grown(s.m.map(reach), 2 * pixel_).intersect(s.clip)) || !empty(grown(s.restM.map(reach), 2 * pixel_).intersect(s.restClip));
+    return !invisible(grown(s.m.map(reach), 2 * pixel_).intersect(s.clip), pixel_) || !invisible(grown(s.restM.map(reach), 2 * pixel_).intersect(s.restClip), pixel_);
 }
 
 void DisplayList::fillRoundRect(const Rect& rect, const CornerRadii& radii, Color color) {
@@ -658,7 +662,7 @@ void DisplayList::popTransform() { pop(Kind::PopTransform); }
 
 bool DisplayList::quickReject(const Rect& rect) const {
     const State& s = states_.back();
-    bool rejected = empty(grown(s.m.map(rect), pixel_).intersect(s.clip)) && empty(grown(s.restM.map(rect), pixel_).intersect(s.restClip));
+    bool rejected = invisible(grown(s.m.map(rect), pixel_).intersect(s.clip), pixel_) && invisible(grown(s.restM.map(rect), pixel_).intersect(s.restClip), pixel_);
     if (keepNodes_) recordingEvents_.push_back({rejected ? Event::Rejected : Event::Accepted, uint32_t(recording_.size()), 0, nullptr, rect});
     return rejected;
 }
