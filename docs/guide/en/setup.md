@@ -11,8 +11,9 @@ Build Kompoz, add it to your own CMake project, and run your app on Linux, Windo
 - Optional: HarfBuzz for text shaping (Arabic joining, Indic scripts, ligatures, emoji sequences). Without it, text is drawn character by character.
 - Optional on Linux: libcurl, libwebp and libturbojpeg (3.0 or later), which `AsyncImage` uses to download images and decode WebP and JPEG. libdbus is loaded at run time, if present, to read the desktop's accent color and its light or dark preference.
 - On Linux, xkbcommon's headers (`libxkbcommon-dev`; on Arch they come with `libxkbcommon`) with Wayland's (`libwayland-dev`; `wayland`) for Kompoz's own Wayland platform, which a Wayland session runs on, and X11's, XInput 2's, Xcursor's and XRandR's (`libx11-dev`, `libxi-dev`, `libxcursor-dev`, `libxrandr-dev`; `libx11`, `libxi`, `libxcursor`, `libxrandr`) for its X11 platform, which an X11 session runs on; their libraries are loaded at run time. At least one of the two is needed.
+- On Linux, Vulkan's headers (`libvulkan-dev`; `vulkan-headers` on Arch and Fedora), for the GPU renderer's Vulkan backend; Vulkan itself is loaded at run time. Without them, `scripts/fetch-deps.sh` downloads them.
 
-On Linux, install these from your distribution's packages. For Android, the web and Windows, Kompoz builds FreeType, HarfBuzz, zlib and libpng from source; `scripts/fetch-deps.sh` downloads them (see below).
+On Linux, install these from your distribution's packages: `scripts/kompoz-install-en.sh` (in Turkish, `scripts/kompoz-install-tr.sh`) asks which compiler, targets and options you want, and installs them with pacman, apt or dnf from your configured repositories. For Android, the web and Windows, Kompoz builds FreeType, HarfBuzz, zlib and libpng from source; `scripts/fetch-deps.sh` downloads them (see below).
 
 ## Build the library and the showcase
 

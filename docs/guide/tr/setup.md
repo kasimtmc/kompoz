@@ -11,8 +11,9 @@ Kompoz'u derleyin, kendi CMake projenize ekleyin ve uygulamanızı Linux, Window
 - İsteğe bağlı: metin şekillendirme için HarfBuzz (Arapça harf bağlama, Hint yazıları, bitişik harfler, emoji dizileri). Olmadan metin karakter karakter çizilir.
 - Linux'ta isteğe bağlı: `AsyncImage`'ın resim indirmek ve WebP ile JPEG çözmek için kullandığı libcurl, libwebp ve libturbojpeg (3.0 ya da sonrası). libdbus, varsa, masaüstünün vurgu rengini ve açık ya da koyu tercihini okumak için çalışma anında yüklenir.
 - Linux'ta xkbcommon'ın başlıkları (`libxkbcommon-dev`; Arch'ta `libxkbcommon` ile gelir), bunlarla birlikte bir Wayland oturumunun üzerinde çalıştığı Kompoz'un kendi Wayland platformu için Wayland'inkiler (`libwayland-dev`; `wayland`), bir X11 oturumunun üzerinde çalıştığı X11 platformu için de X11'in, XInput 2'nin, Xcursor'ın ve XRandR'ın başlıkları (`libx11-dev`, `libxi-dev`, `libxcursor-dev`, `libxrandr-dev`; `libx11`, `libxi`, `libxcursor`, `libxrandr`); kitaplıkları çalışma anında yüklenir. İkisinden en az biri gerekir.
+- Linux'ta GPU çiziminin Vulkan arka ucu için Vulkan'ın başlıkları (`libvulkan-dev`; Arch'ta ve Fedora'da `vulkan-headers`); Vulkan'ın kendisi çalışma anında yüklenir. Yoksa `scripts/fetch-deps.sh` onları indirir.
 
-Linux'ta bunları dağıtımınızın paketlerinden kurun. Android, web ve Windows için Kompoz FreeType, HarfBuzz, zlib ve libpng'yi kaynaktan derler; `scripts/fetch-deps.sh` onları indirir (aşağıya bakın).
+Linux'ta bunları dağıtımınızın paketlerinden kurun: `scripts/kompoz-install-tr.sh` (İngilizcesi `scripts/kompoz-install-en.sh`) hangi derleyiciyi, hedefleri ve seçenekleri istediğinizi sorar ve onları pacman, apt ya da dnf ile yapılandırılmış depolarınızdan kurar. Android, web ve Windows için Kompoz FreeType, HarfBuzz, zlib ve libpng'yi kaynaktan derler; `scripts/fetch-deps.sh` onları indirir (aşağıya bakın).
 
 ## Kütüphaneyi ve vitrini derlemek
 
