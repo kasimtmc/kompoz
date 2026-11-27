@@ -1217,6 +1217,10 @@
   (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
   Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
   `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **Stilli metin alanları**: Compose'daki gibi `VisualTransformation` (`VisualTransformation { text -> TransformedText(annotated,
+  offsetMapping) }`, `OffsetMapping`, `PasswordVisualTransformation(mask)`, `VisualTransformation.None`): alan dönüştürülmüş
+  metni stilleri ve paragraf stilleriyle çizer; satırlar kendi metinleri kadar uzun olur, imleç, seçim, dokunmalar ve
+  tutamaçlar o satırlarda yerini bulur. `TextDecoration`'lar Compose'daki gibi birleşir (`Underline + LineThrough`, `contains`).
 - **Dosya diyalogları** (Compose'da yok), FileKit'in API'siyle: `rememberFilePickerLauncher(type, mode, directory,
   dialogSettings, onError) { sonuç -> }`, `rememberFileSaverLauncher` (`launch(suggestedName, defaultExtension,
   allowedExtensions, directory)`), `rememberDirectoryPickerLauncher`; bir coroutine'de de `FileKit.openFilePicker`,

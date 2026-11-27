@@ -43,7 +43,7 @@ const std::set<std::string, std::less<>> kValueLambdas = {
     "remember", "rememberSaveable", "derivedStateOf", "map", "mapNotNull", "mapIndexed", "filter", "filterNot",
     "filterIndexed", "sortedBy", "sortedByDescending", "any", "all", "none", "count", "first", "firstOrNull",
     "last", "lastOrNull", "find", "groupBy", "associateBy", "associateWith", "flatMap", "sumOf", "maxOf", "minOf",
-    "maxOfOrNull", "minOfOrNull", "check", "require", "joinToString", "withContext",
+    "maxOfOrNull", "minOfOrNull", "check", "require", "joinToString", "withContext", "VisualTransformation",
     "maxByOrNull", "minByOrNull", "let", "run", "with", "takeIf", "takeUnless", "getOrElse", "lazy", "snapshotFlow",
     "List", "buildString", "buildList", "indexOfFirst", "indexOfLast", "partition", "distinctBy", "chunked",
     "DisposableEffect", "async", "withBackground", "offset", "absoluteOffset", "drawWithCache", "shader", "kompozitionLocalOf",

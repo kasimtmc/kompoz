@@ -32936,6 +32936,80 @@ TEST(size_in_modifiers_take_compose_names) {
     CHECK(near(rule.onNodeWithTag("s").bounds().width, 30) && near(rule.onNodeWithTag("s").bounds().height, 20));
 }
 
+TEST(visual_transformation_styles_a_field_and_maps_its_offsets) {
+    // Words in capitals drawn red and twice as big; the text itself stays as typed.
+    auto shout = VisualTransformation([](const AnnotatedString& t) {
+        AnnotatedString shown(t.text());
+        const std::string& s = t.text();
+        for (size_t i = 0; i < s.size();) {
+            size_t j = i;
+            while (j < s.size() && s[j] >= 'A' && s[j] <= 'Z') ++j;
+            if (j > i) shown.addStyle({.fontSize = 32, .color = colors::Red}, int(i), int(j));
+            i = j > i ? j : i + 1;
+        }
+        // (its paragraph's lines as tall as the big letters: the field's style has a line height of its own)
+        if (size_t nl = s.find('\n'); nl != std::string::npos) shown.addStyle(ParagraphStyle{.lineHeight = TextUnit::em(2.5f)}, 0, int(nl));
+        return TransformedText{shown, OffsetMapping::Identity};
+    });
+    // A quote mark before the text: two bytes more, mapped both ways.
+    auto quoted = VisualTransformation([](const AnnotatedString& t) {
+        AnnotatedString shown("> " + t.text());
+        shown.addStyle({.color = colors::Gray}, 0, 2);
+        return TransformedText{shown, OffsetMapping{[](int o) { return o + 2; }, [](int o) { return std::max(0, o - 2); }}};
+    });
+    std::optional<TextFieldState> loud, quote, plain;
+    KompozTestRule rule([&] {
+        Column([&] {
+            auto l = rememberTextFieldState("abBIGcd\nx");
+            loud = l;
+            TextField(l, Modifier().testTag("loud").width(300), visualTransformation = shout);
+            auto p = rememberTextFieldState("abBIGcd\nx");
+            plain = p;
+            TextField(p, Modifier().testTag("plain").width(300));
+            auto q = rememberTextFieldState("söz");
+            quote = q;
+            TextField(q, Modifier().testTag("quote").width(300), singleLine = true, visualTransformation = quoted);
+        });
+    });
+    // The big word is drawn red at 32 sp; its line is taller than the plain field's.
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    bool bigRed = false;
+    for (size_t i = 0; i < canvas.texts.size(); ++i)
+        if (canvas.texts[i] == "BIG" && canvas.colors[i] == colors::Red && near(canvas.fonts[i].size, 32)) bigRed = true;
+    CHECK(bigRed);
+    CHECK(rule.onNodeWithTag("loud").bounds().height > rule.onNodeWithTag("plain").bounds().height + 10);
+    CHECK(std::ranges::count(rule.drawnTexts(), "> ") == 1 && std::ranges::count(rule.drawnTexts(), "söz") == 1);
+    // A tap in the big word: 16 dp in, "ab" 2 x 8, then 16 a big letter: after its second letter.
+    Rect field = rule.onNodeWithTag("loud").bounds();
+    float firstLine = rule.onNodeWithTag("loud").bounds().y + 16 + 10;
+    tap(rule, {field.x + 16 + 2 * 8 + 2 * 16 - 3, firstLine});
+    rule.waitForIdle();
+    CHECK((loud->selection() == TextRange{4, 4}));
+    // Down to the next line (shorter, after the tall one), then typed there.
+    rule.host().keyDown(Key::Down);
+    rule.host().textInput("Y");
+    rule.waitForIdle();
+    CHECK(loud->text() == "abBIGcd\nxY" || loud->text() == "abBIGcd\nYx");
+    // The quoted field: a tap on the mark is before the text; typed at the end, the text alone grows.
+    Rect q = rule.onNodeWithTag("quote").bounds();
+    tap(rule, {q.x + 16 + 4, q.y + q.height / 2});
+    rule.waitForIdle();
+    CHECK((quote->selection() == TextRange{0, 0}));
+    rule.host().keyDown(Key::End);
+    rule.host().textInput("!");
+    rule.waitForIdle();
+    CHECK(quote->text() == "söz!" && std::ranges::count(rule.drawnTexts(), "söz!") == 1);
+    // A password's mask of its own.
+    std::optional<TextFieldState> secret;
+    KompozTestRule masked([&] {
+        auto s = rememberTextFieldState("abc");
+        secret = s;
+        TextField(s, Modifier(), singleLine = true, visualTransformation = PasswordVisualTransformation("*"));
+    });
+    CHECK(std::ranges::count(masked.drawnTexts(), "***") == 1);
+}
+
 // The platform's file dialog, as a test gives it: what it was asked, and what it answers.
 struct FakeFileDialog {
     std::vector<detail::FileDialogRequest> asked;

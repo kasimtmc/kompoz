@@ -2459,7 +2459,54 @@ struct KeyboardActions {
     std::function<void()> onDone, onGo, onNext, onPrevious, onSearch, onSend;
 };
 
-enum class VisualTransformation { None, Password };  // Password shows dots
+// How a field's text is shown, not what it is (Compose's VisualTransformation): the text styled
+// (syntax colored, a rich text's spans), characters added or hidden, with the offsets between the
+// two. Offsets are bytes of the UTF-8 text.
+//   TextField(code, setCode, visualTransformation = VisualTransformation([](const AnnotatedString& t) {
+//       AnnotatedString shown(t.text());
+//       for (auto [a, e] : keywords(t.text())) shown.addStyle({.color = colors::Blue}, a, e);
+//       return TransformedText{shown, OffsetMapping::Identity};
+//   }));
+struct OffsetMapping {
+    std::function<int(int)> originalToTransformed, transformedToOriginal;
+    static const OffsetMapping Identity;
+};
+inline const OffsetMapping OffsetMapping::Identity{[](int o) { return o; }, [](int o) { return o; }};
+struct TransformedText {
+    AnnotatedString text;
+    OffsetMapping offsetMapping;
+};
+class VisualTransformation {
+public:
+    VisualTransformation() = default;
+    // Compose's fun interface: VisualTransformation { text -> TransformedText(…) }.
+    template <class F>
+        requires std::is_invocable_r_v<TransformedText, F&, const AnnotatedString&>
+    VisualTransformation(F filter) : filter_(std::move(filter)) {}
+    TransformedText filter(const AnnotatedString& text) const {
+        if (filter_) return filter_(text);
+        return {text, OffsetMapping::Identity};
+    }
+    static const VisualTransformation None;
+    static const VisualTransformation Password;  // shows dots (PasswordVisualTransformation())
+
+    bool isNone() const { return !filter_ && mask_.empty(); }
+    bool isPassword() const { return !mask_.empty(); }
+    const std::string& mask() const { return mask_; }
+
+private:
+    friend VisualTransformation PasswordVisualTransformation(std::string_view mask);
+    std::function<TransformedText(const AnnotatedString&)> filter_;
+    std::string mask_;  // a password's: each character shown as this
+};
+// Dots in place of the characters (Compose's PasswordVisualTransformation(mask = '\u2022')).
+inline VisualTransformation PasswordVisualTransformation(std::string_view mask = "\u2022") {
+    VisualTransformation v;
+    v.mask_ = std::string(mask);
+    return v;
+}
+inline const VisualTransformation VisualTransformation::None{};
+inline const VisualTransformation VisualTransformation::Password = PasswordVisualTransformation();
 
 // Text being changed, with its selection (Compose's TextFieldBuffer): what TextFieldState::edit
 // and an InputTransformation get. Offsets are bytes of the UTF-8 text; a replacement moves

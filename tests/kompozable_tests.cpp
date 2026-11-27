@@ -3976,6 +3976,34 @@ TEST(file_dialogs_as_filekit_writes_them) {
     fs::remove_all(root);
 }
 
+// A field's text shown styled, as Compose writes a VisualTransformation; a password's dots.
+@Kompozable
+fun Highlighted() {
+    var code by remember { mutableStateOf("val x = 1") }
+    Column {
+        TextField(value = code, onValueChange = { code = it }, modifier = Modifier.testTag("kod"),
+                  visualTransformation = VisualTransformation { text ->
+                      TransformedText(buildAnnotatedString {
+                          append(text.text)
+                          if (text.text.startsWith("val")) addStyle(SpanStyle(color = Color.Blue), 0, 3)
+                      }, OffsetMapping.Identity)
+                  })
+        TextField(value = "gizli", onValueChange = {}, visualTransformation = PasswordVisualTransformation())
+        TextField(value = "açık", onValueChange = {}, visualTransformation = VisualTransformation.None)
+    }
+}
+
+TEST(visual_transformation_as_compose_writes_it) {
+    KompozTestRule rule([] { Highlighted(); });
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    bool blue = false;
+    for (size_t i = 0; i < canvas.texts.size(); ++i)
+        if (canvas.texts[i] == "val" && canvas.colors[i] == colors::Blue) blue = true;
+    CHECK(blue);
+    CHECK(std::ranges::count(rule.drawnTexts(), "•••••") == 1 && std::ranges::count(rule.drawnTexts(), "açık") == 1);
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

@@ -156,7 +156,7 @@ fun Kompozer() {
 | `supportingText`, `isError` | A line under the field (a composable, or a string), and the error colors. |
 | `keyboardOptions` | The keyboard's type (`Email`, `Number`, `Password`…), its action key (`Next`, `Done`, `Search`…), capitalization and autocorrect. |
 | `keyboardActions`, `onSubmit` | What the action key does. |
-| `visualTransformation` | `VisualTransformation.Password` shows dots. |
+| `visualTransformation` | How the text is shown, not what it is, as Compose's: `PasswordVisualTransformation()` (or `VisualTransformation.Password`) shows dots; `VisualTransformation { text -> TransformedText(styled, offsetMapping) }` styles it (syntax colors, a rich text's spans, paragraph styles), its lines as tall as their own text, or adds characters with an `OffsetMapping` (`OffsetMapping.Identity` where none are added). |
 | `enabled`, `readOnly` | Disabled, or focusable and selectable but not editable. |
 
 `BasicTextField` is a field with no decoration, for designs of your own; its `decorator` option draws around the text.

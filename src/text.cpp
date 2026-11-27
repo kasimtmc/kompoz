@@ -724,9 +724,9 @@ void drawStyledText(GraphicsContext& canvas, const StyledTextLayout& layout, con
             else canvas.drawText(p.text, {x, baseline}, run.font, run.color, p.rtl);
             Color ink = run.brush ? run.brush->colorAt({x + p.width / 2, baseline}, b) : run.color;
             float thickness = std::max(1.f, run.font.size / 14);
-            if (run.decoration == TextDecoration::LineThrough)
+            if (contains(run.decoration, TextDecoration::LineThrough))
                 canvas.drawLine({x, baseline - line.ascent * 0.3f}, {x + p.width, baseline - line.ascent * 0.3f}, thickness, ink);
-            else if (run.decoration == TextDecoration::Underline)
+            if (contains(run.decoration, TextDecoration::Underline))
                 canvas.drawLine({x, baseline + 2}, {x + p.width, baseline + 2}, thickness, ink);
         }
     }

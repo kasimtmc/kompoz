@@ -608,6 +608,8 @@ template <class C, class X>
 bool contains(const C& c, const X& x) {
     if constexpr (requires { c.contains(x); }) {
         return c.contains(x);
+    } else if constexpr (std::is_same_v<C, TextDecoration> && std::is_same_v<X, TextDecoration>) {  // decoration.contains(Underline)
+        return ::kompoz::contains(c, x);
     } else if constexpr (std::is_convertible_v<const C&, std::string_view>) {
         return std::string_view(c).find(x) != std::string_view::npos;
     } else {

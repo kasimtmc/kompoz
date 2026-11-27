@@ -2475,6 +2475,7 @@ struct ShownText {
     std::string text;
     std::vector<int> toShown;  // per offset of the value, 0..its length
     std::vector<int> toValue;  // per offset of the shown text
+    std::shared_ptr<const AnnotatedString> styled;  // a VisualTransformation's: the shown text with its spans
 };
 using Display = std::shared_ptr<const ShownText>;  // null: the value as it is
 
@@ -2530,6 +2531,22 @@ Display outputDisplay(const std::string& value, const std::function<void(TextFie
     return d;
 }
 
+// What a VisualTransformation makes of the value: its text and spans, the offsets as its mapping
+// says (clamped to the texts).
+Display visualDisplay(const std::string& value, const VisualTransformation& transformation) {
+    TransformedText t = transformation.filter(AnnotatedString(value));
+    auto d = std::make_shared<ShownText>();
+    d->text = t.text.text();
+    int n = int(value.size()), m = int(d->text.size());
+    const OffsetMapping& map = t.offsetMapping;
+    d->toShown.resize(size_t(n) + 1);
+    for (int o = 0; o <= n; ++o) d->toShown[size_t(o)] = std::clamp(map.originalToTransformed ? map.originalToTransformed(o) : o, 0, m);
+    d->toValue.resize(size_t(m) + 1);
+    for (int o = 0; o <= m; ++o) d->toValue[size_t(o)] = std::clamp(map.transformedToOriginal ? map.transformedToOriginal(o) : o, 0, n);
+    d->styled = std::make_shared<const AnnotatedString>(std::move(t.text));
+    return d;
+}
+
 std::string displayText(const std::string& value, const Display& d) { return d ? d->text : value; }
 int toDisplay(const std::string&, int offset, const Display& d) {
     if (!d) return offset;
@@ -2554,6 +2571,52 @@ struct FieldGeometry {
     float lineHeight = 0;
     float width = 0;   // multi-line: the lines' area, for their alignment
     float height = 0;  // single line: the text node's
+};
+
+float fieldLineHeight(TextMeasurer& tm, const Font& font);
+
+// A field showing styled text (a VisualTransformation's spans and paragraph styles): its lines laid
+// out as a Text's, of their own heights, for drawing, taps and the caret.
+struct StyledField {
+    std::shared_ptr<const AnnotatedString> text;
+    Font font;
+    Color linkColor;
+    TextAlign align = TextAlign::Start;
+    TextDirection direction = TextDirection::Content;
+    bool singleLine = false;
+    detail::StyledTextLayout layout;  // as last laid out
+    float width = 0;                  // what its lines are aligned in
+    float scrollX = 0, scrollY = 0;   // single line: how far left; multi-line: how far up
+    float emptyLineHeight = 0;        // a line's where there is none (no text)
+
+    void lay(TextMeasurer& tm, float w, Color color) {
+        auto runs = detail::resolveRuns(*text, font, color, TextDecoration::None, linkColor);
+        layout = detail::layoutStyledText(tm, text->text(), std::move(runs), singleLine ? kInfinity : std::max(1.f, w),
+                                          std::numeric_limits<int>::max(), !singleLine, TextOverflow::Visible, direction, {}, false,
+                                          LineBreak::Strategy::Simple, &text->paragraphStyles());
+        width = singleLine ? std::max(w, layout.width) : w;
+        emptyLineHeight = fieldLineHeight(tm, font);
+    }
+    float height() const { return layout.lines.empty() ? emptyLineHeight : layout.height; }
+    // The lines from the first: how tall `count` of them are (lines past the text: as tall as the font's).
+    float heightOf(int count) const {
+        float h = 0;
+        for (int i = 0; i < count; ++i) h += i < int(layout.lines.size()) ? layout.lines[size_t(i)].height : emptyLineHeight;
+        return h;
+    }
+    size_t lineOf(int offset) const {
+        for (size_t i = 0; i < layout.lines.size(); ++i)
+            if (offset <= layout.lines[i].end) return i;
+        return layout.lines.empty() ? 0 : layout.lines.size() - 1;
+    }
+    // The caret at a shown offset: its top left and its height, in the laid out text.
+    Rect caret(TextMeasurer& tm, int offset) const {
+        if (layout.lines.empty()) return {detail::alignedX(align, false, width, 0), 0, 2, emptyLineHeight};
+        const detail::TextLine& line = layout.lines[lineOf(offset)];
+        Offset p = detail::caretPoint(layout, tm, text->text(), offset, width, align);
+        return {p.x, line.top, 2, line.height};
+    }
+    int offsetAt(TextMeasurer& tm, Offset p) const { return detail::offsetAt(layout, tm, text->text(), p, width, align); }
 };
 
 // A field's lines: the style's line height (Material's 24 sp for bodyLarge) or the font's own.
@@ -2674,6 +2737,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     // The input method's last report: where the caret is and which word it is still composing.
     auto ime = remember([] { return std::make_shared<TextEditState>(); });
     auto geometry = remember([] { return std::make_shared<FieldGeometry>(); });
+    auto styledState = remember([] { return std::make_shared<StyledField>(); });  // (its scroll kept)
     auto focused = remember([] { return mutableStateOf(false); });
     auto touching = remember([] { return mutableStateOf(false); });  // touch selection: handles and toolbar
     auto toolbarShown = remember([] { return mutableStateOf(false); });
@@ -2767,16 +2831,28 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     auto affixAlpha = [floated, hasLabel] { return hasLabel ? floated.value() : 1.f; };  // shown with the floated label
     float textShift = kind == FieldKind::Filled && hasLabel ? 8.f : 0.f;  // below the floated label
     Display transform = secure ? (secure->visible ? nullptr : passwordDisplay(value, secure->bullet, secure->revealed))
-                        : o.visualTransformation == VisualTransformation::Password ? passwordDisplay(value)
+                        : o.visualTransformation.isPassword() ? passwordDisplay(value, o.visualTransformation.mask())
+                        : !o.visualTransformation.isNone() ? visualDisplay(value, o.visualTransformation)
                         : o.outputTransformation && o.outputTransformation->transformOutput
                             ? outputDisplay(value, o.outputTransformation->transformOutput)
                             : nullptr;
     std::string shown = displayText(value, transform);
+    // Styled (a VisualTransformation's spans): laid out as a Text, its lines of their own heights.
+    std::shared_ptr<StyledField> styled;
+    if (transform && transform->styled) {
+        styled = styledState;
+        styled->text = transform->styled;
+        styled->font = font;
+        styled->linkColor = cs.primary;
+        styled->align = align;
+        styled->singleLine = o.singleLine;
+    }
     // Its direction, from the text (or the placeholder): Arabic starts at the right.
     TextDirection direction = o.textStyle.textDirection;
     if (direction == TextDirection::Content)  // digits only: the layout's way
         direction = LocalLayoutDirection.current() == LayoutDirection::Rtl ? TextDirection::ContentOrRtl : TextDirection::ContentOrLtr;
     bool rtl = detail::isRtl(direction, value.empty() ? std::string_view(o.placeholder) : std::string_view(shown));
+    if (styled) styled->direction = direction;
     // A multi-line field's paragraphs each go their own way (by their own first letter).
     std::function<bool(std::string_view)> paragraphRtl = [direction](std::string_view paragraph) { return detail::isRtl(direction, paragraph); };
     bool singleLine = o.singleLine;
@@ -2787,7 +2863,7 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
     auto focusable = std::make_shared<FocusableElement>();
     focusable->value = value;
     focusable->keyboardOptions = o.keyboardOptions;
-    focusable->allowCopy = !secure && o.visualTransformation != VisualTransformation::Password;
+    focusable->allowCopy = !secure && !o.visualTransformation.isPassword();
     focusable->onContextMenu = [menuAt](Offset at) { menuAt.set(at); };
     focusable->singleLine = singleLine;
     focusable->readOnly = o.readOnly;
@@ -2844,7 +2920,27 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         }
     };
     if (!singleLine)
-        focusable->moveCaret = [measurer, font, geometry, value, transform, align](int offset, CaretMove move) {
+        focusable->moveCaret = [measurer, font, geometry, value, transform, align, styled](int offset, CaretMove move) {
+            if (styled) {  // its lines as laid out, of their own heights
+                const auto& lines = styled->layout.lines;
+                if (lines.empty()) return offset;
+                int d = toDisplay(value, offset, transform);
+                size_t line = styled->lineOf(d);
+                switch (move) {
+                case CaretMove::LineStart: return fromDisplay(value, lines[line].start, transform);
+                case CaretMove::LineEnd: return fromDisplay(value, lines[line].end, transform);
+                case CaretMove::LineUp:
+                case CaretMove::LineDown: {
+                    bool up = move == CaretMove::LineUp;
+                    if (up && line == 0) return 0;
+                    if (!up && line + 1 == lines.size()) return int(value.size());
+                    const detail::TextLine& to = lines[up ? line - 1 : line + 1];
+                    Rect c = styled->caret(*measurer, d);
+                    return fromDisplay(value, styled->offsetAt(*measurer, {c.x, to.top + to.height / 2}), transform);
+                }
+                }
+                return offset;
+            }
             const auto& lines = geometry->lines;
             if (lines.empty()) return offset;
             std::string text = displayText(value, transform);
@@ -2870,7 +2966,12 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
             }
             return offset;
         };
-    focusable->offsetAt = [measurer, font, geometry, padStart, padTop, value, transform, singleLine, align, rtl](Offset local) {
+    focusable->offsetAt = [measurer, font, geometry, padStart, padTop, value, transform, singleLine, align, rtl, styled](Offset local) {
+        if (styled) {
+            Offset at = singleLine ? Offset{local.x - padStart + styled->scrollX, styled->height() / 2}
+                                   : Offset{local.x - padStart, local.y - padTop + styled->scrollY};
+            return fromDisplay(value, styled->offsetAt(*measurer, at), transform);
+        }
         std::string text = displayText(value, transform);
         if (!singleLine && !geometry->lines.empty()) {
             float lh = std::max(1.f, geometry->lineHeight);
@@ -2886,9 +2987,34 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
 
     float minHeight = plain ? 0.f : 56.f;  // a decorated field is at least 56 dp tall
     auto measureText = [font, singleLine, shown, geometry, padStart, padEnd, padTop, padBottom, minLines, maxLines, plain,
-                        minHeight, paragraphRtl, textShift](LayoutNode& node, const Constraints& c) {
+                        minHeight, paragraphRtl, textShift, styled](LayoutNode& node, const Constraints& c) {
         FontMetrics m = node.textMeasurer().metrics(font);
         m.lineHeight = fieldLineHeight(node.textMeasurer(), font);
+        if (styled) {  // its lines of their own heights (a probe lays a copy out: what is drawn stays)
+            float width = c.hasBoundedWidth() ? c.maxWidth : 280;
+            StyledField probe;
+            StyledField& laid = detail::isProbeMeasure() ? (probe = *styled, probe) : *styled;
+            laid.lay(node.textMeasurer(), std::max(1.f, width - padStart - padEnd), Color{});
+            const auto& lines = laid.layout.lines;
+            float firstAscent = lines.empty() ? m.ascent : lines[0].top + lines[0].ascent;
+            if (singleLine) {
+                float h = std::max(m.lineHeight, laid.height());
+                Size size = c.constrain({c.maxWidth, plain ? h : std::max(56.f, h + 32)});
+                if (!detail::isProbeMeasure()) geometry->height = size.height;
+                node.textBaselines[0] = node.textBaselines[1] = (size.height - laid.height()) / 2 + firstAscent + textShift;
+                return size;
+            }
+            int count = std::max<int>(1, int(lines.size()));
+            int visible = std::clamp(count, minLines, maxLines);
+            node.textBaselines[0] = padTop + firstAscent;
+            if (lines.empty()) {
+                node.textBaselines[1] = node.textBaselines[0];
+            } else {
+                const detail::TextLine& last = lines[size_t(std::min({count, visible, int(lines.size())}) - 1)];
+                node.textBaselines[1] = padTop + last.top + last.ascent;
+            }
+            return c.constrain({width, std::max(minHeight, padTop + laid.heightOf(visible) + padBottom)});
+        }
         if (singleLine) {
             Size size = c.constrain({c.maxWidth, plain ? m.lineHeight : std::max(56.f, m.lineHeight + 32)});
             if (!detail::isProbeMeasure()) geometry->height = size.height;
@@ -2994,7 +3120,66 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
         canvas.popClip();
         drawAffixes(canvas, b, area.y + glyphTop + m.ascent);  // they stay as the lines scroll
     };
+    // Styled: the laid out lines drawn as a Text's, the caret and selection where they fall in them.
+    auto drawStyled = [=, placeholder = o.placeholder](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
+        (void)edits.get();
+        bool focusedNow = node.focused;
+        TextMeasurer& tm = node.textMeasurer();
+        FontMetrics m = tm.metrics(font);
+        Rect area = singleLine ? Rect{b.x + padStart, b.y, std::max(0.f, b.width - padStart - padEnd), b.height}
+                               : Rect{b.x + padStart, b.y + padTop, std::max(0.f, b.width - padStart - padEnd),
+                                      std::max(0.f, b.height - padTop - padBottom)};
+        styled->lay(tm, std::max(1.f, area.width - 2), textColor);
+        const std::string& text = styled->text->text();
+        bool synced = (focusedNow || node.dragHovered) && ime->text == value;
+        int caret = toDisplay(value, synced ? ime->selectionEnd : int(value.size()), transform);
+        Rect c = styled->caret(tm, caret);
+        Offset origin;
+        if (singleLine) {
+            float& sx = styled->scrollX;
+            if (focusedNow || node.dragHovered) {
+                if (c.x - sx < 0) sx = c.x;
+                if (c.x - sx > area.width - 2) sx = c.x - area.width + 2;
+            }
+            sx = std::clamp(sx, 0.f, std::max(0.f, styled->width - area.width + 2));
+            origin = {area.x - sx, area.y + (area.height - styled->height()) / 2 + textShift};
+        } else {
+            float& sy = styled->scrollY;
+            if (focusedNow || node.dragHovered) {
+                if (c.y < sy) sy = c.y;
+                if (c.bottom() > sy + area.height) sy = c.bottom() - area.height;
+            }
+            sy = std::clamp(sy, 0.f, std::max(0.f, styled->height() - area.height));
+            origin = {area.x, area.y - sy};
+        }
+        auto ranges = [&](int from, int to) {
+            return detail::selectionRects(styled->layout, tm, text, toDisplay(value, from, transform), toDisplay(value, to, transform),
+                                          styled->width, align);
+        };
+        canvas.pushClip(singleLine ? area : Rect{b.x, area.y, b.width, area.height});
+        if (synced && ime->selectionStart != ime->selectionEnd)
+            for (const Rect& r : ranges(std::min(ime->selectionStart, ime->selectionEnd), std::max(ime->selectionStart, ime->selectionEnd)))
+                canvas.fillRoundRect({r.x + origin.x, r.y + origin.y, r.width, r.height}, 0, selectionColors.backgroundColor);
+        const auto& lines = styled->layout.lines;
+        float baseline = origin.y + (lines.empty() ? (styled->emptyLineHeight - (m.ascent + m.descent)) / 2 + m.ascent : lines[0].top + lines[0].ascent);
+        if (value.empty()) {
+            if (!hasLabel || focusedNow || alwaysUp)
+                canvas.drawText(placeholder, {area.x + alignShift(align, rtl, area.width - 2, tm.measureWidth(placeholder, font)), baseline}, font,
+                                placeholderColor, rtl);
+        } else {
+            detail::drawStyledText(canvas, styled->layout, {origin.x, origin.y, styled->width, styled->height()}, align, TextOverflow::Visible);
+        }
+        if (synced && ime->compositionStart >= 0)  // the word being composed, underlined like Android
+            for (const Rect& r : ranges(ime->compositionStart, ime->compositionEnd))
+                canvas.drawLine({origin.x + r.x, origin.y + r.bottom() - 2}, {origin.x + r.right(), origin.y + r.bottom() - 2}, 1.5f, textColor);
+        bool selectingNow = synced && ime->selectionStart != ime->selectionEnd;
+        if ((focusedNow || node.dragHovered) && !o.readOnly && !selectingNow)
+            canvas.drawLine({origin.x + c.x + 1, origin.y + c.y}, {origin.x + c.x + 1, origin.y + c.bottom()}, 2, cursorColor);
+        canvas.popClip();
+        drawAffixes(canvas, b, baseline);
+    };
     auto drawText = [=, placeholder = o.placeholder](GraphicsContext& canvas, const Rect& b, const LayoutNode& node) {
+        if (styled) return drawStyled(canvas, b, node);
         if (!singleLine) return drawLines(canvas, b, node);
         (void)edits.get();  // (the caret, the selection and the composition are `ime`'s)
         bool focusedNow = node.focused;
@@ -3032,7 +3217,12 @@ void textField(FieldKind kind, const std::string& value, std::function<void(std:
 
     // Touch selection: where the caret at `offset` stands in the text node (its x, and the
     // bottom of its line), for the handles and the toolbar.
-    auto caretPoint = [measurer, font, geometry, padStart, padTop, value, transform, singleLine, align, textShift, rtl](int offset) {
+    auto caretPoint = [measurer, font, geometry, padStart, padTop, value, transform, singleLine, align, textShift, rtl, styled](int offset) {
+        if (styled) {
+            Rect c = styled->caret(*measurer, toDisplay(value, offset, transform));
+            if (singleLine) return Offset{padStart - styled->scrollX + c.x, (geometry->height - styled->height()) / 2 + textShift + c.bottom()};
+            return Offset{padStart + c.x, padTop - styled->scrollY + c.bottom()};
+        }
         std::string text = displayText(value, transform);
         std::string_view view = text;
         int d = std::clamp(toDisplay(value, offset, transform), 0, int(text.size()));

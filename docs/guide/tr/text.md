@@ -156,7 +156,7 @@ fun Kompozer() {
 | `supportingText`, `isError` | Alanın altında bir satır (bir composable ya da bir dize) ve hata renkleri. |
 | `keyboardOptions` | Klavyenin türü (`Email`, `Number`, `Password`…), eylem tuşu (`Next`, `Done`, `Search`…), büyük harf kullanımı ve otomatik düzeltme. |
 | `keyboardActions`, `onSubmit` | Eylem tuşunun ne yaptığı. |
-| `visualTransformation` | `VisualTransformation.Password` noktalar gösterir. |
+| `visualTransformation` | Metnin ne olduğunu değil nasıl gösterildiğini değiştirir, Compose'daki gibi: `PasswordVisualTransformation()` (ya da `VisualTransformation.Password`) noktalar gösterir; `VisualTransformation { text -> TransformedText(stilli, offsetMapping) }` onu stillendirir (sözdizimi renkleri, zengin metnin stilleri, paragraf stilleri; satırlar kendi metinleri kadar uzun olur) ya da bir `OffsetMapping` ile karakter ekler (hiç eklenmiyorsa `OffsetMapping.Identity`). |
 | `enabled`, `readOnly` | Devre dışı ya da odaklanabilir ve seçilebilir ama düzenlenemez. |
 
 `BasicTextField`, kendi tasarımlarınız için süslemesiz bir alandır; `decorator` seçeneği metnin çevresini çizer.

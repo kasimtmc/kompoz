@@ -18,7 +18,21 @@
 
 namespace kompoz {
 
-enum class TextDecoration { None, LineThrough, Underline };
+// Lines through or under text (Compose's TextDecoration); combined, both: Underline + LineThrough.
+enum class TextDecoration { None = 0, LineThrough = 1, Underline = 2 };
+constexpr TextDecoration operator|(TextDecoration a, TextDecoration b) { return TextDecoration(int(a) | int(b)); }
+constexpr TextDecoration operator+(TextDecoration a, TextDecoration b) { return a | b; }  // (Compose's plus)
+// Whether `decoration` has all of `other`'s lines (Compose's contains).
+constexpr bool contains(TextDecoration decoration, TextDecoration other) { return (int(decoration) & int(other)) == int(other); }
+// Its lines but `other`'s.
+constexpr TextDecoration minus(TextDecoration decoration, TextDecoration other) { return TextDecoration(int(decoration) & ~int(other)); }
+// All of them (Compose's TextDecoration.combine).
+template <class R>
+constexpr TextDecoration combine(const R& decorations) {
+    TextDecoration all = TextDecoration::None;
+    for (TextDecoration d : decorations) all = all | d;
+    return all;
+}
 
 // A length in text (Compose's TextUnit): sp, or em — a share of a font size. A font size in em is
 // that share of the size it would have otherwise (the style around it: the enclosing span, the

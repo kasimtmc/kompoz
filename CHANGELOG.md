@@ -1178,6 +1178,10 @@
   settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
   that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
   `DragIndicator`.
+- **Styled text fields**: `VisualTransformation` as Compose's (`VisualTransformation { text -> TransformedText(annotated,
+  offsetMapping) }`, `OffsetMapping`, `PasswordVisualTransformation(mask)`, `VisualTransformation.None`): a field draws the
+  transformed text with its spans and paragraph styles, its lines as tall as their own text, the caret, selection, taps and
+  handles where they fall in them. `TextDecoration`s combine as Compose's (`Underline + LineThrough`, `contains`).
 - **File dialogs** (Compose has none), with FileKit's API: `rememberFilePickerLauncher(type, mode, directory,
   dialogSettings, onError) { result -> }`, `rememberFileSaverLauncher` (`launch(suggestedName, defaultExtension,
   allowedExtensions, directory)`), `rememberDirectoryPickerLauncher`, and in a coroutine `FileKit.openFilePicker`,
