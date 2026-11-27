@@ -239,6 +239,26 @@ fun Mail() {
 }
 ```
 
+### Bölünmüş paneller
+
+Yan yana ya da üst üste iki panel ve aralarında, kullanıcının alanı paylaştırmak için sürüklediği bir ayırıcı: bir dosya ağacı ve bir düzenleyici. Compose'da yoktur; Kompoz'da Compose Multiplatform'un SplitPane bileşeninin API'si vardır. `HorizontalSplitPane` `first { }`'i başa, `second { }`'i sona koyar; `VerticalSplitPane` birini ötekinin üstüne. Her panel en az `minSize`'ını korur:
+
+```kotlin body
+val state = rememberSplitPaneState(initialPositionPercentage = 0.3f)
+HorizontalSplitPane(splitPaneState = state, modifier = Modifier.fillMaxSize()) {
+    first(minSize = 200.dp) { Text("Dosyalar") }
+    second(minSize = 300.dp) { Text("Düzenleyici") }
+    splitter {
+        visiblePart { Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant)) }
+        handle { Box(Modifier.markAsHandle().cursorForHorizontalResize().width(9.dp).fillMaxHeight()) }
+    }
+}
+```
+
+`splitter { }` isteğe bağlıdır: verilmezse ayırıcı 1 dp'lik bir çizgidir ve üstünde işaretçinin gerektirdiği genişlikte bir tutamak vardır (fare için 8 dp, parmak için 24). `visiblePart { }` paneller arasında yer kaplar; `handle { }` yer kaplamaz, onun üstünde durur (`handle(alignment = SplitterHandleAlignment.BEFORE)` ya da `AFTER` onu yanına koyar), `Modifier.markAsHandle()` da onu sürüklenen parça yapar. Tutamak klavye odağını da alır (ok tuşları 16 dp, Shift ile 64 dp taşır; Home ve End uçlara) ve erişilebilirlik hizmetleri için bir kaydırıcıdır.
+
+`SplitPaneState.positionPercentage` ayırıcının yeridir; 0 (ilk panel en küçüğünde) ile 1 (ikincisi en küçüğünde) arasında. Okuyun ya da ayırıcıyı taşımak için değiştirin. `moveEnabled = false` kullanıcının taşımasını engeller; `dispatchRawMovement(delta)` onu dp cinsinden taşır. `rememberSplitPaneState` uygulamanın durumuyla birlikte kaydedilir.
+
 ## Pencere kenar boşlukları
 
 Telefonlarda sistem çubukları, ekran çentiği ve klavye pencerenin bazı kısımlarını örter. *Kenar boşlukları* (insets) bunun ne kadar olduğunu söyler, böylece içerik onlardan uzak durabilir:

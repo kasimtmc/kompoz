@@ -35,6 +35,7 @@
 #include "runtime.hpp"
 #include "saved_value.hpp"
 #include "shared_transition.hpp"
+#include "splitpane.hpp"
 #include "state.hpp"
 #include "strings.hpp"
 #include "text_measure.hpp"

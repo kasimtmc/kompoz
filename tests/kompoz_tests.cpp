@@ -32623,6 +32623,97 @@ TEST(reorderable_grids_move_cells_across_lines_and_lanes) {
     CHECK(near(rule.onNodeWithTag("k1").bounds().x, 150));
 }
 
+// ---- Split panes (splitpane.hpp) ----
+
+TEST(split_pane_shares_the_room_and_the_handle_moves_it) {
+    SplitPaneState state(0.25f);
+    KompozTestRule rule([&] {
+        HorizontalSplitPane(Modifier().size(400, 300), kompoz::splitPaneState = state, [] {
+            first(kompoz::minSize = 50.f, [] { Box(Modifier().fillMaxSize().testTag("sol")); });
+            second(kompoz::minSize = 100.f, [] { Box(Modifier().fillMaxSize().testTag("sağ")); });
+        });
+    }, {400, 300});
+    // Room for the splitter (a 1 dp line): from 50 to 400 - 100 - 1 = 299; a quarter of the way.
+    float at = 50 + 249 * 0.25f;
+    CHECK(near(rule.onNodeWithTag("sol").bounds().width, at) && near(rule.onNodeWithTag("sağ").bounds().x, at + 1));
+    CHECK(near(rule.onNodeWithTag("sağ").bounds().width, 400 - at - 1));
+    // The handle over the line (24 dp: no fine pointer), dragged 100 dp right (less the touch slop).
+    rule.swipe({at + 0.5f, 150}, {at + 100.5f, 150});
+    rule.waitForIdle();
+    float moved = rule.onNodeWithTag("sol").bounds().width;
+    CHECK(moved > at + 85 && moved <= at + 100.5f);
+    CHECK(near(state.positionPercentage(), (moved - 50) / 249, 0.01f));
+    rule.swipe({moved + 0.5f, 150}, {399, 150});  // as far as the second pane's least
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("sol").bounds().width, 299) && near(rule.onNodeWithTag("sağ").bounds().width, 100));
+    CHECK(near(state.positionPercentage(), 1));
+    state.setPositionPercentage(0);  // from code
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("sol").bounds().width, 50));
+    state.setMoveEnabled(false);
+    rule.waitForIdle();
+    rule.swipe({50.5f, 150}, {200, 150});
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("sol").bounds().width, 50));  // not moved by the user
+}
+
+TEST(split_pane_keys_accessibility_vertical_and_right_to_left) {
+    SplitPaneState down(0.5f), across(0.f);
+    KompozTestRule rule([&] {
+        Column(Modifier().fillMaxSize(), [&] {
+            VerticalSplitPane(Modifier().size(200, 300), kompoz::splitPaneState = down, [] {
+                first([] { Box(Modifier().fillMaxSize().testTag("üst")); });
+                second([] { Box(Modifier().fillMaxSize().testTag("alt")); });
+                splitter([] {
+                    visiblePart([] { Box(Modifier().height(4).fillMaxWidth()); });
+                    handle(kompoz::alignment = SplitterHandleAlignment::AFTER,
+                           [] { Box(Modifier().markAsHandle().height(10).fillMaxWidth().testTag("tutamak")); });
+                });
+            });
+            KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [&] {
+                HorizontalSplitPane(Modifier().size(400, 100), kompoz::splitPaneState = across, [] {
+                    first(kompoz::minSize = 100.f, [] { Box(Modifier().fillMaxSize().testTag("baş")); });
+                    second([] { Box(Modifier().fillMaxSize().testTag("son")); });
+                });
+            });
+        });
+    }, {400, 800});
+    // Vertical: the first above, room 0..296, half way; the handle after the 4 dp line.
+    CHECK(near(rule.onNodeWithTag("üst").bounds().height, 148) && near(rule.onNodeWithTag("alt").bounds().y, 152));
+    CHECK(near(rule.onNodeWithTag("tutamak").bounds().y, 152));
+    // Right to left: the first pane at the right, at its least (100).
+    CHECK(near(rule.onNodeWithTag("baş").bounds().x, 300) && near(rule.onNodeWithTag("son").bounds().width, 299));
+    // The keyboard: Tab to the first handle, then Down moves it 16 dp, Shift+Down 64, Home to the top.
+    KompozHost& host = rule.host();
+    host.keyDown(Key::Tab);
+    host.keyDown(Key::Down);
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("üst").bounds().height, 164));
+    host.keyDown(Key::Down, {.shift = true});
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("üst").bounds().height, 228));
+    host.keyDown(Key::Home);
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("üst").bounds().height, 0));
+    // Accessibility services: a slider of the place, set from them.
+    auto semantics = detail::semanticsOf(rule.onNodeWithTag("tutamak").node()->modifier);
+    CHECK(semantics && semantics->role == SemanticsRole::Slider && semantics->progressBarRangeInfo && semantics->setProgress);
+    if (semantics && semantics->setProgress) semantics->setProgress(0.75f);
+    rule.waitForIdle();
+    CHECK(near(rule.onNodeWithTag("üst").bounds().height, 222));
+    // Right to left, dragged left (towards the second pane, at the left): the first one grows.
+    rule.swipe({299.5f, 350}, {199.5f, 350});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithTag("baş").bounds().width > 180);
+}
+
+TEST(split_pane_state_is_saved) {
+    SplitPaneState state(0.4f, false);
+    SavedValue saved = Saver<SplitPaneState>::save(state);
+    auto back = Saver<SplitPaneState>::restore(saved);
+    CHECK(back && near(back->positionPercentage(), 0.4f) && !back->moveEnabled());
+}
+
 int main(int argc, char** argv) {
     detail::setLayoutCheck(true);
     detail::setKeepCheck(true);

@@ -3685,7 +3685,14 @@ private:
                 return constructClass(c, *m->second.decl, [&] { out_->text(m->second.outer); }, callee.text);
         // A @Kompozable kompozc translates: arguments by position, defaults filled in.
         if (callee.kind == Node::Name && !lookup(callee.text)) {
-            if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) return overloadCall(c, f->second);
+            // (an extension needs a receiver: with none, `second(…)` in a split pane's block is the scope's, not
+            // fun List<T>.second()'s)
+            if (auto f = module_.functions.find(callee.text); f != module_.functions.end()) {
+                std::vector<const Function*> callable;
+                for (const Function* g : f->second)
+                    if (!g->receiver || !receivers_.empty()) callable.push_back(g);
+                if (!callable.empty()) return overloadCall(c, callable);
+            }
             if (auto k = module_.classes.find(callee.text); k != module_.classes.end()) return construct(c, *k->second);
             // (a generic one's always: its name with its namespace, as inside it its name alone is the type it is there)
             if (auto k = module_.classDecls.find(callee.text); k != module_.classDecls.end() && (named(c) || !k->second->typeParams.empty()))

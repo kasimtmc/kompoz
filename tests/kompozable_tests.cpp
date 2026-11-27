@@ -3785,6 +3785,33 @@ TEST(reorderable_grid_as_compose_apps_write_it) {
     CHECK(rule.onNodeWithText("fotoğraflar: 2,1,3,4,5,6").exists());
 }
 
+// Two panes and the splitter between them, as Compose Multiplatform's SplitPane writes it.
+@Kompozable
+fun Workbench() {
+    val state = rememberSplitPaneState(initialPositionPercentage = 0.5f)
+    Column {
+        Text("yer: %.2f".format(state.positionPercentage))
+        HorizontalSplitPane(splitPaneState = state, modifier = Modifier.size(400.dp, 200.dp)) {
+            first(minSize = 100.dp) { Text("dosyalar", modifier = Modifier.testTag("dosyalar")) }
+            second(minSize = 100.dp) { Text("düzenleyici") }
+            splitter {
+                visiblePart { Box(Modifier.width(2.dp).fillMaxHeight().background(Color.Gray)) }
+                handle { Box(Modifier.markAsHandle().cursorForHorizontalResize().width(16.dp).fillMaxHeight().testTag("tutamak")) }
+            }
+        }
+        Button(onClick = { state.positionPercentage = 0f }) { Text("Daralt") }
+    }
+}
+
+TEST(split_pane_as_compose_multiplatform_writes_it) {
+    KompozTestRule rule([] { Workbench(); }, {400, 800});
+    CHECK(rule.onNodeWithText("yer: 0.50").exists());
+    Rect handle = rule.onNodeWithTag("tutamak").bounds();
+    CHECK(std::abs(handle.x + handle.width / 2 - 200) < 0.6f);  // the middle of the 2 dp line at 100 + 198 / 2
+    rule.onNodeWithText("Daralt").performClick();
+    CHECK(rule.onNodeWithText("yer: 0.00").exists());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

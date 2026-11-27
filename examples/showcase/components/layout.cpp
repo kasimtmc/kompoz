@@ -49,6 +49,47 @@ fun ListDetailSection() {
     }
 }
 
+// Panes the user shares the room between (Compose Multiplatform's SplitPane): a file list and an
+// editor, the editor over a console; the default splitter and a custom one.
+@Kompozable
+fun SplitPaneSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val outer = rememberSplitPaneState(initialPositionPercentage = 0.3f)
+    val inner = rememberSplitPaneState(initialPositionPercentage = 0.6f)
+    Section("HorizontalSplitPane · VerticalSplitPane") {
+        Text("Ayırıcıyı sürükleyin (ya da odaklayıp ok tuşlarıyla taşıyın); dosyalar en az 80 dp, düzenleyici en az 120 dp. " +
+                 "Yer: %d%% · %d%%".format((outer.positionPercentage * 100).toInt(), (inner.positionPercentage * 100).toInt()),
+             color = cs.onSurfaceVariant, style = typography.bodySmall)
+        HorizontalSplitPane(splitPaneState = outer,
+                            modifier = Modifier.fillMaxWidth().height(240.dp).background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))) {
+            first(minSize = 80.dp) {
+                Column(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Dosyalar", style = typography.titleSmall)
+                    for (name in listOf("main.cpp", "app.hpp", "list.cpp", "CMakeLists.txt")) Text(name, style = typography.bodySmall, maxLines = 1)
+                }
+            }
+            second(minSize = 120.dp) {
+                VerticalSplitPane(splitPaneState = inner) {
+                    first(minSize = 60.dp) {
+                        Text("fun main() {\n    println(\"Merhaba\")\n}", modifier = Modifier.fillMaxSize().padding(12.dp),
+                             fontFamily = FontFamily.Monospace, style = typography.bodySmall)
+                    }
+                    second(minSize = 40.dp) {
+                        Text("> derleniyor… tamam", modifier = Modifier.fillMaxSize().background(cs.surfaceContainerHighest).padding(12.dp),
+                             fontFamily = FontFamily.Monospace, style = typography.bodySmall, color = cs.onSurfaceVariant)
+                    }
+                    splitter {
+                        visiblePart { Box(Modifier.height(2.dp).fillMaxWidth().background(cs.primary)) }
+                        handle { Box(Modifier.markAsHandle().cursorForVerticalResize().height(24.dp).fillMaxWidth()) }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // A main pane with a supporting one: side by side on a wide window, slid in on a narrow one.
 @Kompozable
 fun SupportingPaneSection() {

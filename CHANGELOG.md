@@ -1178,6 +1178,14 @@
   settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
   that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
   `DragIndicator`.
+- **Split panes** (Compose has none), with Compose Multiplatform's SplitPane API: `HorizontalSplitPane` and
+  `VerticalSplitPane` with `first(minSize) { }`, `second(minSize) { }` and `splitter { visiblePart { }; handle { } }`,
+  `Modifier.markAsHandle()`, `cursorForHorizontalResize()` / `cursorForVerticalResize()`, `rememberSplitPaneState`
+  (`positionPercentage`, `moveEnabled`, `dispatchRawMovement`; saved). Without a splitter, a line and a handle as wide as
+  the pointer needs; the handle takes the keyboard focus (the arrow keys move it) and is a slider to accessibility
+  services; right to left, a horizontal one's first pane is at the right.
+- **kompozc**: a call without a receiver is never taken for an extension function's (`second(minSize = …) { }` in a
+  split pane's block was taken for a `fun List<T>.second()` of the same module).
 - **The vcpkg port** asks for libjpeg-turbo's `turbojpeg` feature: vcpkg's libjpeg-turbo builds TurboJPEG, which
   AsyncImage decodes with, only with it now (Kompoz's configure stopped: JPEG required but not found). CI tries the
   port with today's vcpkg on every runner.

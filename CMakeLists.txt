@@ -111,6 +111,7 @@ add_library(kompoz_core STATIC
     src/pull_refresh.cpp
     src/reorderable.cpp
     src/search.cpp
+    src/splitpane.cpp
     src/shared_transition.cpp
     src/short_navigation_bar.cpp
     src/overlays.cpp

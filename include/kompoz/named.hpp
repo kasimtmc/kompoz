@@ -617,6 +617,11 @@ struct Exit {};
 struct TargetState {};
 struct TransitionSpec {};
 struct ContentKey {};
+// Split panes (splitpane.hpp).
+struct MinSize {};
+struct InitialPositionPercentage {};
+struct MoveEnabled {};
+struct SplitPaneState {};
 // Reorderable lists (reorderable.hpp).
 struct ScrollThresholdPadding {};
 struct ScrollThreshold {};
@@ -1087,6 +1092,11 @@ inline constexpr Param<detail::names::DragGestureDetector> dragGestureDetector;
 inline constexpr Param<detail::names::LazyListState> lazyListState;
 inline constexpr Param<detail::names::LazyGridState> lazyGridState;
 inline constexpr Param<detail::names::LazyStaggeredGridState> lazyStaggeredGridState;
+// Split panes (splitpane.hpp).
+inline constexpr Param<detail::names::MinSize> minSize;
+inline constexpr Param<detail::names::InitialPositionPercentage> initialPositionPercentage;
+inline constexpr Param<detail::names::MoveEnabled> moveEnabled;
+inline constexpr Param<detail::names::SplitPaneState> splitPaneState;
 } // namespace args
 // The names as kompozc writes them (arg::colors = …): all of args', and those that are something
 // else of Kompoz's too (colors: the colors' namespace).

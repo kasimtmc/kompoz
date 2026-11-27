@@ -1217,6 +1217,14 @@
   (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
   Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
   `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **Bölünmüş paneller** (Compose'da yok), Compose Multiplatform'un SplitPane API'siyle: `first(minSize) { }`,
+  `second(minSize) { }` ve `splitter { visiblePart { }; handle { } }` alan `HorizontalSplitPane` ve `VerticalSplitPane`,
+  `Modifier.markAsHandle()`, `cursorForHorizontalResize()` / `cursorForVerticalResize()`, `rememberSplitPaneState`
+  (`positionPercentage`, `moveEnabled`, `dispatchRawMovement`; kaydedilir). Ayırıcı verilmezse bir çizgi ve işaretçinin
+  gerektirdiği genişlikte bir tutamak; tutamak klavye odağını alır (ok tuşları onu taşır) ve erişilebilirlik
+  hizmetlerine bir kaydırıcıdır; sağdan sola, yataydakinin ilk paneli sağdadır.
+- **kompozc**: alıcısız bir çağrı hiçbir zaman bir uzantı fonksiyonununki sanılmaz (bölünmüş panelin bloğundaki
+  `second(minSize = …) { }`, aynı modüldeki bir `fun List<T>.second()` sanılıyordu).
 - **vcpkg paketi** libjpeg-turbo'nun `turbojpeg` özelliğini istiyor: vcpkg'nin libjpeg-turbo'su AsyncImage'ın JPEG
   çözdüğü TurboJPEG'i artık yalnızca onunla derliyor (Kompoz'un yapılandırması "JPEG gerekli ama bulunamadı" diye
   duruyordu). CI paketi her runner'da güncel vcpkg ile deniyor.

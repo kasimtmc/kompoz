@@ -2120,6 +2120,12 @@ public:
     Modifier draggableHandle(A&&... args) const;
     template <class... A>
     Modifier longPressDraggableHandle(A&&... args) const;
+    // A split pane's handle (splitpane.hpp): in its splitter's handle { }, what the user drags (and
+    // focuses, and accessibility services set).
+    Modifier markAsHandle() const;
+    // The resize cursor over it (Compose Multiplatform's SplitPane names).
+    Modifier cursorForHorizontalResize() const { return pointerHoverIcon(Cursor::ResizeHorizontal); }
+    Modifier cursorForVerticalResize() const { return pointerHoverIcon(Cursor::ResizeVertical); }
     // Scrolls the state in any direction (Compose's Modifier.scrollable2D): a drag past the
     // touch slop, a fling after it (the scrollables' decay, axis by axis until an end), the
     // mouse wheel (and its sideways one). The gesture is consumed; a press stops a fling.

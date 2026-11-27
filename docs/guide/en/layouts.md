@@ -239,6 +239,26 @@ fun Mail() {
 }
 ```
 
+### Split panes
+
+Two panes side by side, or one over the other, with a splitter the user drags to share the room: a file tree and an editor. Compose has none; Kompoz has the API of Compose Multiplatform's SplitPane component. `HorizontalSplitPane` puts `first { }` at the start and `second { }` at the end, `VerticalSplitPane` one above the other; each pane keeps at least its `minSize`:
+
+```kotlin body
+val state = rememberSplitPaneState(initialPositionPercentage = 0.3f)
+HorizontalSplitPane(splitPaneState = state, modifier = Modifier.fillMaxSize()) {
+    first(minSize = 200.dp) { Text("Files") }
+    second(minSize = 300.dp) { Text("Editor") }
+    splitter {
+        visiblePart { Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant)) }
+        handle { Box(Modifier.markAsHandle().cursorForHorizontalResize().width(9.dp).fillMaxHeight()) }
+    }
+}
+```
+
+`splitter { }` is optional: without it the splitter is a 1 dp line with a handle over it as wide as the pointer needs (8 dp for a mouse, 24 for a finger). `visiblePart { }` takes room between the panes; `handle { }` takes none, it lies over it (`handle(alignment = SplitterHandleAlignment.BEFORE)` or `AFTER` puts it beside it), and `Modifier.markAsHandle()` makes it the part that is dragged. The handle also takes the keyboard focus (the arrow keys move it 16 dp, with Shift 64, Home and End to the ends) and is a slider to accessibility services.
+
+`SplitPaneState.positionPercentage` is where the splitter is, from 0 (the first pane at its least) to 1 (the second at its least): read it, or set it to move the splitter; `moveEnabled = false` keeps the user from moving it; `dispatchRawMovement(delta)` moves it by dp. `rememberSplitPaneState` is saved with the app's state.
+
 ## Window insets
 
 On phones, the system bars, the display cutout and the keyboard cover parts of the window. *Insets* tell you how much, so content can stay clear of them:

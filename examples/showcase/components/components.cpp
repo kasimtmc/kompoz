@@ -57,6 +57,7 @@ fun ComponentsScreen(modifier: Modifier) {
         item(key = "LayoutInfoSection") { LayoutInfoSection() }
         item(key = "ListDetailSection") { ListDetailSection() }
         item(key = "SupportingPaneSection") { SupportingPaneSection() }
+        item(key = "SplitPaneSection") { SplitPaneSection() }
         item(key = "ProgressSection") { ProgressSection() }
         item(key = "StateFlowSection") { StateFlowSection() }
         item(key = "FlowSearchSection") { FlowSearchSection() }
