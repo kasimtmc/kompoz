@@ -3958,8 +3958,11 @@ TEST(file_dialogs_as_filekit_writes_them) {
     rule.onNodeWithText("Kaydet").performClick();
     rule.waitForIdle();
     CHECK(asked.back().suggestedName == "notlar" && asked.back().title == std::optional<std::string>("Kaydet"));
-    std::ifstream saved(root / "notlar.txt");
-    std::string content((std::istreambuf_iterator<char>(saved)), std::istreambuf_iterator<char>());
+    std::string content;
+    {  // (closed before the folder is removed: Windows keeps an open file)
+        std::ifstream saved(root / "notlar.txt");
+        content.assign(std::istreambuf_iterator<char>(saved), std::istreambuf_iterator<char>());
+    }
     CHECK(content == "merhaba!");
     answer = {.files = {"/p/q.pdf"}};
     rule.onNodeWithText("Durum").performClick();
