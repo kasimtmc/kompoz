@@ -196,7 +196,7 @@ const std::map<std::string, std::string, std::less<>> kReceiverLambdas = {
     {"SubkompozLayout", "SubkompozMeasureScope"},
     {"ButtonGroup", "ButtonGroupScope"},  // (its items: clickableItem(…); its buttons' Modifier.animateWidth(source))
     {"FloatingActionButtonMenu", "const FloatingActionButtonMenuScope"}, {"ToggleFloatingActionButton", "const ToggleFloatingActionButtonScope"},
-    {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"edit", "TextFieldBuffer"}, {"OutputTransformation", "TextFieldBuffer"},
+    {"buildAnnotatedString", "AnnotatedStringBuilder"}, {"rememberRichTextState", "RichTextState"}, {"edit", "TextFieldBuffer"}, {"OutputTransformation", "TextFieldBuffer"},
     {"focusProperties", "FocusProperties"},
     {"GenericShape", "Path"},                {"blur", "BlurScope"},
     {"AnimatedVisibility", "const AnimatedVisibilityScope"}, {"AnimatedContent", "const AnimatedContentScope"},

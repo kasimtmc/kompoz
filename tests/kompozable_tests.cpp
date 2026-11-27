@@ -4005,6 +4005,73 @@ TEST(visual_transformation_as_compose_writes_it) {
     CHECK(std::ranges::count(rule.drawnTexts(), "•••••") == 1 && std::ranges::count(rule.drawnTexts(), "açık") == 1);
 }
 
+// A rich text as Compose Rich Editor writes it: a toolbar of toggles, the editors, the text shown.
+@Kompozable
+fun Notebook() {
+    val state = rememberRichTextState { setHtml("<p>Merhaba <b>dünya</b></p>") }
+    val bold = state.currentSpanStyle.fontWeight == FontWeight.Bold
+    Column {
+        Row {
+            Button(onClick = { state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) }) { Text(if (bold) "Kalın ✓" else "Kalın") }
+            Button(onClick = { state.toggleUnorderedList() }) { Text("Liste") }
+            Button(onClick = {
+                state.config.linkColor = Color.Red
+                state.addLink(text = " bağ", url = "https://kompoz.dev")
+            }) { Text("Bağ") }
+            Button(onClick = { state.history.undo() }, enabled = state.history.canUndo) { Text("Geri") }
+        }
+        RichTextEditor(state = state, modifier = Modifier.fillMaxWidth().testTag("editör"))
+        OutlinedRichTextEditor(state = state, label = { Text("Not") }, maxLines = 4)
+        RichText(state = state, modifier = Modifier.testTag("görünüm"))
+        Text(state.toMarkdown(), modifier = Modifier.testTag("md"))
+    }
+}
+
+TEST(rich_text_as_compose_rich_editor_writes_it) {
+    KompozTestRule rule([] { Notebook(); }, {600, 900});
+    // (the caret after the bold word: what is typed there is bold, the toggle on)
+    CHECK(rule.onNodeWithText("Merhaba **dünya**").exists() && rule.onNodeWithText("Kalın ✓").exists());
+    rule.onNodeWithText("Liste").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("- Merhaba **dünya**").exists());
+    rule.onNodeWithText("Bağ").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("- Merhaba **dünya** [**bağ**](https://kompoz.dev)").exists());  // (bold as typed there)
+    rule.onNodeWithText("Geri").performClick();
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("- Merhaba **dünya**").exists());
+}
+
+// Markdown as multiplatform-markdown-renderer writes it: the content, its colors, typography, padding and a
+// component of one's own.
+@Kompozable
+fun Readme() {
+    Markdown(
+        content = """
+            # Kompoz
+            Bir **kalın** söz ve `kod`.
+
+            - [x] bitti
+
+            ```kotlin
+            val x = 1
+            ```
+        """.trimIndent(),
+        colors = markdownColor(linkText = Color.Red),
+        typography = markdownTypography(h1 = MaterialTheme.typography.displaySmall),
+        padding = markdownPadding(block = 4.dp),
+        components = markdownComponents(codeFence = { model -> Text("KOD ${model.content.length}") }),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+TEST(markdown_as_the_renderer_writes_it) {
+    KompozTestRule rule([] { Readme(); }, {500, 800});
+    auto drawn = rule.drawnTexts();
+    CHECK(std::ranges::count(drawn, "Kompoz") == 1 && std::ranges::count(drawn, "bitti") == 1);
+    CHECK(std::ranges::any_of(drawn, [](const std::string& t) { return t.starts_with("KOD "); }));
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

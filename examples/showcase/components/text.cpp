@@ -271,3 +271,107 @@ fun TextSection() {
              color = cs.onSurfaceVariant, style = typography.bodySmall)
     }
 }
+
+// A toolbar button that is on while the selection has its style.
+@Kompozable
+fun FormatToggle(icon: ImageVector, label: String, on: Boolean, onClick: () -> Unit) {
+    IconToggleButton(checked = on, onCheckedChange = { onClick() }) { Icon(icon, label) }
+}
+
+// Rich text with Compose Rich Editor's API: a toolbar over the editor, the text as HTML or
+// Markdown, and shown as a Text.
+@Kompozable
+fun RichTextSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val state = rememberRichTextState {
+        setMarkdown("## Zengin metin\n\n**Kalın**, *eğik*, ~~üstü çizili~~, `kod` ve [bir bağlantı](https://kompoz.dev).\n\n" +
+                        "- Bir madde\n- Bir madde daha\n    - İç içe\n\n1. Birinci\n2. İkinci")
+    }
+    var asMarkdown by remember { mutableStateOf(true) }
+    val span = state.currentSpanStyle
+    Section("RichTextEditor · RichText · HTML / Markdown") {
+        Text("Compose Rich Editor'ın API'si: seçili metni ya da yazılacak olanı biçimleyin; Enter listeyi sürdürür, boş maddede " +
+                 "Enter listeden çıkar, Tab iç içe yapar. Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+Z da çalışır. \"- \" ya da \"1. \" yazmak liste başlatır.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        FlowRow(modifier = Modifier.fillMaxWidth()) {
+            FormatToggle(Icons.Filled.FormatBold, "Kalın", span.fontWeight == FontWeight.Bold) {
+                state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold))
+            }
+            FormatToggle(Icons.Filled.FormatItalic, "Eğik", span.fontStyle == FontStyle.Italic) {
+                state.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic))
+            }
+            FormatToggle(Icons.Filled.FormatUnderlined, "Altı çizili", span.textDecoration?.contains(TextDecoration.Underline) == true) {
+                state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+            }
+            FormatToggle(Icons.Filled.FormatStrikethrough, "Üstü çizili", span.textDecoration?.contains(TextDecoration.LineThrough) == true) {
+                state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.LineThrough))
+            }
+            FormatToggle(Icons.Filled.Code, "Kod", state.isCodeSpan) { state.toggleCodeSpan() }
+            FormatToggle(Icons.Filled.Title, "Başlık", state.currentHeadingStyle == HeadingStyle.H2) {
+                state.setHeadingStyle(if (state.currentHeadingStyle == HeadingStyle.H2) HeadingStyle.Normal else HeadingStyle.H2)
+            }
+            FormatToggle(Icons.Filled.FormatListBulleted, "Madde listesi", state.isUnorderedList) { state.toggleUnorderedList() }
+            FormatToggle(Icons.Filled.FormatListNumbered, "Numaralı liste", state.isOrderedList) { state.toggleOrderedList() }
+            FormatToggle(Icons.Filled.FormatAlignCenter, "Ortala", state.currentParagraphStyle.textAlign == TextAlign.Center) {
+                state.toggleParagraphStyle(ParagraphStyle(textAlign = TextAlign.Center))
+            }
+            FormatToggle(Icons.Filled.Link, "Bağlantı", state.isLink) {
+                if (state.isLink) state.removeLink() else state.addLinkToSelection(url = "https://kompoz.dev")
+            }
+            IconButton(onClick = { state.history.undo() }, enabled = state.history.canUndo) { Icon(Icons.Filled.Undo, "Geri al") }
+            IconButton(onClick = { state.history.redo() }, enabled = state.history.canRedo) { Icon(Icons.Filled.Redo, "Yinele") }
+        }
+        OutlinedRichTextEditor(state = state, modifier = Modifier.fillMaxWidth(), minLines = 6, maxLines = 12,
+                               label = { Text("Not") })
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilterChip(selected = asMarkdown, onClick = { asMarkdown = true }, label = { Text("Markdown") })
+            FilterChip(selected = !asMarkdown, onClick = { asMarkdown = false }, label = { Text("HTML") })
+        }
+        Text(if (asMarkdown) state.toMarkdown() else state.toHtml(), fontFamily = FontFamily.Monospace,
+             style = typography.bodySmall, color = cs.onSurfaceVariant,
+             modifier = Modifier.fillMaxWidth().background(cs.surfaceContainerHighest, RoundedCornerShape(8.dp)).padding(12.dp))
+        Text("RichText (bağlantıya dokunun):", style = typography.labelLarge)
+        RichText(state = state, modifier = Modifier.fillMaxWidth())
+        Text("Aynı metin, Markdown(content = state.toMarkdown()):", style = typography.labelLarge)
+        Markdown(content = state.toMarkdown(), modifier = Modifier.fillMaxWidth())
+    }
+}
+
+// Markdown shown as composables, with multiplatform-markdown-renderer's API.
+@Kompozable
+fun MarkdownSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val doc = """
+        ## Markdown
+        CommonMark ve GitHub'ın Markdown'ı: **kalın**, *eğik*, ~~üstü çizili~~, `kod` ve [bağlantılar](https://kompoz.dev).
+
+        > Alıntılar kendi çizgisiyle gösterilir.
+
+        - Madde listeleri
+          - iç içe
+        1. Numaralı
+        2. listeler
+
+        - [x] Görev listesi
+        - [ ] onay kutularıyla
+
+        | Bileşen | Durum |
+        |:--|:-:|
+        | Tablo | ✓ |
+        | Hizalama | ✓ |
+
+        ```kotlin
+        Markdown(content = metin)
+        ```
+
+        ![Dağlar](images/mountains.jpg)
+    """.trimIndent()
+    Section("Markdown · markdownColor · markdownTypography") {
+        Text("multiplatform-markdown-renderer'ın API'si: Markdown(content = …); bağlantılar LocalUriHandler ile açılır, " +
+                 "resimler AsyncImage ile yüklenir.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        Markdown(content = doc, modifier = Modifier.fillMaxWidth())
+    }
+}

@@ -38,6 +38,8 @@ fun ComponentsScreen(modifier: Modifier) {
         item(key = "MultiTouchSection") { MultiTouchSection() }
         item(key = "KeyboardSection") { KeyboardSection() }
         item(key = "TextSection") { TextSection() }
+        item(key = "RichTextSection") { RichTextSection() }
+        item(key = "MarkdownSection") { MarkdownSection() }
         item(key = "TextMeasureSection") { TextMeasureSection() }
         item(key = "LayoutSection") { LayoutSection() }
         item(key = "FlexBoxSection") { FlexBoxSection() }

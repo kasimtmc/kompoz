@@ -33011,6 +33011,222 @@ TEST(visual_transformation_styles_a_field_and_maps_its_offsets) {
     CHECK(std::ranges::count(masked.drawnTexts(), "***") == 1);
 }
 
+TEST(markdown_parser_reads_commonmark_and_github_blocks) {
+    using namespace kompoz::markdown;
+    auto blocks = parse("# Başlık *eğik*\n\nBir **kalın** ve `kod` ve [bağ](https://kompoz.dev \"t\") ~~çizik~~\nikinci satır  \nsert\n\n"
+                        "- bir\n- iki\n  - iç\n- [x] bitti\n\n1. a\n2. b\n\n> alıntı\n> devam\n\n```cpp\nint x;\n```\n\n---\n\n"
+                        "| A | B |\n|:--|--:|\n| 1 | *2* |\n\nhttps://example.com/a. ve <https://x.y>\n\nAlt\n===\n");
+    CHECK(blocks.size() == 10);
+    if (blocks.size() != 10) return;
+    CHECK(blocks[0].kind == Block::Kind::Heading && blocks[0].level == 1 && plainText(blocks[0].inlines) == "Başlık eğik");
+    const auto& p = blocks[1].inlines;
+    CHECK(p.size() >= 9 && p[1].kind == Inline::Kind::Strong && p[3].kind == Inline::Kind::Code && p[3].text == "kod");
+    CHECK(p[5].kind == Inline::Kind::Link && p[5].url == "https://kompoz.dev" && p[5].title == "t" && plainText(p[5].children) == "bağ");
+    CHECK(p[7].kind == Inline::Kind::Strikethrough);
+    bool hard = std::ranges::any_of(p, [](const Inline& n) { return n.kind == Inline::Kind::HardBreak; });
+    bool soft = std::ranges::any_of(p, [](const Inline& n) { return n.kind == Inline::Kind::SoftBreak; });
+    CHECK(hard && soft);
+    const Block& list = blocks[2];
+    CHECK(list.kind == Block::Kind::List && !list.ordered && list.tight && list.children.size() == 3);
+    if (list.children.size() == 3) {
+        CHECK(list.children[1].children.size() == 2 && list.children[1].children[1].kind == Block::Kind::List);
+        CHECK(list.children[2].checked == std::optional(true) && plainText(list.children[2].children[0].inlines) == "bitti");
+    }
+    CHECK(blocks[3].kind == Block::Kind::List && blocks[3].ordered && blocks[3].start == 1 && blocks[3].children.size() == 2);
+    CHECK(blocks[4].kind == Block::Kind::BlockQuote && blocks[4].children.size() == 1 && plainText(blocks[4].children[0].inlines) == "alıntı devam");
+    CHECK(blocks[5].kind == Block::Kind::CodeBlock && blocks[5].info == "cpp" && blocks[5].literal == "int x;");
+    CHECK(blocks[6].kind == Block::Kind::ThematicBreak);
+    CHECK(blocks[7].kind == Block::Kind::Table && blocks[7].rows.size() == 2 &&
+          (blocks[7].aligns == std::vector<TableAlign>{TableAlign::Left, TableAlign::Right}) && blocks[7].rows[1][1][0].kind == Inline::Kind::Emphasis);
+    const auto& links = blocks[8].inlines;
+    CHECK(links.size() == 3 && links[0].kind == Inline::Kind::Link && links[0].url == "https://example.com/a" && links[1].text == ". ve " &&
+          links[2].url == "https://x.y");
+    CHECK(blocks[9].kind == Block::Kind::Heading && blocks[9].level == 1);
+    // Emphasis rules: intraword _ is text, * nests, escapes and entities.
+    auto in = parseInlines("snake_case_name ***ikisi*** \\*değil\\* &amp; &#304;");
+    CHECK(plainText(in) == "snake_case_name ikisi *değil* & İ");
+    CHECK(in.size() == 3 && in[1].kind == Inline::Kind::Emphasis && in[1].children[0].kind == Inline::Kind::Strong);
+}
+
+TEST(rich_text_state_styles_lists_history_and_formats) {
+    RichTextState state;
+    KompozTestRule rule([&] { RichTextEditor(state, Modifier().testTag("ed").fillMaxWidth()); });
+    state.setText("Merhaba dünya");
+    rule.waitForIdle();
+    // A style on a range; the selection's style; HTML of it.
+    state.setSelection({0, 7});
+    state.toggleSpanStyle({.fontWeight = FontWeight::Bold});
+    CHECK(state.currentSpanStyle().fontWeight == FontWeight::Bold);
+    CHECK(state.toHtml() == "<p><b>Merhaba</b> dünya</p>");
+    CHECK(state.toMarkdown() == "**Merhaba** dünya");
+    state.toggleSpanStyle({.fontWeight = FontWeight::Bold});
+    CHECK(!state.currentSpanStyle().fontWeight && state.toHtml() == "<p>Merhaba dünya</p>");
+    state.history().undo();
+    CHECK(state.toHtml() == "<p><b>Merhaba</b> dünya</p>");
+    state.history().redo();
+    state.history().undo();
+    // Typed at the bold word's end, bold; with no selection a toggle is for what is typed next.
+    rule.onNodeWithTag("ed").performClick();
+    state.setSelection({7, 7});
+    rule.waitForIdle();
+    rule.host().textInput("!");
+    rule.waitForIdle();
+    CHECK(state.toText() == "Merhaba! dünya" && state.toHtml() == "<p><b>Merhaba!</b> dünya</p>");
+    state.setSelection({int(state.toText().size()), int(state.toText().size())});
+    state.toggleSpanStyle({.fontStyle = FontStyle::Italic});
+    CHECK(state.currentSpanStyle().fontStyle == FontStyle::Italic);
+    rule.waitForIdle();
+    rule.host().textInput(" yeni");
+    rule.waitForIdle();
+    CHECK(state.toHtml() == "<p><b>Merhaba!</b> dünya<i> yeni</i></p>");
+    // A list: its marker shown, Enter continues it, Enter on an empty item leaves it.
+    state.toggleUnorderedList();
+    CHECK(state.isUnorderedList() && state.annotatedString().text().starts_with("• "));
+    rule.host().textInput("\n");
+    rule.waitForIdle();
+    rule.host().textInput("iki");
+    rule.waitForIdle();
+    CHECK(state.toMarkdown() == "- **Merhaba!** dünya *yeni*\n- *iki*");
+    rule.host().textInput("\n");
+    rule.waitForIdle();
+    rule.host().textInput("\n");  // (an empty item: out of the list, no new line)
+    rule.waitForIdle();
+    CHECK(!state.isList() && std::ranges::count(state.toText(), '\n') == 2);
+    // "1. " at a paragraph's start makes an ordered list; Backspace at its start leaves it.
+    state.setSelection({int(state.toText().size()), int(state.toText().size())});
+    state.toggleSpanStyle({.fontStyle = FontStyle::Italic});
+    rule.host().textInput("1");
+    rule.host().textInput(".");
+    rule.host().textInput(" ");
+    rule.host().textInput("sıra");
+    rule.waitForIdle();
+    CHECK(state.isOrderedList() && state.toText().ends_with("\nsıra"));
+    std::string shown = state.annotatedString().text();
+    CHECK(shown.ends_with("\n1. sıra"));
+    int itemStart = int(state.toText().size()) - int(std::string("sıra").size());
+    state.setSelection({itemStart, itemStart});
+    rule.waitForIdle();
+    rule.host().keyDown(Key::Backspace);
+    rule.waitForIdle();
+    CHECK(!state.isList() && state.toText().ends_with("\nsıra"));
+    // Nested items with Tab; HTML and Markdown of them.
+    state.setMarkdown("- bir\n- iki\n\n1. a\n2. b");
+    CHECK(state.toMarkdown() == "- bir\n- iki\n\n1. a\n2. b");
+    state.setSelection({6, 6});  // in "iki"
+    CHECK(state.canIncreaseListLevel());
+    state.increaseListLevel();
+    CHECK(state.toHtml() == "<ul><li>bir</li><ul><li>iki</li></ul></ul><ol><li>a</li><li>b</li></ol>");
+    CHECK(state.toMarkdown() == "- bir\n    - iki\n\n1. a\n2. b");
+    CHECK(state.annotatedString().text() == "• bir\n◦ iki\n1. a\n2. b");
+    // Headings, links, code, alignment through HTML.
+    state.setHtml("<h2>Başlık</h2><p style=\"text-align: center\">Bir <a href=\"https://kompoz.dev\">bağ</a> ve <code>kod</code> "
+                  "<span style=\"color: #ff0000\">kırmızı</span><br></p><p><br></p><p><u><s>ikisi</s></u> &amp; son</p>");
+    CHECK(state.toText() == "Başlık\nBir bağ ve kod kırmızı\n\nikisi & son");
+    state.setSelection({0, 0});
+    CHECK(state.currentHeadingStyle() == HeadingStyle::H2);
+    state.setSelection({14, 14});  // in "bağ" ("Başlık\nBir " is 13 bytes)
+    CHECK(state.isLink() && state.selectedLinkUrl() == std::optional<std::string>("https://kompoz.dev") &&
+          state.selectedLinkText() == std::optional<std::string>("bağ"));
+    CHECK(state.currentParagraphStyle().textAlign == TextAlign::Center);
+    state.updateLink("https://example.com");
+    CHECK(state.selectedLinkUrl() == std::optional<std::string>("https://example.com"));
+    CHECK(state.toMarkdown() == "## Başlık\n\nBir [bağ](https://example.com) ve `kod` kırmızı\n\n<br>\n\n<u>~~ikisi~~</u> & son");
+    std::string html = state.toHtml();
+    CHECK(html.find("<h2>Başlık</h2>") == 0 && html.find("<span style=\"color: #ff0000\">kırmızı</span>") != std::string::npos &&
+          html.find("<code>kod</code>") != std::string::npos && html.find("text-align: center") != std::string::npos);
+    state.removeLink();
+    CHECK(!state.isLink());
+    // Bold inside a word next to punctuation: ** can't say it there, the HTML tag does (and reads back).
+    RichTextState word;
+    word.setHtml("<p>Ucuncu<b>_kalin</b> son</p>");
+    CHECK(word.toMarkdown() == "Ucuncu<strong>\\_kalin</strong> son");
+    word.setMarkdown(word.toMarkdown());
+    CHECK(word.toHtml() == "<p>Ucuncu<b>_kalin</b> son</p>");
+    // The saver keeps it.
+    auto saved = Saver<RichTextState>::restore(Saver<RichTextState>::save(state));
+    CHECK(saved && saved->toHtml() == state.toHtml());
+    // Shown as a Text: the link opened by the platform.
+    std::vector<std::string> opened;
+    RichTextState linked;
+    linked.setMarkdown("Bak: [buraya](https://kompoz.dev)");
+    KompozTestRule shown2([&] { RichText(linked, Modifier().testTag("rt")); });
+    shown2.host().setCallbacks({.openUri = [&](const std::string& u) { opened.push_back(u); }});
+    CHECK(std::ranges::count(shown2.drawnTexts(), "buraya") == 1);
+    Rect r = shown2.onNodeWithTag("rt").bounds();
+    tap(shown2, {r.x + 8 * 7, r.y + r.height / 2});
+    shown2.waitForIdle();
+    CHECK((opened == std::vector<std::string>{"https://kompoz.dev"}));
+}
+
+TEST(rich_text_editor_keys_and_typing_shortcuts) {
+    RichTextState state;
+    state.config().setHeadingTypingShortcutsEnabled(true);
+    state.config().setInlineTypingShortcutsEnabled(true);
+    KompozTestRule rule([&] { RichTextEditor(state, Modifier().testTag("ed").fillMaxWidth()); });
+    rule.onNodeWithTag("ed").performClick();
+    rule.waitForIdle();
+    for (const char* s : {"#", "#", " ", "B", "a", "ş"}) {
+        rule.host().textInput(s);
+        rule.waitForIdle();
+    }
+    CHECK(state.toText() == "Baş" && state.currentHeadingStyle() == HeadingStyle::H2);
+    rule.host().textInput("\n");
+    rule.waitForIdle();
+    for (const char* s : {"a", " ", "*", "*", "k", "a", "l", "*", "*"}) {
+        rule.host().textInput(s);
+        rule.waitForIdle();
+    }
+    CHECK(state.toText() == "Baş\na kal" && state.toMarkdown() == "## Baş\n\na **kal**");
+    CHECK(state.currentHeadingStyle() == HeadingStyle::Normal);
+    // Ctrl+B / Ctrl+I over a selection; Ctrl+Z undoes it.
+    state.setSelection({5, 6});  // "a" ("Baş\n" is 5 bytes)
+    rule.waitForIdle();
+    rule.host().keyDown(Key::I, {.ctrl = true});
+    rule.waitForIdle();
+    CHECK(state.toMarkdown() == "## Baş\n\n*a* **kal**");
+    rule.host().keyDown(Key::Z, {.ctrl = true});
+    rule.waitForIdle();
+    CHECK(state.toMarkdown() == "## Baş\n\na **kal**");
+    rule.host().keyDown(Key::Z, {.shift = true, .ctrl = true});
+    rule.waitForIdle();
+    CHECK(state.toMarkdown() == "## Baş\n\n*a* **kal**");
+    CHECK(state.history().canUndo());
+}
+
+TEST(markdown_shows_blocks_and_opens_links) {
+    std::vector<std::string> opened;
+    std::string doc = "# Başlık\n\nBir **kalın** söz ve [bağ](https://kompoz.dev).\n\n> alıntı\n\n- bir\n- iki\n  - iç\n\n1. a\n2. b\n\n"
+                      "- [x] bitti\n- [ ] sırada\n\n```\nint x = 1;\n```\n\n---\n\n| Ad | Yaş |\n|:--|--:|\n| Ayşe | 34 |\n";
+    KompozTestRule rule([&] { Markdown(kompoz::arg::content = doc, modifier = Modifier().fillMaxWidth().testTag("md")); }, {500, 1200});
+    rule.host().setCallbacks({.openUri = [&](const std::string& u) { opened.push_back(u); }});
+    auto drawn = rule.drawnTexts();
+    auto has = [&](const std::string& t) { return std::ranges::count(drawn, t) >= 1; };
+    CHECK(has("Başlık") && has("alıntı") && has("•") && has("◦") && has("1.") && has("2.") && has("int x = 1;") && has("Ayşe") && has("34"));
+    CHECK(has("Ad") && has("Yaş") && has("bitti"));
+    // The heading is larger than the text; the code block's text monospace; the heading a heading for screen readers.
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    float headingSize = 0, textSize = 0;
+    bool mono = false;
+    float codeX = -1;
+    for (size_t i = 0; i < canvas.texts.size(); ++i) {
+        if (canvas.texts[i] == "Başlık") headingSize = canvas.fonts[i].size;
+        if (canvas.texts[i] == "alıntı") textSize = canvas.fonts[i].size;
+        if (canvas.texts[i] == "int x = 1;") mono = canvas.fonts[i].family == FontFamily::Monospace.id, codeX = canvas.baselines[i].x;
+    }
+    CHECK(headingSize > textSize + 10 && mono);
+    CHECK(near(codeX, 16));  // (the code block's padding: 16 dp all round)
+    bool heading = std::ranges::any_of(rule.host().semanticsTree(), [](const SemanticsNode& n) { return n.heading && n.label == "Başlık"; });
+    CHECK(heading);
+    // Two checkboxes, one checked; a divider; the link opened by the platform.
+    auto tree = rule.host().semanticsTree();
+    CHECK(std::ranges::count_if(tree, [](const SemanticsNode& n) { return n.role == SemanticsRole::Checkbox; }) == 2);
+    Rect paragraph = rule.onNodeWithText("Bir kalın söz ve bağ.").bounds();  // (16 sp: 8 dp a character)
+    tap(rule, {paragraph.x + 17 * 8 + 8, paragraph.y + paragraph.height / 2});
+    rule.waitForIdle();
+    CHECK((opened == std::vector<std::string>{"https://kompoz.dev"}));
+}
+
 // The platform's file dialog, as a test gives it: what it was asked, and what it answers.
 struct FakeFileDialog {
     std::vector<detail::FileDialogRequest> asked;

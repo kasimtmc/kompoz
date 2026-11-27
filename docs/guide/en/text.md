@@ -179,6 +179,60 @@ fun Search() {
 }
 ```
 
+## Rich text
+
+A text field with bold, italic, colored and linked text, headings and lists is a `RichTextEditor`: Compose has none; Kompoz has the API of Compose Rich Editor. A `RichTextState` holds the text and its styles; its functions change the selection's text, or with no selection what is typed next, and its properties tell the selection's style, for a toolbar:
+
+```kotlin
+@Kompozable
+fun Notes() {
+    val state = rememberRichTextState { setHtml("<p>Merhaba <b>dünya</b></p>") }
+    Column {
+        Row {
+            IconToggleButton(checked = state.currentSpanStyle.fontWeight == FontWeight.Bold,
+                             onCheckedChange = { state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) }) {
+                Icon(Icons.Filled.FormatBold, "Bold")
+            }
+            IconToggleButton(checked = state.isUnorderedList, onCheckedChange = { state.toggleUnorderedList() }) {
+                Icon(Icons.Filled.FormatListBulleted, "List")
+            }
+            IconButton(onClick = { state.history.undo() }, enabled = state.history.canUndo) { Icon(Icons.Filled.Undo, "Undo") }
+        }
+        RichTextEditor(state = state, modifier = Modifier.fillMaxWidth())
+        Text(state.toMarkdown())
+    }
+}
+```
+
+- Character styles: `toggleSpanStyle(SpanStyle(…))`, `addSpanStyle`, `removeSpanStyle` (with a `TextRange` too), `currentSpanStyle`, `getSpanStyle(range)`.
+- Paragraphs: `toggleParagraphStyle(ParagraphStyle(textAlign = …))`, `currentParagraphStyle`; `setHeadingStyle(HeadingStyle.H2)`, `currentHeadingStyle`.
+- Links: `addLink(text = …, url = …)`, `addLinkToSelection(url = …)`, `updateLink(url = …)`, `removeLink()`, `isLink`, `selectedLinkText`, `selectedLinkUrl`. Code spans: `toggleCodeSpan()`, `isCodeSpan`.
+- Lists: `toggleUnorderedList()`, `toggleOrderedList()`, `isUnorderedList`, `isOrderedList`, `increaseListLevel()`, `decreaseListLevel()`.
+- Text: `setText`, `addTextAtIndex`, `addTextAfterSelection`, `replaceSelectedText`, `removeTextRange`, `clear()`, `toText()`.
+- HTML and Markdown: `setHtml(…)`, `toHtml()`, `insertHtml(html, position = …)`, `setMarkdown(…)`, `toMarkdown()`, `insertMarkdown(…)`; `setAnnotatedString(…)`.
+- History: `state.history.undo()`, `redo()`, `canUndo`, `canRedo` (typing within `coalesceWindowMs` is one step).
+
+Typed text takes the style before it. Enter continues a list, Enter on an empty item leaves it, Backspace at an item's start takes it out of the list, Tab and Shift+Tab nest it. "- " and "1. " at a paragraph's start make lists; with `state.config.headingTypingShortcutsEnabled`, "# " makes a heading, and with `inlineTypingShortcutsEnabled`, `**bold**`, `*italic*`, `` `code` `` and `~~struck~~` are styled as they close. Ctrl+B, Ctrl+I and Ctrl+U toggle styles; Ctrl+Z and Ctrl+Shift+Z undo and redo. `state.config` sets links', code spans' and lists' looks (`linkColor`, `codeSpanBackgroundColor`, `listIndent`, …). `OutlinedRichTextEditor` and `BasicRichTextEditor` are the outlined and undecorated forms; `RichText(state)` shows the text as a `Text`, its links opened with `LocalUriHandler`. `rememberRichTextState()` is saved with its HTML.
+
+## Markdown
+
+Markdown shown as composables is `Markdown(content)`, with the API of multiplatform-markdown-renderer: CommonMark and GitHub's Markdown, its headings, paragraphs, emphasis, code, block quotes, lists (task items with checkboxes), tables, thematic breaks, links (opened with `LocalUriHandler`) and images (`AsyncImage`: files, assets, http(s)):
+
+```kotlin
+@Kompozable
+fun Readme(text: String) {
+    Markdown(
+        content = text,
+        colors = markdownColor(linkText = Color.Blue),
+        typography = markdownTypography(h1 = MaterialTheme.typography.displaySmall),
+        components = markdownComponents(codeFence = { model -> Text(model.content) }),
+        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+    )
+}
+```
+
+`markdownColor(…)`, `markdownTypography(…)` and `markdownPadding(…)` change its looks, the theme's where not given; `markdownComponents(…)` draws kinds of blocks (`paragraph`, `heading1`…`heading6`, `blockQuote`, `codeFence`, `codeBlock`, `orderedList`, `unorderedList`, `image`, `horizontalRule`, `table`, `checkbox`) with composables of your own, each given the block and its source (`MarkdownComponentModel`); `MarkdownBlocks(model)` draws a block's children inside one, `buildMarkdownAnnotatedString(inlines)` its text. `kompoz/markdown_parser.hpp` reads Markdown into blocks and inlines for code of your own.
+
 ## Measuring text
 
 To draw text on a `Canvas`, or to know how a text was laid out, use a text measurer:

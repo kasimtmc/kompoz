@@ -1217,6 +1217,14 @@
   (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
   Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
   `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **Zengin metin** (Compose'da yok), Compose Rich Editor'ın API'siyle: `rememberRichTextState`, `RichTextEditor`,
+  `OutlinedRichTextEditor`, `BasicRichTextEditor`, `RichText`. Karakter ve paragraf stilleri, başlıklar, bağlantılar, kod
+  parçaları, numaralı ve madde listeleri (iç içe; Enter, Backspace ve Tab düzenleyicilerdeki gibi), yazma kısayolları,
+  Ctrl+B/I/U, geri al ve yinele (`history`), HTML ve Markdown giriş-çıkış, `config`.
+- **Markdown** (Compose'da yok), multiplatform-markdown-renderer'ın API'siyle: `Markdown(content, colors, typography,
+  padding, components)`, `markdownColor`, `markdownTypography`, `markdownPadding`, `markdownComponents`. CommonMark ve
+  GitHub'ın Markdown'ı (tablolar, görev listeleri, üstü çizili, otomatik bağlantılar), `markdown_parser.hpp` ile okunur.
+- Material'ın metin biçimlendirme ikonları (`Icons.Filled.FormatBold`, `FormatItalic`, `FormatListBulleted`, `Undo`, `Redo`, …).
 - **Saydam ve çerçevesiz pencereler**, Compose Desktop'taki gibi: `Window(transparent = true)` içeriğinin çizmediği
   yerde saydamdır (bir açılır pencerenin yuvarlak paneli), `undecorated = true` çerçevesizdir (`Application`'da da). Wayland:
   alfa kanallı bir yüzey; X11: bileşik pencere yöneticisi altında 32 bitlik bir görsel; macOS: şeffaf bir pencere;

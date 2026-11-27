@@ -179,6 +179,60 @@ fun Search() {
 }
 ```
 
+## Zengin metin
+
+Kalın, eğik, renkli ve bağlantılı metin, başlıklar ve listeler içeren bir metin alanı bir `RichTextEditor`'dır. Compose'da yoktur; Kompoz'da Compose Rich Editor'ın API'si vardır. Bir `RichTextState` metni ve stillerini tutar. Fonksiyonları seçili metni, seçim yoksa yazılacak olanı değiştirir; özellikleri seçimin stilini söyler, bir araç çubuğu için:
+
+```kotlin
+@Kompozable
+fun Notes() {
+    val state = rememberRichTextState { setHtml("<p>Merhaba <b>dünya</b></p>") }
+    Column {
+        Row {
+            IconToggleButton(checked = state.currentSpanStyle.fontWeight == FontWeight.Bold,
+                             onCheckedChange = { state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) }) {
+                Icon(Icons.Filled.FormatBold, "Bold")
+            }
+            IconToggleButton(checked = state.isUnorderedList, onCheckedChange = { state.toggleUnorderedList() }) {
+                Icon(Icons.Filled.FormatListBulleted, "List")
+            }
+            IconButton(onClick = { state.history.undo() }, enabled = state.history.canUndo) { Icon(Icons.Filled.Undo, "Undo") }
+        }
+        RichTextEditor(state = state, modifier = Modifier.fillMaxWidth())
+        Text(state.toMarkdown())
+    }
+}
+```
+
+- Karakter stilleri: `toggleSpanStyle(SpanStyle(…))`, `addSpanStyle`, `removeSpanStyle` (bir `TextRange` ile de), `currentSpanStyle`, `getSpanStyle(range)`.
+- Paragraflar: `toggleParagraphStyle(ParagraphStyle(textAlign = …))`, `currentParagraphStyle`; `setHeadingStyle(HeadingStyle.H2)`, `currentHeadingStyle`.
+- Bağlantılar: `addLink(text = …, url = …)`, `addLinkToSelection(url = …)`, `updateLink(url = …)`, `removeLink()`, `isLink`, `selectedLinkText`, `selectedLinkUrl`. Kod parçaları: `toggleCodeSpan()`, `isCodeSpan`.
+- Listeler: `toggleUnorderedList()`, `toggleOrderedList()`, `isUnorderedList`, `isOrderedList`, `increaseListLevel()`, `decreaseListLevel()`.
+- Metin: `setText`, `addTextAtIndex`, `addTextAfterSelection`, `replaceSelectedText`, `removeTextRange`, `clear()`, `toText()`.
+- HTML ve Markdown: `setHtml(…)`, `toHtml()`, `insertHtml(html, position = …)`, `setMarkdown(…)`, `toMarkdown()`, `insertMarkdown(…)`; `setAnnotatedString(…)`.
+- Geçmiş: `state.history.undo()`, `redo()`, `canUndo`, `canRedo` (`coalesceWindowMs` içinde yazılanlar tek adımdır).
+
+Yazılan metin kendinden önceki stili alır. Enter listeyi sürdürür; boş maddede Enter listeden çıkar; maddenin başında Backspace onu listeden çıkarır; Tab ve Shift+Tab iç içe yapar. Paragrafın başında "- " ve "1. " liste başlatır. `state.config.headingTypingShortcutsEnabled` ile "# " başlık yapar; `inlineTypingShortcutsEnabled` ile `**kalın**`, `*eğik*`, `` `kod` `` ve `~~çizik~~` kapandıkça stillenir. Ctrl+B, Ctrl+I ve Ctrl+U stilleri açıp kapatır; Ctrl+Z ve Ctrl+Shift+Z geri alır ve yineler. `state.config` bağlantıların, kod parçalarının ve listelerin görünüşünü ayarlar (`linkColor`, `codeSpanBackgroundColor`, `listIndent`, …). `OutlinedRichTextEditor` ve `BasicRichTextEditor` çerçeveli ve süssüz biçimlerdir; `RichText(state)` metni bir `Text` olarak gösterir, bağlantıları `LocalUriHandler` ile açılır. `rememberRichTextState()` HTML'iyle birlikte kaydedilir.
+
+## Markdown
+
+Markdown'ı composable'lar olarak göstermek `Markdown(content)` ile olur; API multiplatform-markdown-renderer'ınkidir. CommonMark ve GitHub'ın Markdown'ını gösterir: başlıklar, paragraflar, vurgu, kod, alıntılar, listeler (onay kutulu görev maddeleri), tablolar, ayraçlar, bağlantılar (`LocalUriHandler` ile açılır) ve resimler (`AsyncImage`: dosyalar, asset'ler, http(s)):
+
+```kotlin
+@Kompozable
+fun Readme(text: String) {
+    Markdown(
+        content = text,
+        colors = markdownColor(linkText = Color.Blue),
+        typography = markdownTypography(h1 = MaterialTheme.typography.displaySmall),
+        components = markdownComponents(codeFence = { model -> Text(model.content) }),
+        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+    )
+}
+```
+
+`markdownColor(…)`, `markdownTypography(…)` ve `markdownPadding(…)` görünüşünü değiştirir; verilmeyenler temadan gelir. `markdownComponents(…)` blok türlerini (`paragraph`, `heading1`…`heading6`, `blockQuote`, `codeFence`, `codeBlock`, `orderedList`, `unorderedList`, `image`, `horizontalRule`, `table`, `checkbox`) kendi composable'larınızla çizer; her birine blok ve kaynağı verilir (`MarkdownComponentModel`). `MarkdownBlocks(model)` bunların içinde bir bloğun çocuklarını, `buildMarkdownAnnotatedString(inlines)` metnini çizer. `kompoz/markdown_parser.hpp`, kendi kodunuz için Markdown'ı bloklara ve satır içi öğelere ayırır.
+
 ## Metni ölçmek
 
 Bir `Canvas`'a metin çizmek ya da bir metnin nasıl yerleştirildiğini öğrenmek için bir metin ölçer kullanın:

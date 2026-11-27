@@ -1178,6 +1178,14 @@
   settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
   that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
   `DragIndicator`.
+- **Rich text** (Compose has none), with Compose Rich Editor's API: `rememberRichTextState`, `RichTextEditor`,
+  `OutlinedRichTextEditor`, `BasicRichTextEditor`, `RichText`. Span and paragraph styles, headings, links, code spans,
+  ordered and unordered lists (nested; Enter, Backspace and Tab as editors have them), typing shortcuts, Ctrl+B/I/U,
+  undo and redo (`history`), HTML and Markdown in and out, `config`.
+- **Markdown** (Compose has none), with multiplatform-markdown-renderer's API: `Markdown(content, colors, typography,
+  padding, components)`, `markdownColor`, `markdownTypography`, `markdownPadding`, `markdownComponents`. CommonMark and
+  GitHub's Markdown (tables, task lists, strikethrough, autolinks), read by `markdown_parser.hpp`.
+- Material's text formatting icons (`Icons.Filled.FormatBold`, `FormatItalic`, `FormatListBulleted`, `Undo`, `Redo`, …).
 - **Transparent and undecorated windows**, as Compose Desktop's: `Window(transparent = true)` is see-through where its
   content draws nothing (a popup's rounded panel), `undecorated = true` without a frame (`Application`'s too). Wayland: an
   alpha surface; X11: a 32-bit visual under a compositing window manager; macOS: a clear window; Windows 11: rounded

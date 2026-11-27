@@ -123,7 +123,12 @@ add_library(kompoz_core STATIC
     src/window.cpp
     src/tray.cpp
     src/tree.cpp
-    src/filekit.cpp)
+    src/filekit.cpp
+    src/markdown_parser.cpp
+    src/richtext.cpp
+    src/richtext_html.cpp
+    src/richtext_markdown.cpp
+    src/markdown.cpp)
 target_include_directories(kompoz_core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                                               $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 set_target_properties(kompoz_core PROPERTIES EXPORT_NAME core)
