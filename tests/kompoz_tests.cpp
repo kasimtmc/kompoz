@@ -10004,7 +10004,7 @@ TEST(tray_click_point_opens_a_popup_window) {
         Tray(kompoz::tooltip = "AirLink", kompoz::onAction = [&](std::optional<IntOffset> at) { popup.set(WindowPopup{.anchor = at}); });
         Tray(kompoz::tooltip = "Öteki", kompoz::onAction = [&] { ++plain; });
         if (auto p = popup.get())
-            Window(onCloseRequest = [&] { popup.set(std::nullopt); }, arg::popup = *p,
+            Window(onCloseRequest = [&] { popup.set(std::nullopt); }, arg::popup = *p, kompoz::arg::transparent = true,
                    kompoz::state = rememberWindowState(arg::size = DpSize(380, 560)), [] { Text("panel"); });
     });
     KompozHost& host = rule.host();
@@ -10018,6 +10018,7 @@ TEST(tray_click_point_opens_a_popup_window) {
     if (host.windowRequests().size() != 1) return;
     auto request = host.windowRequests()[0];
     CHECK(request->popup && request->popup->anchor == (IntOffset{1800, 1060}) && request->state.size() == DpSize(380, 560));
+    CHECK(request->transparent && request->undecorated);  // (transparent windows are undecorated, as Compose Desktop's)
     request->onCloseRequest();  // (its focus lost, Escape)
     rule.waitForIdle();
     CHECK(host.windowRequests().empty());

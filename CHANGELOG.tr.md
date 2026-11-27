@@ -1217,6 +1217,10 @@
   (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
   Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
   `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **Saydam ve çerçevesiz pencereler**, Compose Desktop'taki gibi: `Window(transparent = true)` içeriğinin çizmediği
+  yerde saydamdır (bir açılır pencerenin yuvarlak paneli), `undecorated = true` çerçevesizdir (`Application`'da da). Wayland:
+  alfa kanallı bir yüzey; X11: bileşik pencere yöneticisi altında 32 bitlik bir görsel; macOS: şeffaf bir pencere;
+  Windows 11: yuvarlak köşeler (ve GPU'nunki izin veriyorsa takas zincirinin alfası); hiçbiri mümkün değilse eskisi gibi opak.
 - **Stilli metin alanları**: Compose'daki gibi `VisualTransformation` (`VisualTransformation { text -> TransformedText(annotated,
   offsetMapping) }`, `OffsetMapping`, `PasswordVisualTransformation(mask)`, `VisualTransformation.None`): alan dönüştürülmüş
   metni stilleri ve paragraf stilleriyle çizer; satırlar kendi metinleri kadar uzun olur, imleç, seçim, dokunmalar ve

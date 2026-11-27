@@ -264,6 +264,21 @@ fun TrayPanel(icon: ImageBitmap) {
 
 Wayland'de panel bir wlr-layer-shell yüzeyidir (KDE Plasma, Sway, Hyprland) ve noktanın bulunduğu ekranın yakın kenarına yerleşir; bileşicide layer-shell yoksa (GNOME) sıradan bir penceredir. X11'de çerçevesiz, hep üstte duran ve görev çubuğunda görünmeyen bir pencere, Windows'ta ise bir `WS_POPUP` araç penceresidir; ikisi de çalışma alanı içinde noktaya yerleşir. Diğer platformlarda normal bir penceredir. Panel bilgisi pencere açılırken bir kez okunur.
 
+`transparent = true` verilen bir `Window` (Compose Desktop'taki gibi), içeriğinin hiçbir şey çizmediği her yerde saydamdır. Böylece kendi şekli olan bir içerik, çevresinde masaüstünü gösterir: yuvarlak köşeli bir panel gibi. Saydam bir pencere, açılır pencere gibi çerçevesizdir (yalnızca `undecorated = true` da verilebilir: çerçeve ve başlık çubuğu olmaz, pencerenin tamamını içerik çizer):
+
+```kotlin
+@Kompozable
+fun RoundedPanel(onClose: () -> Unit) {
+    Window(onCloseRequest = onClose, popup = WindowPopup(), transparent = true) {
+        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 2.dp) {
+            Text("panel", modifier = Modifier.padding(24.dp))
+        }
+    }
+}
+```
+
+Wayland'de pencerenin yüzeyi bir alfa kanalı taşır. X11'de bir bileşik pencere yöneticisi çalışıyorsa 32 bitlik bir görsel alır. macOS'ta şeffaf arka planlı, opak olmayan bir penceredir. Windows'ta takas zincirinin alfası, GPU'nunki izin verdiği yerde birleştirilir (Vulkan takas zincirleri genellikle izin vermez); Windows 11 pencerenin köşelerini her durumda yuvarlar. Bunların hiçbiri mümkün değilse pencere eskisi gibi opaktır. Uygulamanın kendi penceresi için `Application`'da da `transparent` ve `undecorated` vardır.
+
 ## Paketleme
 
 ```bash

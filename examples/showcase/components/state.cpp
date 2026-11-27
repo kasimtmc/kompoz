@@ -643,3 +643,51 @@ fun FileDialogsSection() {
         for (entry in entries) Text(entry, style = typography.bodySmall, maxLines = 1)
     }
 }
+
+// Windows of their own (desktops): a plain one, and a transparent, undecorated one whose content
+// draws its own rounded shape (a tray panel's look).
+@Kompozable
+fun WindowsSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    var plain by remember { mutableStateOf(false) }
+    var rounded by remember { mutableStateOf(false) }
+    Section("Window · transparent · undecorated") {
+        Text("Masaüstünde ayrı pencereler. Saydam pencere (transparent = true) çerçevesizdir; köşeleri içeriğin kendi " +
+                 "şeklidir. Android'de ve web'de uygulamanın tek penceresi olduğundan açılmazlar.",
+             color = cs.onSurfaceVariant, style = typography.bodyMedium)
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { plain = true }) { Text("Pencere aç") }
+            Button(onClick = { rounded = true }) { Text("Saydam pencere aç") }
+        }
+    }
+    if (plain) {
+        Window(onCloseRequest = { plain = false }, title = "Kompoz penceresi", state = rememberWindowState(size = DpSize(360.dp, 240.dp))) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.padding(24.dp)) { Text("Ayrı bir pencere, uygulamanın durumunu paylaşır.") }
+            }
+        }
+    }
+    if (rounded) {
+        Window(onCloseRequest = { rounded = false }, title = "Saydam", transparent = true,
+               state = rememberWindowState(size = DpSize(340.dp, 220.dp))) {
+            Surface(shape = RoundedCornerShape(24.dp), color = cs.surfaceContainer, border = BorderStroke(1.dp, cs.outlineVariant),
+                    modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Yuvarlak köşeli panel", style = typography.titleLarge)
+                    Text("Köşelerin dışı saydam: masaüstü görünür.", color = cs.onSurfaceVariant)
+                    Button(onClick = { rounded = false }) { Text("Kapat") }
+                }
+            }
+        }
+    }
+}
+
+// The windows' section on its own (KOMPOZ_PREVIEW=WindowsPreview).
+@Preview(widthDp = 420, heightDp = 260)
+@Kompozable
+fun WindowsPreview() {
+    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+        Surface(modifier = Modifier.fillMaxSize()) { Column(modifier = Modifier.padding(16.dp)) { WindowsSection() } }
+    }
+}

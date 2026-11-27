@@ -219,6 +219,10 @@ public:
             viewport_ = wp_viewporter_get_viewport(viewporter_, surface_);
         }
         popup_ = app.popup;
+        undecorated_ = app.undecorated || popup_.has_value();
+        // A transparent window: its buffers' alpha is the compositor's to blend (premultiplied, as
+        // Wayland's alpha formats are), with no opaque region to say otherwise.
+        surface.transparent = app.transparent;
         if (popup_ && layerShell_) {
             if (!makeLayerSurface()) return failed("the compositor didn't configure the popup");
         } else if (!makeToplevel()) {
@@ -274,10 +278,10 @@ public:
         if (decorations_) {
             decoration_ = zxdg_decoration_manager_v1_get_toplevel_decoration(decorations_, toplevel_);
             zxdg_toplevel_decoration_v1_add_listener(decoration_, &kDecoration, this);
-            bool own = popup_ || option("KOMPOZ_DECORATIONS") == "kompoz";
+            bool own = undecorated_ || option("KOMPOZ_DECORATIONS") == "kompoz";
             zxdg_toplevel_decoration_v1_set_mode(decoration_, own ? ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE : ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
         } else {
-            ownDecorations_ = !popup_;
+            ownDecorations_ = !undecorated_;
         }
         wl_surface_commit(surface_);
         while (!configured_)  // (the first configure, acknowledged before anything is drawn)
@@ -560,6 +564,7 @@ private:
     zwlr_layer_surface_v1* layerSurface_ = nullptr;  // a popup's role, instead of an xdg_toplevel
     uint32_t layerOutput_ = 0;                       // the output it is on (its global's name; 0: the compositor's choice)
     std::optional<WindowPopup> popup_;               // the window a popup (Application::popup)
+    bool undecorated_ = false;                       // no title bar of the compositor's or Kompoz's (Application::undecorated, a popup)
     bool secondary_ = false;    // a window of the app's own (Window)
     bool needFrame_ = true;     // something to show (a frame on the next callback)
     int64_t lastInputAt_ = -1;  // when the user last pressed a key, a button or the screen in it (raise's)
@@ -1318,7 +1323,7 @@ const xdg_toplevel_listener WaylandPlatform::kToplevel = {
 const zxdg_toplevel_decoration_v1_listener WaylandPlatform::kDecoration = {
     .configure = [](void* data, zxdg_toplevel_decoration_v1*, uint32_t mode) {
         WaylandPlatform& p = self(data);
-        bool own = mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE && !p.popup_;
+        bool own = mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE && !p.undecorated_;
         if (own == p.ownDecorations_) return;
         p.ownDecorations_ = own;
         if (!p.configured_) return;

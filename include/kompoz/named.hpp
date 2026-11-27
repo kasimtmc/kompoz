@@ -637,6 +637,9 @@ struct OnResult {};
 struct SuggestedName {};
 struct DefaultExtension {};
 struct AllowedExtensions {};
+// Window's (window.hpp).
+struct Undecorated {};
+struct Transparent {};
 // widthIn(min = …, max = …), heightIn's.
 struct Min {};
 struct Max {};
@@ -1139,6 +1142,8 @@ inline constexpr Param<detail::names::OnResult> onResult;
 inline constexpr Param<detail::names::SuggestedName> suggestedName;
 inline constexpr Param<detail::names::DefaultExtension> defaultExtension;
 inline constexpr Param<detail::names::AllowedExtensions> allowedExtensions;
+inline constexpr Param<detail::names::Undecorated> undecorated;
+inline constexpr Param<detail::names::Transparent> transparent;
 inline constexpr Param<detail::names::HeaderBackgroundColor> headerBackgroundColor;
 // Trees (tree.hpp).
 inline constexpr Param<detail::names::TreeState> treeState;

@@ -20,6 +20,14 @@
 //              state = rememberWindowState(size = DpSize(380.dp, 560.dp))) { Panel() }
 //   }
 //
+// Rounded, see-through where its content isn't (Compose Desktop's transparent, undecorated windows):
+//
+//   Window(onCloseRequest = { popup = null }, popup = p, transparent = true) {
+//       Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 2.dp) { Panel() }
+//   }
+//
+// (app.hpp's Application::transparent says where that can be had.)
+//
 // The app's window closing closes them all. On Android and the web, which give an app one window,
 // they aren't shown.
 
@@ -79,15 +87,17 @@ struct WindowRequest {
     WindowState state;
     std::function<void()> onCloseRequest;  // the user closing it (its title bar's ×, Alt+F4; a popup's focus lost, Escape)
     std::optional<WindowPopup> popup;      // (read as it opens)
+    bool undecorated = false, transparent = false;  // (read as it opens)
     Content content;                       // with the caller's composition locals provided
     MutableState<int> contentChanges = mutableStateOf(0);  // read by the window's composition: its content recomposed
 };
 
 // (state: none given, one remembered here)
 void Window(std::function<void()> onCloseRequest, std::optional<WindowState> state, bool visible, std::string title,
-            const Content& content, std::optional<WindowPopup> popup = std::nullopt, CallSite site = CallSite::current());
+            const Content& content, std::optional<WindowPopup> popup = std::nullopt, bool undecorated = false, bool transparent = false,
+            CallSite site = CallSite::current());
 struct WindowImpl {
-    using P = Params<names::OnCloseRequest, names::State, names::Visible, names::Title, names::Popup, Block>;
+    using P = Params<names::OnCloseRequest, names::State, names::Visible, names::Title, names::Popup, names::Undecorated, names::Transparent, Block>;
     template <class... A>
     static void call(CallSite site, A&&... args) {
         static_assert(P::check<A...>());
@@ -95,7 +105,8 @@ struct WindowImpl {
         static_assert(P::blockGiven<A...>(), "kompoz: Window takes a block: its content");
         Window(std::move(onCloseRequest), P::get<names::State>(std::optional<WindowState>(), args...), P::get<names::Visible>(true, args...),
                std::string(P::get<names::Title>(std::string("Untitled"), args...)), P::block(std::forward<A>(args)...),
-               P::get<names::Popup>(std::optional<WindowPopup>(), args...), site);
+               P::get<names::Popup>(std::optional<WindowPopup>(), args...), P::get<names::Undecorated>(false, args...),
+               P::get<names::Transparent>(false, args...), site);
     }
 };
 } // namespace detail

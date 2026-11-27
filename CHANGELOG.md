@@ -1178,6 +1178,10 @@
   settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
   that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
   `DragIndicator`.
+- **Transparent and undecorated windows**, as Compose Desktop's: `Window(transparent = true)` is see-through where its
+  content draws nothing (a popup's rounded panel), `undecorated = true` without a frame (`Application`'s too). Wayland: an
+  alpha surface; X11: a 32-bit visual under a compositing window manager; macOS: a clear window; Windows 11: rounded
+  corners (and the swapchain's alpha where the GPU's has it); opaque, as before, where none can be had.
 - **Styled text fields**: `VisualTransformation` as Compose's (`VisualTransformation { text -> TransformedText(annotated,
   offsetMapping) }`, `OffsetMapping`, `PasswordVisualTransformation(mask)`, `VisualTransformation.None`): a field draws the
   transformed text with its spans and paragraph styles, its lines as tall as their own text, the caret, selection, taps and

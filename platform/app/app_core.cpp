@@ -983,6 +983,9 @@ std::vector<gpu::Backend> gpuOrder(App& app, const std::string& choice) {
 // the window closed again) if it can't be made.
 bool startGpu(App& app, gpu::Backend backend) {
     gpu::Surface surface;
+    // (a transparent window: the platform says whether it made one (Surface::transparent), the device
+    // whether it shows its alpha)
+    if (app.config.transparent) app.config.undecorated = true;
     std::string error;
     if (!app.platform.openWindow(app.config, backend, surface, &error)) {
         app.logf("kompoz: no window for %s: %s", gpu::backendName(backend), error.c_str());
@@ -1044,6 +1047,8 @@ bool AppCore::start(int argc, char** argv) {
             w->content();
         };
         app.config.popup = w->popup;
+        app.config.undecorated = w->undecorated || w->popup.has_value();
+        app.config.transparent = w->transparent;
         app.applied = {w->title, size, false, 0};
     } else {
         static App* logged = nullptr;  // (the GPU layer's messages into the platform's log)

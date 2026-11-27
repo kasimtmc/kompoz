@@ -3144,8 +3144,8 @@ fun TrayPanel() {
     var popup by remember { mutableStateOf<WindowPopup?>(null) }
     Tray(tooltip = "Uygulamam", onAction = { at -> popup = WindowPopup(anchor = at) })
     popup?.let { p ->
-        Window(onCloseRequest = { popup = null }, popup = p, state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
-            Text("panel")
+        Window(onCloseRequest = { popup = null }, popup = p, transparent = true, state = rememberWindowState(size = DpSize(380.dp, 560.dp))) {
+            Surface(shape = RoundedCornerShape(16.dp)) { Text("panel") }
         }
     }
 }
@@ -3161,6 +3161,7 @@ TEST(tray_panel_as_the_guide_writes_it) {
     if (host.windowRequests().size() != 1) return;
     auto request = host.windowRequests()[0];
     CHECK(request->popup && request->popup->anchor == (IntOffset{1800, 1060}) && request->state.size() == DpSize(380, 560));
+    CHECK(request->transparent && request->undecorated);
     request->onCloseRequest();
     rule.waitForIdle();
     CHECK(host.windowRequests().empty());

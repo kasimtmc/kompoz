@@ -44,6 +44,16 @@ struct Application {
     std::function<void()> onCloseRequest;
     // The window opened as a popup (WindowPopup): Window's popup, for which the app core sets it.
     std::optional<WindowPopup> popup;
+    // Its window without the system's frame and title bar (Compose Desktop's undecorated): the app
+    // draws all of it. A popup is.
+    bool undecorated = false;
+    // Its window see-through where the app draws nothing, or draws with alpha (Compose Desktop's
+    // transparent): content of its own shape (a Surface with rounded corners) shows the desktop
+    // around it. Undecorated windows only (a popup is). Wayland: an alpha surface; X11: a 32-bit
+    // visual (with a compositing window manager); macOS: a clear window; Windows: an alpha
+    // swapchain where the GPU's has one, else Windows 11's rounded corners. Where none of these can
+    // be had, the window is opaque.
+    bool transparent = false;
     GpuPriority gpuPriority = GpuPriority::Auto;  // (GpuPriority)
 };
 

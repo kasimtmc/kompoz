@@ -54,6 +54,7 @@ fun ComponentsScreen(modifier: Modifier) {
         item(key = "SnapRowSection") { SnapRowSection() }
         item(key = "PlatformServicesSection") { PlatformServicesSection() }
         item(key = "FileDialogsSection") { FileDialogsSection() }
+        item(key = "WindowsSection") { WindowsSection() }
         item(key = "ChatSection") { ChatSection() }
         item(key = "LayoutInfoSection") { LayoutInfoSection() }
         item(key = "ListDetailSection") { ListDetailSection() }

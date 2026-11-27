@@ -264,6 +264,21 @@ fun TrayPanel(icon: ImageBitmap) {
 
 On Wayland the panel is a wlr-layer-shell surface (KDE Plasma, Sway, Hyprland), placed at the anchor's output edge nearer to it; where the compositor has no layer-shell (GNOME) it is a plain window. On X11 it is an undecorated window kept on top and out of the taskbar, and on Windows a `WS_POPUP` tool window, both placed inside the work area at the anchor. Elsewhere it is a normal window. The panel is read once, when the window opens.
 
+A `Window` given `transparent = true` (Compose Desktop's) is see-through wherever its content draws nothing, so content of its own shape shows the desktop around it: a panel with rounded corners. A transparent window is undecorated (`undecorated = true` alone: no frame or title bar, the content draws all of it), as a popup is:
+
+```kotlin
+@Kompozable
+fun RoundedPanel(onClose: () -> Unit) {
+    Window(onCloseRequest = onClose, popup = WindowPopup(), transparent = true) {
+        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 2.dp) {
+            Text("panel", modifier = Modifier.padding(24.dp))
+        }
+    }
+}
+```
+
+On Wayland its surface has an alpha channel; on X11 it gets a 32-bit visual when a compositing window manager runs; on macOS it is a clear, non-opaque window. On Windows the swapchain's alpha is composited where the GPU's can be (its Vulkan swapchains usually can't), and Windows 11 rounds the window's corners either way. Where none of this can be had, the window is opaque, as before. `Application` has `transparent` and `undecorated` for the app's own window.
+
 ## Packaging
 
 ```bash

@@ -28,6 +28,7 @@ constexpr PointerPrecision kNoPointer = PointerPrecision::None;  // (named befor
 #include <unistd.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <array>
 #include <clocale>
 #include <cmath>
@@ -199,8 +200,26 @@ public:
         XSetWindowAttributes attributes{};
         attributes.event_mask = StructureNotifyMask | FocusChangeMask | ExposureMask | PropertyChangeMask | KeyPressMask | KeyReleaseMask;
         attributes.bit_gravity = NorthWestGravity;
-        window_ = XCreateWindow(display_, root_, 0, 0, unsigned(width_), unsigned(height_), 0, CopyFromParent, InputOutput, CopyFromParent,
-                                CWEventMask | CWBitGravity, &attributes);
+        // A transparent window (Application::transparent): a 32-bit visual, its alpha the
+        // compositing manager's to blend (premultiplied); none running, or no such visual: opaque.
+        XVisualInfo argb{};
+        char cm[32];
+        std::snprintf(cm, sizeof cm, "_NET_WM_CM_S%d", screen_);
+        bool composited = XGetSelectionOwner(display_, XInternAtom(display_, cm, False)) != None;
+        transparent_ = app.transparent && composited && XMatchVisualInfo(display_, screen_, 32, TrueColor, &argb);
+        surface.transparent = transparent_;
+        unsigned long valueMask = CWEventMask | CWBitGravity;
+        if (transparent_) {
+            colormap_ = XCreateColormap(display_, root_, argb.visual, AllocNone);
+            attributes.colormap = colormap_;
+            attributes.background_pixel = 0, attributes.border_pixel = 0;
+            valueMask |= CWColormap | CWBackPixel | CWBorderPixel;
+            visual_ = argb.visualid;
+        } else {
+            visual_ = DefaultVisual(display_, screen_)->visualid;
+        }
+        window_ = XCreateWindow(display_, root_, 0, 0, unsigned(width_), unsigned(height_), 0, transparent_ ? 32 : CopyFromParent, InputOutput,
+                                transparent_ ? argb.visual : CopyFromParent, valueMask, &attributes);
         if (!window_) return failed("the window couldn't be made");
         // Its names, its process, what it answers (closing, the window manager's ping), its kind,
         // and drops (XDND 5).
@@ -222,6 +241,7 @@ public:
         XChangeProperty(display_, window_, atoms_._NET_WM_WINDOW_TYPE, XA_ATOM, 32, PropModeReplace,
                         reinterpret_cast<unsigned char*>(app.popup ? &atoms_._NET_WM_WINDOW_TYPE_UTILITY : &atoms_._NET_WM_WINDOW_TYPE_NORMAL), 1);
         if (app.popup) makePopup(*app.popup);
+        else if (app.undecorated) undecorate();
         long xdndVersion = 5;
         XChangeProperty(display_, window_, atoms_.XdndAware, XA_ATOM, 32, PropModeReplace, reinterpret_cast<unsigned char*>(&xdndVersion), 1);
         // The pointer, touch and pinches through XInput 2 (the keyboard's events are the core
@@ -265,7 +285,7 @@ public:
         case gpu::Backend::GLES:
             // (Swap interval 1: the swap waits for the display's beat.)
             return egl_.open({.platform = EglWindow::kX11, .display = display_, .window = &window_,
-                              .visual = int(DefaultVisual(display_, screen_)->visualid), .alpha = false, .swapInterval = 1,
+                              .visual = int(visual_), .alpha = transparent_, .swapInterval = 1,
                               .debug = option("KOMPOZ_GPU_VALIDATION") == "1"},
                              surface, error) ||
                    failed(*error);
@@ -302,6 +322,7 @@ public:
         egl_.close();
         if (ic_) XDestroyIC(std::exchange(ic_, nullptr));
         if (window_) XDestroyWindow(display_, std::exchange(window_, 0));
+        if (colormap_) XFreeColormap(display_, std::exchange(colormap_, 0));
         if (vulkan_) dlclose(std::exchange(vulkan_, nullptr));
     }
 
@@ -421,6 +442,9 @@ private:
     Display* display_ = nullptr;
     int screen_ = 0;
     Window root_ = 0, window_ = 0;
+    Colormap colormap_ = 0;     // a transparent window's (its 32-bit visual's)
+    VisualID visual_ = 0;       // the window's
+    bool transparent_ = false;  // made with a 32-bit visual, a compositing manager running
     Atoms atoms_{};
     int xiOpcode_ = 0, xiMinor_ = 0, rrEvent_ = -1;
     std::string title_ = "Kompoz";
@@ -641,9 +665,14 @@ private:
     // the taskbar and the pager, at the anchor's monitor's top or bottom (whichever the anchor is
     // nearer: where the panel is) inside its work area, along it at the anchor; the window manager
     // told the position is the user's own.
-    void makePopup(const WindowPopup& popup) {
+    // No frame from the window manager (Motif's hints): Application::undecorated, a popup.
+    void undecorate() {
         long motif[5] = {2, 0, 0, 0, 0};  // (flags: decorations given; decorations: none)
         XChangeProperty(display_, window_, atoms_._MOTIF_WM_HINTS, atoms_._MOTIF_WM_HINTS, 32, PropModeReplace, reinterpret_cast<unsigned char*>(motif), 5);
+    }
+
+    void makePopup(const WindowPopup& popup) {
+        undecorate();
         Atom states[] = {atoms_._NET_WM_STATE_ABOVE, atoms_._NET_WM_STATE_SKIP_TASKBAR, atoms_._NET_WM_STATE_SKIP_PAGER};
         XChangeProperty(display_, window_, atoms_._NET_WM_STATE, XA_ATOM, 32, PropModeReplace, reinterpret_cast<unsigned char*>(states), 3);
         if (!popup.anchor) return;

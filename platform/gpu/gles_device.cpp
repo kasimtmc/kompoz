@@ -127,6 +127,7 @@ public:
     Gl gl;
     std::function<void()> swap;
     std::function<void(int*, int*)> drawableSize;
+    bool transparent = false;  // (Surface::transparent: the platform made the window's surface with alpha)
     std::string renderer;
     bool floatTargets = false;  // half- and full-float textures drawn into (EXT_color_buffer_float or _half_float)
     int errors = 0;
@@ -228,6 +229,7 @@ public:
         }
         swap = s.glSwap;
         drawableSize = s.drawableSize;
+        transparent = s.transparent;
         gl.GenVertexArrays(1, &vertexArray);
         gl.BindVertexArray(vertexArray);
         gl.GenBuffers(1, &stream);
@@ -501,6 +503,7 @@ public:
         return window.get();
     }
     bool swapchainFlipped() const override { return true; }
+    bool presentsAlpha() const override { return transparent; }
 
     void* allocate(size_t size, size_t alignment, BufferRef* ref) override {
         alignment = std::max<size_t>(alignment, 16);

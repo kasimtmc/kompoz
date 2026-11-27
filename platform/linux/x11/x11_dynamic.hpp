@@ -27,7 +27,7 @@ namespace kompoz::platform::x11 {
     X(XSetLocaleModifiers) X(XRegisterIMInstantiateCallback) X(XUnregisterIMInstantiateCallback)                      \
     X(XResourceManagerString) X(XkbSetDetectableAutoRepeat) X(XSelectInput) X(XQueryExtension) X(XGetEventData)       \
     X(XFreeEventData) X(XExtendedMaxRequestSize) X(XMaxRequestSize) X(XRefreshKeyboardMapping) X(XSetErrorHandler)  \
-    X(XCheckIfEvent) X(XLookupString) X(XGetIMValues)
+    X(XCheckIfEvent) X(XLookupString) X(XGetIMValues) X(XMatchVisualInfo) X(XCreateColormap) X(XFreeColormap)
 #define KOMPOZ_XI_FUNCTIONS(X)                                                                                        \
     X(XIQueryVersion) X(XISelectEvents) X(XIQueryDevice) X(XIFreeDeviceInfo)
 #define KOMPOZ_XCURSOR_FUNCTIONS(X)                                                                                   \
@@ -67,6 +67,9 @@ bool load();
 #define XDeleteProperty KOMPOZ_X11_RENAME(XDeleteProperty)
 #define XGetWindowProperty KOMPOZ_X11_RENAME(XGetWindowProperty)
 #define XFree KOMPOZ_X11_RENAME(XFree)
+#define XMatchVisualInfo KOMPOZ_X11_RENAME(XMatchVisualInfo)
+#define XCreateColormap KOMPOZ_X11_RENAME(XCreateColormap)
+#define XFreeColormap KOMPOZ_X11_RENAME(XFreeColormap)
 #define XSetWMProtocols KOMPOZ_X11_RENAME(XSetWMProtocols)
 #define XAllocSizeHints KOMPOZ_X11_RENAME(XAllocSizeHints)
 #define XSetWMNormalHints KOMPOZ_X11_RENAME(XSetWMNormalHints)

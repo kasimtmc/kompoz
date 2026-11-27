@@ -162,9 +162,14 @@ public:
             layer.device = device;
             layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
             layer.framebufferOnly = NO;  // (the renderer copies from it: blend modes read what is below)
+            layer.opaque = !s.transparent;  // (a transparent window's: composited with its alpha, premultiplied)
         }
+        alphaShown = layer && s.transparent;
         return true;
     }
+
+    bool presentsAlpha() const override { return alphaShown; }
+    bool alphaShown = false;
 
     ~MetalDevice() override { waitIdle(); }  // (their completion handlers count into this)
 

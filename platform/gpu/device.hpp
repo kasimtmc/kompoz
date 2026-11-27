@@ -164,6 +164,10 @@ struct Surface {
     std::string webgpuCanvas;
     // The drawable's size in pixels.
     std::function<void(int* width, int* height)> drawableSize;
+    // Its window shows the desktop through it where it is drawn transparent (Application's
+    // transparent), as far as the platform could make it so: the swapchain's alpha composited
+    // (premultiplied) where it can be.
+    bool transparent = false;
     // A file where the pipelines' compiled shaders are kept between runs, read when the device is
     // made and written when it has made more (Vulkan's pipeline cache, OpenGL ES's program
     // binaries); none to compile them every run. Metal and the browser keep theirs themselves.
@@ -251,6 +255,9 @@ public:
     // since, as Android's renderer does with a buffer's age); 0 if what it holds isn't known (a
     // new one, or a platform that doesn't keep it): all of it drawn over.
     virtual int swapchainAge() const { return 0; }
+    // Whether the window shows its alpha (Surface::transparent, and the swapchain composited with
+    // it): a frame left transparent shows what is under the window. Else it is opaque.
+    virtual bool presentsAlpha() const { return false; }
     // The window's native window went away or is another (Surface::vulkanNativeWindow tells
     // which), between frames: what was made for the old one is let go of now, as the platform
     // must before the system takes it (Android's surfaceDestroyed), not at the next frame.

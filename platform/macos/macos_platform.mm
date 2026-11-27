@@ -34,6 +34,19 @@ using kompoz::platform::EventType;
 
 // The window's view: its layer the CAMetalLayer drawn into; the mouse, the keyboard, typing
 // (NSTextInputClient) and drops, told to the platform.
+// A window that takes the keyboard without a title bar (an undecorated one: a borderless NSWindow
+// doesn't by default).
+@interface KompozWindow : NSWindow
+@end
+@implementation KompozWindow
+- (BOOL)canBecomeKeyWindow {
+    return YES;
+}
+- (BOOL)canBecomeMainWindow {
+    return YES;
+}
+@end
+
 @interface KompozView : NSView <NSTextInputClient> {
 @public
     kompoz::platform::MacPlatform* platform;
@@ -349,8 +362,18 @@ public:
         title_ = app.title;
         makeMenu();
         NSRect frame = NSMakeRect(0, 0, app.width, app.height);  // (points: a dp each, the screen's scale the pixels)
-        NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
-        window_ = [[NSWindow alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO];
+        // Undecorated (Application::undecorated, a popup): borderless; a popup above the other windows.
+        bool undecorated = app.undecorated || app.popup.has_value();
+        NSWindowStyleMask style = undecorated ? NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable
+                                              : NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+        window_ = [[KompozWindow alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO];
+        if (app.popup) window_.level = NSPopUpMenuWindowLevel;
+        // Transparent (Application::transparent): a clear, non-opaque window, the shadow its content's.
+        if (app.transparent) {
+            window_.opaque = NO;
+            window_.backgroundColor = NSColor.clearColor;
+            window_.hasShadow = NO;
+        }
         window_.releasedWhenClosed = NO;
         window_.title = [NSString stringWithUTF8String:title_.c_str()];
         window_.delegate = delegate_;
@@ -363,6 +386,7 @@ public:
         layer_.contentsScale = window_.backingScaleFactor;
         sizes();
         surface.metalLayer = (__bridge void*)layer_;
+        surface.transparent = app.transparent;
         surface.drawableSize = [this](int* w, int* h) { *w = pixelWidth_, *h = pixelHeight_; };
         [window_ makeKeyAndOrderFront:nil];
         events_.push_back({.type = EventType::Shown});

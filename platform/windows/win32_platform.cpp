@@ -524,7 +524,8 @@ public:
         popup_ = app.popup;
         // A popup (Application::popup): no frame, above the other windows, out of the taskbar; made at
         // its anchor, so that its DPI is that monitor's.
-        DWORD style = popup_ ? WS_POPUP : WS_OVERLAPPEDWINDOW, exStyle = popup_ ? WS_EX_TOOLWINDOW | WS_EX_TOPMOST : 0;
+        // Undecorated (Application::undecorated): no frame either.
+        DWORD style = popup_ || app.undecorated ? WS_POPUP : WS_OVERLAPPEDWINDOW, exStyle = popup_ ? WS_EX_TOOLWINDOW | WS_EX_TOPMOST : 0;
         int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
         if (popup_) x = popup_->anchor ? popup_->anchor->x : 0, y = popup_->anchor ? popup_->anchor->y : 0;
         hwnd_ = CreateWindowExW(exStyle, kClassName, wide(title_).c_str(), style, x, y, 100, 100, nullptr, nullptr, GetModuleHandleW(nullptr), this);
@@ -536,6 +537,15 @@ public:
         SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         placePopup();
         clientSize();
+        // A transparent window (Application::transparent): its swapchain's alpha where the GPU's
+        // composites it (the device tells; Windows' Vulkan swapchains are opaque); its corners rounded
+        // by Windows 11 either way (DWMWA_WINDOW_CORNER_PREFERENCE: DWMWCP_ROUND), as a popup's panel is.
+        if (app.transparent) {
+            constexpr DWORD kCornerPreference = 33;  // DWMWA_WINDOW_CORNER_PREFERENCE (Windows 11's SDK)
+            int round = 2;                           // DWMWCP_ROUND
+            DwmSetWindowAttribute(hwnd_, kCornerPreference, &round, sizeof round);
+        }
+        surface.transparent = app.transparent && backend == gpu::Backend::Vulkan;  // (ANGLE's and WGL's surfaces are opaque)
         dark_ = darkMode();
         darkTitleBar();
         refreshRate_ = monitorRefreshRate();

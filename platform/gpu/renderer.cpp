@@ -514,7 +514,8 @@ bool Renderer::drawFrame(Texture& target, const DisplayList& list, bool changes)
     for (const std::optional<Rect>& area : areas) {
         if (area) pushClip(*area);
         std::optional<size_t> cover = list.opaqueCover(area.value_or(all));
-        if (!cover) fillOpaque({0, 0, target.width(), target.height()}, colors::White);
+        // (a window that shows its alpha: cleared, the desktop showing through where nothing is drawn)
+        if (!cover) fillOpaque({0, 0, target.width(), target.height()}, device_.presentsAlpha() ? colors::Transparent : colors::White);
         list.replay(*this, area, cover.value_or(0));
         if (area) popClip();
     }

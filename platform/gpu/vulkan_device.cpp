@@ -231,6 +231,7 @@ public:
     VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     std::function<void(int*, int*)> drawableSize;
+    bool transparent = false, alphaShown = false;  // (Surface::transparent; the swapchain composites its alpha)
     std::atomic<int> errors{0};  // validation errors reported
 
     // Swapchain.
@@ -323,6 +324,7 @@ public:
         keepOffloadDriverOut();
 #endif
         drawableSize = s.drawableSize;
+        transparent = s.transparent;
         vk.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(s.vulkanGetInstanceProcAddr);
         auto global = [&](const char* name) { return vk.vkGetInstanceProcAddr(VK_NULL_HANDLE, name); };
         vk.vkCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(global("vkCreateInstance"));
@@ -471,6 +473,13 @@ public:
             dpci.poolSizeCount = 1;
             dpci.pPoolSizes = &size;
             vk.vkCreateDescriptorPool(device, &dpci, nullptr, &f.descriptors);
+        }
+        // Whether a transparent window's alpha will be composited, known before its first frame is
+        // drawn (the swapchain is made as that frame is shown): the surface can have it.
+        if (transparent && surface) {
+            VkSurfaceCapabilitiesKHR caps{};
+            vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical, surface, &caps);
+            alphaShown = (caps.supportedCompositeAlpha & ~VkCompositeAlphaFlagsKHR(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)) != 0;
         }
         log("kompoz: GPU: Vulkan on " + deviceName());
         return true;
@@ -792,12 +801,19 @@ public:
         sci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         sci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         sci.preTransform = transform;
-        for (VkCompositeAlphaFlagBitsKHR a : {VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
-                                              VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR})
+        // Opaque, or a transparent window's alpha: premultiplied, as Kompoz draws (else what the
+        // window system makes of it: X11's 32-bit visual and Wayland's alpha formats are premultiplied).
+        std::initializer_list<VkCompositeAlphaFlagBitsKHR> order =
+            transparent ? std::initializer_list<VkCompositeAlphaFlagBitsKHR>{VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+                                                                              VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR}
+                        : std::initializer_list<VkCompositeAlphaFlagBitsKHR>{VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+                                                                              VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR};
+        for (VkCompositeAlphaFlagBitsKHR a : order)
             if (caps.supportedCompositeAlpha & a) {
                 sci.compositeAlpha = a;
                 break;
             }
+        alphaShown = transparent && sci.compositeAlpha != VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         sci.presentMode = VK_PRESENT_MODE_FIFO_KHR;  // vsync, always there
         sci.clipped = VK_FALSE;  // (what is kept in an image: all of it, a part hidden by another window too)
         sci.oldSwapchain = old;
@@ -944,6 +960,7 @@ public:
     }
 
     int swapchainAge() const override { return acquired ? swapAge : 0; }
+    bool presentsAlpha() const override { return alphaShown; }
 
     void surfaceChanged() override {
         if (nativeWindow && !acquired) surfaceCurrent();
