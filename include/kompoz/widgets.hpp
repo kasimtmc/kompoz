@@ -39,6 +39,9 @@ struct ColorScheme {
     // ColorScheme.contentColorFor): onPrimary on primary, onSurface on the surfaces...; none for
     // another color.
     std::optional<Color> contentColorFor(Color background) const;
+    // The surface color at a tonal elevation (Compose's ColorScheme.surfaceColorAtElevation):
+    // surfaceTint over surface, more of it the higher.
+    Color surfaceColorAtElevation(float elevation) const;
 
     // Applies `f` to every color (e.g. to animate a theme change color by color).
     template <class F>
@@ -2271,6 +2274,22 @@ struct OutlinedCardImpl {
 } // namespace detail
 inline constexpr Composable<detail::OutlinedCardImpl> OutlinedCard;
 
+// The tonal elevation of the Surfaces around, added up (Compose's LocalAbsoluteTonalElevation): a
+// surface-colored Surface is tinted by it.
+inline const KompozitionLocal<float> LocalAbsoluteTonalElevation{0.f};
+// false: the Surfaces in it take no tint from their elevation (Compose's LocalTonalElevationEnabled).
+inline const KompozitionLocal<bool> LocalTonalElevationEnabled{true};
+
+// A Surface's look (Compose's Surface parameters): unset colors are the scheme's surface and the
+// content color for it.
+struct SurfaceStyle {
+    Shape shape = RectangleShape;
+    std::optional<Color> color, contentColor;
+    float tonalElevation = 0;   // dp: tints a surface-colored one (LocalAbsoluteTonalElevation)
+    float shadowElevation = 0;  // dp: the shadow under its shape
+    std::optional<BorderStroke> border;
+};
+
 namespace detail {
 void Surface(const Modifier& modifier, const Content& content, CallSite site = CallSite::current());
 void Surface(const Modifier& modifier, Color color, Color contentColor, const Content& content,
@@ -2278,20 +2297,72 @@ void Surface(const Modifier& modifier, Color color, Color contentColor, const Co
 // With a shape: its color in that shape, the content clipped to it (Compose's Surface(shape = …)).
 void Surface(const Modifier& modifier, Color color, Color contentColor, const Shape& shape, const Content& content,
              CallSite site = CallSite::current());
+// What a Surface does when touched: nothing (it takes the touch from what is under it), a click,
+// selecting it, toggling it.
+enum class SurfaceKind { Plain, Clickable, Selectable, Toggleable };
+void surface(SurfaceKind kind, bool value, std::function<void()> onClick, std::function<void(bool)> onCheckedChange, const Modifier& modifier,
+             bool enabled, const SurfaceStyle& style, std::optional<MutableInteractionSource> interactionSource, const Content& content,
+             CallSite site);
+// Compose's four Surfaces: Surface(modifier, shape, color, contentColor, tonalElevation, shadowElevation, border) { … },
+// Surface(onClick, modifier, enabled, …, interactionSource) { … }, Surface(selected, onClick, …) { … } and
+// Surface(checked, onCheckedChange, …) { … }: by their names, or in that order.
 struct SurfaceImpl {
-    using P = Params<names::Modifier, names::Shape, names::Color, names::ContentColor, Block>;
+    using Look = Params<names::Shape, names::Color, names::ContentColor, names::TonalElevation, names::ShadowElevation, names::Border>;
+    template <class P, class... A>
+    static SurfaceStyle style(A&&... args) {
+        SurfaceStyle s;
+        P::template set<names::Shape>(s.shape, args...);
+        if constexpr (P::template given<names::Color, A...>()) s.color = Color(P::template arg<names::Color>(args...));
+        if constexpr (P::template given<names::ContentColor, A...>()) s.contentColor = Color(P::template arg<names::ContentColor>(args...));
+        P::template set<names::TonalElevation>(s.tonalElevation, args...);
+        P::template set<names::ShadowElevation>(s.shadowElevation, args...);
+        if constexpr (P::template given<names::Border, A...>()) s.border = P::template arg<names::Border>(args...);
+        return s;
+    }
+    template <class P, class... A>
+    static std::optional<MutableInteractionSource> source(A&&... args) {
+        if constexpr (P::template given<names::InteractionSource, A...>()) return P::template arg<names::InteractionSource>(args...);
+        else return std::nullopt;
+    }
+    template <class... A>
+    static constexpr SurfaceKind kind() {
+        if constexpr (countOf<names::Checked, A...> + countOf<names::OnCheckedChange, A...> > 0) return SurfaceKind::Toggleable;
+        else if constexpr (countOf<names::Selected, A...> > 0) return SurfaceKind::Selectable;
+        else if constexpr (countOf<names::OnClick, A...> > 0 || startsWithClick<A...>()) return SurfaceKind::Clickable;
+        else if constexpr (sizeof...(A) >= 3 && startsWith<bool, A...>()) {
+            using Second = std::remove_cvref_t<std::tuple_element_t<1, std::tuple<A...>>>;
+            return std::is_invocable_v<Second&, bool> && !std::is_invocable_v<Second&> ? SurfaceKind::Toggleable : SurfaceKind::Selectable;
+        } else return SurfaceKind::Plain;
+    }
     template <class... A>
     static void call(CallSite site, A&&... args) {
-        static_assert(P::check<A...>());
-        Modifier modifier = P::get<names::Modifier>(Modifier{}, args...);
-        if constexpr (!P::given<names::Color, A...>() && !P::given<names::ContentColor, A...>() && !P::given<names::Shape, A...>()) {
-            detail::Surface(modifier, P::block(std::forward<A>(args)...), site);
+        constexpr SurfaceKind k = kind<A...>();
+        if constexpr (k == SurfaceKind::Plain) {
+            using P = Params<names::Modifier, names::Shape, names::Color, names::ContentColor, names::TonalElevation, names::ShadowElevation,
+                             names::Border, Block>;
+            static_assert(P::check<A...>());
+            surface(k, false, {}, {}, P::get<names::Modifier>(Modifier{}, args...), true, style<P>(args...), std::nullopt,
+                    P::block(std::forward<A>(args)...), site);
+        } else if constexpr (k == SurfaceKind::Clickable) {
+            using P = Params<names::OnClick, names::Modifier, names::Enabled, names::Shape, names::Color, names::ContentColor, names::TonalElevation,
+                             names::ShadowElevation, names::Border, names::InteractionSource, Block>;
+            static_assert(P::check<A...>());
+            surface(k, false, std::function<void()>(P::arg<names::OnClick>(args...)), {}, P::get<names::Modifier>(Modifier{}, args...),
+                    P::get<names::Enabled>(true, args...), style<P>(args...), source<P>(args...), P::block(std::forward<A>(args)...), site);
+        } else if constexpr (k == SurfaceKind::Selectable) {
+            using P = Params<names::Selected, names::OnClick, names::Modifier, names::Enabled, names::Shape, names::Color, names::ContentColor,
+                             names::TonalElevation, names::ShadowElevation, names::Border, names::InteractionSource, Block>;
+            static_assert(P::check<A...>());
+            surface(k, bool(P::arg<names::Selected>(args...)), std::function<void()>(P::arg<names::OnClick>(args...)), {},
+                    P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...), style<P>(args...), source<P>(args...),
+                    P::block(std::forward<A>(args)...), site);
         } else {
-            Color color = P::get<names::Color>(colorScheme().surface, args...);
-            Color content = P::get<names::ContentColor>(contentColorFor(color), args...);
-            if constexpr (P::given<names::Shape, A...>())
-                detail::Surface(modifier, color, content, P::get<names::Shape>(Shape(RectangleShape), args...), P::block(std::forward<A>(args)...), site);
-            else detail::Surface(modifier, color, content, P::block(std::forward<A>(args)...), site);
+            using P = Params<names::Checked, names::OnCheckedChange, names::Modifier, names::Enabled, names::Shape, names::Color, names::ContentColor,
+                             names::TonalElevation, names::ShadowElevation, names::Border, names::InteractionSource, Block>;
+            static_assert(P::check<A...>());
+            surface(k, bool(P::arg<names::Checked>(args...)), {}, std::function<void(bool)>(P::arg<names::OnCheckedChange>(args...)),
+                    P::get<names::Modifier>(Modifier{}, args...), P::get<names::Enabled>(true, args...), style<P>(args...), source<P>(args...),
+                    P::block(std::forward<A>(args)...), site);
         }
     }
 };

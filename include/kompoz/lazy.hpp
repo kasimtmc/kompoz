@@ -235,6 +235,12 @@ public:
         }
     }
 
+    // An item's key as the layout keeps it (LazyListItemInfo::key): ReorderableItem(state, key = …)
+    // finds its item by it.
+    template <class K>
+    static size_t hashedKey(const K& key) {
+        return explicitKey(key);
+    }
     int size() const;
     size_t keyAt(int index) const;
     size_t contentTypeAt(int index) const;
@@ -660,6 +666,7 @@ struct LazyStaggeredGridLayoutInfo {
     Size viewportSize;
     float beforeContentPadding = 0, afterContentPadding = 0, mainAxisItemSpacing = 0;
     int lanes = 1;
+    Orientation orientation = Orientation::Vertical;  // the way it scrolls
     friend bool operator==(const LazyStaggeredGridLayoutInfo&, const LazyStaggeredGridLayoutInfo&) = default;
 };
 

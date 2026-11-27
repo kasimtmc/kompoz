@@ -1170,6 +1170,23 @@
   from Windows 10 on). One sent before its Tray is composed waits for it.
 - **A password on the clipboard**: `ClipMetadata.isSensitive`, on Linux for a clip a password manager offers with
   `x-kde-passwordManagerHint` (KeePassXC, Klipper's), so that an app keeps it out of what it records or sends on.
+- **Lists the user reorders by dragging** (Compose has none), with the API of the library Compose apps use for it
+  (Reorderable): `rememberReorderableLazyListState(listState) { from, to -> … }`, `ReorderableItem(state, key = …) {
+  isDragging -> … }` and `Modifier.draggableHandle()` / `longPressDraggableHandle()` (`onDragStarted`,
+  `onDragStopped`, `interactionSource`). The dragged item follows the finger over the others, which glide out of its
+  way (`animateItemModifier`); near an end the list scrolls (`scrollThreshold`, `scrollThresholdPadding`); let go, it
+  settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
+  that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
+  `DragIndicator`.
+- **A lazy item's `zIndex`** orders it among the items, as in Compose (each item's node in the list takes it).
+- **LazyStaggeredGridLayoutInfo's `orientation`**, as Compose's.
+- **Surface as Compose's**, its four forms: plain (it takes the touches on it from what is under it), `onClick`,
+  `selected` + `onClick`, `checked` + `onCheckedChange` (`enabled`, `interactionSource`); `tonalElevation`
+  (`LocalAbsoluteTonalElevation`, `LocalTonalElevationEnabled`, `ColorScheme.surfaceColorAtElevation`),
+  `shadowElevation` and `border`. Its color is the scheme's surface by default (it was the background), and its
+  content gets its minimum size.
+- **Kotlin's lists**: `list.add(index, element)` puts it there (it was added at the end), `SnapshotStateList.removeAt`
+  gives the element it took out, and Compose's `toMutableStateList()`.
 - **Typed text where no field takes it**: what a key types comes, after its `KeyDown`, as a `KeyEventType.Unknown`
   key event (Compose Desktop's typed keys) with `text` and `utf16CodePoint`, to a focused node with no text field;
   every key event has `nativeKeyCode`. On X11 and Wayland dead keys and the Compose key compose through the

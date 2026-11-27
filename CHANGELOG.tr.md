@@ -1209,6 +1209,23 @@
 - **Panodaki parola**: `ClipMetadata.isSensitive`, Linux'ta bir parola yöneticisinin `x-kde-passwordManagerHint` ile
   sunduğu pano içeriği için (KeePassXC, Klipper'ınki); böylece uygulama onu kaydettiklerinin ve ilettiklerinin dışında
   tutar.
+- **Kullanıcının sürükleyerek sıraladığı listeler** (Compose'da yok), Compose uygulamalarının bunun için kullandığı
+  kütüphanenin (Reorderable) API'siyle: `rememberReorderableLazyListState(listState) { from, to -> … }`,
+  `ReorderableItem(state, key = …) { isDragging -> … }` ve `Modifier.draggableHandle()` /
+  `longPressDraggableHandle()` (`onDragStarted`, `onDragStopped`, `interactionSource`). Sürüklenen öğe parmağı
+  ötekilerin üstünde izler, ötekiler yolundan kayarak çekilir (`animateItemModifier`); bir uca yaklaşınca liste kayar
+  (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
+  Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
+  `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **Tembel bir öğenin `zIndex`'i** onu öğeler arasında sıralar, Compose'daki gibi (listedeki her öğenin düğümü onu alır).
+- Compose'daki gibi **LazyStaggeredGridLayoutInfo'nun `orientation`'ı**.
+- **Compose'daki gibi Surface**, dört biçimiyle: düz (üstüne gelen dokunuşları altındakinden alır), `onClick`,
+  `selected` + `onClick`, `checked` + `onCheckedChange` (`enabled`, `interactionSource`); `tonalElevation`
+  (`LocalAbsoluteTonalElevation`, `LocalTonalElevationEnabled`, `ColorScheme.surfaceColorAtElevation`),
+  `shadowElevation` ve `border`. Rengi varsayılan olarak şemanın surface'i (background'uydu); içeriği en küçük
+  boyutunu alır.
+- **Kotlin'in listeleri**: `list.add(index, element)` öğeyi oraya koyar (sona ekliyordu), `SnapshotStateList.removeAt`
+  çıkardığı öğeyi verir; Compose'un `toMutableStateList()`'i.
 - **Alan almayan yazılan metin**: bir tuşun yazdığı, `KeyDown`'ından sonra `text` ve `utf16CodePoint` taşıyan bir
   `KeyEventType.Unknown` tuş olayı olarak (Compose Desktop'un yazılan tuşları), içinde metin alanı olmayan odaklı bir
   düğüme gelir; her tuş olayında `nativeKeyCode` vardır. X11'de ve Wayland'de ölü tuşlar ve Compose tuşu masaüstünün

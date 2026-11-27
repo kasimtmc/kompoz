@@ -493,6 +493,7 @@ struct SupportingContent {};
 struct OnLongClick {};
 struct TrailingContent {};
 struct ShadowElevation {};
+struct TonalElevation {};
 struct Action {};
 struct DismissAction {};
 struct ActionOnNewLine {};
@@ -616,6 +617,17 @@ struct Exit {};
 struct TargetState {};
 struct TransitionSpec {};
 struct ContentKey {};
+// Reorderable lists (reorderable.hpp).
+struct ScrollThresholdPadding {};
+struct ScrollThreshold {};
+struct OnMove {};
+struct OnSettle {};
+struct AnimateItemModifier {};
+struct List {};
+struct DragGestureDetector {};
+struct LazyListState {};
+struct LazyGridState {};
+struct LazyStaggeredGridState {};
 struct InitialOffsetX {};
 struct InitialOffsetY {};
 struct TargetOffsetX {};
@@ -970,6 +982,7 @@ inline constexpr Param<detail::names::FloatingToolbarColors> floatingToolbarColo
 inline constexpr Param<detail::names::LeadingContent> leadingContent;
 inline constexpr Param<detail::names::TrailingContent> trailingContent;
 inline constexpr Param<detail::names::ShadowElevation> shadowElevation;
+inline constexpr Param<detail::names::TonalElevation> tonalElevation;
 inline constexpr Param<detail::names::Action> action;
 inline constexpr Param<detail::names::DismissAction> dismissAction;
 inline constexpr Param<detail::names::ActionOnNewLine> actionOnNewLine;
@@ -1064,6 +1077,16 @@ inline constexpr Param<detail::names::InitialScale> initialScale;
 inline constexpr Param<detail::names::TargetScale> targetScale;
 inline constexpr Param<detail::names::NavigationItems> navigationItems;
 inline constexpr Param<detail::names::Shortcut> shortcut;
+// Reorderable lists (reorderable.hpp).
+inline constexpr Param<detail::names::ScrollThresholdPadding> scrollThresholdPadding;
+inline constexpr Param<detail::names::ScrollThreshold> scrollThreshold;
+inline constexpr Param<detail::names::OnMove> onMove;
+inline constexpr Param<detail::names::OnSettle> onSettle;
+inline constexpr Param<detail::names::AnimateItemModifier> animateItemModifier;
+inline constexpr Param<detail::names::DragGestureDetector> dragGestureDetector;
+inline constexpr Param<detail::names::LazyListState> lazyListState;
+inline constexpr Param<detail::names::LazyGridState> lazyGridState;
+inline constexpr Param<detail::names::LazyStaggeredGridState> lazyStaggeredGridState;
 } // namespace args
 // The names as kompozc writes them (arg::colors = …): all of args', and those that are something
 // else of Kompoz's too (colors: the colors' namespace).
@@ -1076,6 +1099,8 @@ inline constexpr Param<detail::names::Key> key;
 inline constexpr Param<detail::names::ContentType> contentType;
 // (kompoz::items(…) adds a lazy list's items: this is ContextMenuArea's items = { … })
 inline constexpr Param<detail::names::Items> items;
+// (a name too common to take from you: ReorderableColumn's list = …)
+inline constexpr Param<detail::names::List> list;
 // (NavigationSuiteScaffoldDefaults::navigationSuiteType(…) is the function: this is NavigationSuiteItem's and the scaffold's argument)
 inline constexpr Param<detail::names::NavigationSuiteType> navigationSuiteType;
 // (kompoz::colorScheme() and motionScheme() read the theme's: these are MaterialTheme's names)

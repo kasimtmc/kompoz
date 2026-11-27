@@ -160,6 +160,15 @@ OutlinedCard(modifier = Modifier.fillMaxWidth()) {
 }
 ```
 
+`Surface` bunların yapıldığı şeydir: bir renkte bir şekil, içeriğinin rengi ve ona kırpılmış içerik. `tonalElevation`, yüzey renginde olanı şemanın `surfaceTint`'iyle renklendirir; ne kadar yüksekse o kadar çok (çevresindeki Surface'lerinkiyle toplanarak: `LocalAbsoluteTonalElevation`; o rengi `MaterialTheme.colorScheme.surfaceColorAtElevation(…)` verir). `shadowElevation` gölge düşürür; `border = BorderStroke(…)` çerçeve çizer. Bir Surface üstüne gelen dokunuşları altındakinden alır; `Surface(onClick = …)`, `Surface(selected = …, onClick = …)` ve `Surface(checked = …, onCheckedChange = …)` tıklanır, seçilir, açılıp kapanır; `enabled` ve `interactionSource` alırlar:
+
+```kotlin body
+var on by remember { mutableStateOf(false) }
+Surface(checked = on, onCheckedChange = { on = it }, shape = RoundedCornerShape(12.dp), tonalElevation = 3.dp, shadowElevation = 2.dp) {
+    Text(if (on) "Açık" else "Kapalı", modifier = Modifier.padding(16.dp))
+}
+```
+
 ## Seçim kontrolleri
 
 `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, `Slider` ve `RangeSlider`. Durumsuzdurlar: verdiğiniz değeri gösterir ve değişiklikleri bir geri çağrıyla bildirirler.

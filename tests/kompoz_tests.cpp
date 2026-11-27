@@ -32248,6 +32248,230 @@ TEST(previews_register_and_show_alone_or_all_together) {
     }
 }
 
+// ---- Reorderable lists (reorderable.hpp) ----
+
+namespace {
+// A list of 50 dp items whose handles are the items themselves.
+void reorderableList(SnapshotStateList<int> items, int* moves, Modifier listModifier = Modifier().fillMaxSize(), bool longPress = false) {
+    LazyListState list = rememberLazyListState();
+    ReorderableLazyListState reorder = rememberReorderableLazyListState(list, [items, moves](const LazyListItemInfo& from, const LazyListItemInfo& to) {
+        ++*moves;
+        int v = items.items()[size_t(from.index)];
+        items.removeAt(size_t(from.index));
+        items.add(size_t(to.index), v);
+    });
+    LazyColumn(listModifier, kompoz::state = list, [=] {
+        kompoz::items(items.items(), [](int v) { return v; }, [=](int v) {
+            ReorderableItem(reorder, kompoz::arg::key = v, [=](bool isDragging) {
+                Modifier handle = longPress ? Modifier().longPressDraggableHandle() : Modifier().draggableHandle();
+                Box(handle.fillMaxWidth().height(50).testTag("item" + std::to_string(v)), [=] { Text(isDragging ? "sürükleniyor" : "duruyor"); });
+            });
+        });
+    });
+}
+} // namespace
+
+TEST(reorderable_lazy_column_moves_the_dragged_item_past_the_middles) {
+    auto items = mutableStateListOf<int>({1, 2, 3, 4, 5});
+    int moves = 0;
+    KompozTestRule rule([&] { reorderableList(items, &moves); }, {400, 800});
+    KompozHost& host = rule.host();
+    host.pointerDown({200, 25});
+    for (int y = 25; y <= 145; y += 10) {  // its bottom (50 + 120) past item 3's middle (125), not item 4's (175)
+        rule.advanceFrame();
+        host.pointerMove({200, float(y)});
+    }
+    rule.advanceFrame();
+    rule.advanceFrame();
+    CHECK((items.items() == std::vector<int>{2, 3, 1, 4, 5}));
+    CHECK(rule.onNodeWithText("sürükleniyor").exists());
+    rule.advanceTimeBy(600);  // the others glide up into its old place...
+    CHECK(near(rule.onNodeWithTag("item2").bounds().y, 0) && near(rule.onNodeWithTag("item3").bounds().y, 50));
+    // Back up (the touch slop, 8 dp, not followed): its top, 82, still under item 3's middle, 75: it stays.
+    for (int y = 145; y >= 115; y -= 10) {
+        rule.advanceFrame();
+        host.pointerMove({200, float(y)});
+    }
+    rule.advanceFrame();
+    CHECK((items.items() == std::vector<int>{2, 3, 1, 4, 5}));
+    for (int y = 115; y >= 35; y -= 10) {  // its top (2) above item 2's middle (25): first
+        rule.advanceFrame();
+        host.pointerMove({200, float(y)});
+    }
+    rule.advanceFrame();
+    rule.advanceFrame();
+    CHECK((items.items() == std::vector<int>{1, 2, 3, 4, 5}));
+    host.pointerUp({200, 35});
+    rule.waitForIdle();
+    CHECK(!rule.onNodeWithText("sürükleniyor").exists());
+    CHECK(near(rule.onNodeWithTag("item1").bounds().y, 0) && near(rule.onNodeWithTag("item2").bounds().y, 50));
+    testing::RecordingCanvas after;
+    host.draw(after);
+    CHECK(after.layers == 0);  // settled: drawn as the others
+}
+
+TEST(reorderable_item_drawn_over_the_others_while_dragged) {
+    auto items = mutableStateListOf<int>({1, 2, 3});
+    int moves = 0;
+    KompozTestRule rule([&] { reorderableList(items, &moves); }, {400, 800});
+    KompozHost& host = rule.host();
+    host.pointerDown({200, 25});
+    for (int y = 25; y <= 60; y += 5) {
+        rule.advanceFrame();
+        host.pointerMove({200, float(y)});
+    }
+    rule.advanceFrame();
+    // The item's node in the list (its container) is ordered last: drawn and hit over the others.
+    const LayoutNode* item = rule.onNodeWithTag("item1").node()->parent->parent;  // (in the ReorderableItem, in its container)
+    CHECK(item && item->parent && item->parent->childrenInDrawOrder().size() == 3 && item->parent->childrenInDrawOrder().back() == item);
+    host.pointerUp({200, 60});
+    rule.waitForIdle();
+}
+
+TEST(reorderable_lazy_column_scrolls_near_its_end) {
+    auto items = mutableStateListOf<int>({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12});
+    int moves = 0;
+    KompozTestRule rule([&] { reorderableList(items, &moves, Modifier().fillMaxWidth().height(200)); }, {400, 800});
+    KompozHost& host = rule.host();
+    host.pointerDown({200, 25});
+    for (int y = 25; y <= 175; y += 10) {  // into the last 48 dp of the list, and held there
+        rule.advanceFrame();
+        host.pointerMove({200, float(y)});
+    }
+    rule.advanceTimeBy(1500);
+    // The list scrolled on to its end, the item going along with it (moved down each time).
+    CHECK(items.items().back() == 1 || items.items()[items.items().size() - 2] == 1);
+    CHECK(moves >= 8);
+    CHECK(rule.onNodeWithTag("item12").exists());
+    host.pointerUp({200, 175});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithTag("item1").exists());
+}
+
+TEST(reorderable_long_press_handle_lets_a_finger_scroll) {
+    auto items = mutableStateListOf<int>({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    int moves = 0;
+    KompozTestRule rule([&] { reorderableList(items, &moves, Modifier().fillMaxWidth().height(200), true); }, {400, 800});
+    float before = rule.onNodeWithTag("item4").bounds().y;
+    rule.swipe({200, 150}, {200, 50});  // at once: the list scrolls
+    rule.waitForIdle();
+    CHECK(moves == 0 && rule.onNodeWithTag("item4").bounds().y < before - 90);
+    KompozHost& host = rule.host();
+    float top = -1;  // the first item all in view, picked up after a long press
+    for (int v = 1; v <= 10 && top < 0; ++v)
+        if (auto n = rule.onNodeWithTag("item" + std::to_string(v)); n.exists() && n.bounds().y >= 0 && n.bounds().y < 100) top = n.bounds().y;
+    host.pointerDown({200, top + 25});
+    rule.advanceTimeBy(600);  // held: picked up
+    CHECK(rule.onNodeWithText("sürükleniyor").exists());
+    for (float y = top + 25; y <= top + 95; y += 10) {
+        rule.advanceFrame();
+        host.pointerMove({200, y});
+    }
+    rule.advanceFrame();
+    rule.advanceFrame();
+    CHECK(moves >= 1);
+    host.pointerUp({200, top + 95});
+    rule.waitForIdle();
+}
+
+TEST(reorderable_column_settles_the_move_when_let_go) {
+    auto cities = mutableStateOf(std::vector<std::string>{"Ankara", "Bursa", "Çorum", "Denizli"});
+    std::vector<std::pair<int, int>> settled;
+    int steps = 0;
+    KompozTestRule rule([&] {
+        ReorderableColumn(cities.get(), kompoz::onSettle = std::function<void(int, int)>([&](int from, int to) {
+                              settled.push_back({from, to});
+                              auto v = cities.get();
+                              std::string c = v[size_t(from)];
+                              v.erase(v.begin() + from);
+                              v.insert(v.begin() + to, c);
+                              cities.set(v);
+                          }),
+                          kompoz::onMove = std::function<void()>([&] { ++steps; }), kompoz::verticalArrangement = Arrangement::spacedBy(10),
+                          [](int, const std::string& city, bool) {
+                              key(city, [&] {
+                                  ReorderableItem([=](bool isDragging) {
+                                      Box(Modifier().draggableHandle().size(200, 40).testTag(city), [=] { Text(isDragging ? city + " sürükleniyor" : city); });
+                                  });
+                              });
+                          });
+    }, {400, 800});
+    CHECK(near(rule.onNodeWithTag("Çorum").bounds().y, 100));
+    KompozHost& host = rule.host();
+    host.pointerDown({100, 20});
+    for (int y = 20; y <= 130; y += 10) {  // Ankara (40 high) past Bursa's middle (70) and Çorum's (120)
+        rule.advanceFrame();
+        host.pointerMove({100, float(y)});
+    }
+    rule.advanceTimeBy(500);
+    CHECK(rule.onNodeWithText("Ankara sürükleniyor").exists());
+    CHECK(steps == 2 && settled.empty());  // shown moved; the list itself not yet
+    CHECK(near(rule.onNodeWithTag("Bursa").bounds().y, 0) && near(rule.onNodeWithTag("Çorum").bounds().y, 50));
+    host.pointerUp({100, 130});
+    rule.waitForIdle();
+    CHECK((settled == std::vector<std::pair<int, int>>{{0, 2}}));
+    CHECK((cities.get() == std::vector<std::string>{"Bursa", "Çorum", "Ankara", "Denizli"}));
+    CHECK(near(rule.onNodeWithTag("Ankara").bounds().y, 100) && near(rule.onNodeWithTag("Denizli").bounds().y, 150));
+    CHECK(rule.onNodeWithText("Ankara").exists());
+}
+
+TEST(reorderable_lists_reversed_and_right_to_left) {
+    // A reversed list (a chat's): item 1 at the bottom, dragged up it goes on to item 2's place.
+    auto items = mutableStateListOf<int>({1, 2, 3, 4, 5});
+    auto row = mutableStateListOf<int>({1, 2, 3, 4});
+    auto move = [](SnapshotStateList<int> list) {
+        return [list](const LazyListItemInfo& from, const LazyListItemInfo& to) {
+            int v = list.items()[size_t(from.index)];
+            list.removeAt(size_t(from.index));
+            list.add(size_t(to.index), v);
+        };
+    };
+    KompozTestRule rule([&] {
+        Column(Modifier().fillMaxSize(), [=] {
+            LazyListState list = rememberLazyListState();
+            ReorderableLazyListState reorder = rememberReorderableLazyListState(list, move(items));
+            LazyColumn(Modifier().fillMaxWidth().height(250), kompoz::state = list, kompoz::reverseLayout = true, [=] {
+                kompoz::items(items.items(), [](int v) { return v; }, [=](int v) {
+                    ReorderableItem(reorder, kompoz::arg::key = v, [=] {
+                        Box(Modifier().draggableHandle().fillMaxWidth().height(50).testTag("satır" + std::to_string(v)));
+                    });
+                });
+            });
+            // Right to left: item 1 at the right; dragged left (its way on) it goes past item 2.
+            KompozitionLocalProvider({LocalLayoutDirection.provides(LayoutDirection::Rtl)}, [=] {
+                LazyListState rowState = rememberLazyListState();
+                ReorderableLazyListState reorderRow = rememberReorderableLazyListState(rowState, move(row));
+                LazyRow(Modifier().fillMaxWidth().height(50), kompoz::state = rowState, [=] {
+                    kompoz::items(row.items(), [](int v) { return v; }, [=](int v) {
+                        ReorderableItem(reorderRow, kompoz::arg::key = v, [=] {
+                            Box(Modifier().draggableHandle().width(100).fillMaxHeight().testTag("sütun" + std::to_string(v)));
+                        });
+                    });
+                });
+            });
+        });
+    }, {400, 800});
+    KompozHost& host = rule.host();
+    CHECK(near(rule.onNodeWithTag("satır1").bounds().y, 200) && near(rule.onNodeWithTag("sütun1").bounds().x, 300));
+    auto drag = [&](Offset from, Offset by) {
+        host.pointerDown(from);
+        for (int k = 1; k <= 10; ++k) {
+            rule.advanceFrame();
+            host.pointerMove({from.x + by.x * float(k) / 10, from.y + by.y * float(k) / 10});
+        }
+        rule.advanceFrame();
+        rule.advanceFrame();
+        host.pointerUp({from.x + by.x, from.y + by.y});
+        rule.waitForIdle();
+    };
+    drag({200, 225}, {0, -70});
+    CHECK((items.items() == std::vector<int>{2, 1, 3, 4, 5}));
+    CHECK(near(rule.onNodeWithTag("satır1").bounds().y, 150));
+    drag({350, 275}, {-90, 0});
+    CHECK((row.items() == std::vector<int>{2, 1, 3, 4}));
+    CHECK(near(rule.onNodeWithTag("sütun1").bounds().x, 200));
+}
+
 int main(int argc, char** argv) {
     detail::setLayoutCheck(true);
     detail::setKeepCheck(true);

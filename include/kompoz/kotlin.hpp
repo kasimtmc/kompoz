@@ -1481,6 +1481,15 @@ template <class C, class... A>
 auto toMutableList(const C& c, A&&... args) {
     KOMPOZ_KT_OWN(toMutableList()) return std::vector<detail::Element<C>>(std::begin(c), std::end(c));
 }
+// Compose's Collection.toMutableStateList(): a SnapshotStateList with its elements.
+template <class C, class... A>
+auto toMutableStateList(const C& c, A&&... args) {
+    KOMPOZ_KT_OWN(toMutableStateList()) {
+        SnapshotStateList<detail::Element<C>> list;
+        list.update([&](auto& v) { v.assign(std::begin(c), std::end(c)); });
+        return list;
+    }
+}
 template <class T, class F, class... A>
 auto let(const T& c, F&& f, A&&... args) {
     KOMPOZ_KT_OWN(let(f)) return f(c);
@@ -1824,6 +1833,13 @@ decltype(auto) add(C& c, X&& x, A&&... args) {
         c.push_back(std::forward<X>(x));
         return bool(true);
     }
+}
+// add(index, element): put in there, the ones from there on after it.
+template <class C, class I, class X>
+    requires std::integral<std::remove_cvref_t<I>>
+void add(C& c, I index, X&& x) {
+    if constexpr (requires { c.add(size_t(index), std::forward<X>(x)); }) c.add(size_t(index), std::forward<X>(x));
+    else c.insert(c.begin() + std::ptrdiff_t(index), std::forward<X>(x));
 }
 template <class C, class X, class... A>
 decltype(auto) addAll(C& c, const X& more, A&&... args) {

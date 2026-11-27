@@ -460,6 +460,17 @@ const AnimateItemElement* animatedItem(LayoutNode& item, LayoutNode** carrier) {
     return nullptr;
 }
 
+// An item's container node is drawn (and hit) in the zIndex its content was given: Compose's lazy
+// items have no container, so an item's Modifier.zIndex orders it among the items (the one being
+// dragged over the others).
+float itemZIndex(const LayoutNode& container) {
+    float z = 0;
+    for (const auto* content : container.children)
+        for (const auto& e : content->modifier.elements())
+            if (auto* zi = dynamic_cast<const ZIndexElement*>(e.get())) z = std::max(z, zi->zIndex);
+    return z;
+}
+
 // Every item gets one container node (laid out by detail::stackPolicy), so the list maps items
 // to children one to one.
 
@@ -575,10 +586,11 @@ MeasurePolicy listPolicy(LazyListState state, bool vertical, LazyListOptions opt
         auto placeChild = [&](int j, float main) {
             main = onScreen(main, mains[size_t(j)]);
             float cross = crossBefore + (space - crosses[size_t(j)]) / 2 * (1 + options.crossAxisBias);
+            LayoutNode& child = *node.children[size_t(j)];
             if (vertical)
-                node.children[size_t(j)]->place(cross, main);
+                child.place(cross, main, itemZIndex(child));
             else
-                node.children[size_t(j)]->place(main, cross);
+                child.place(main, cross, itemZIndex(child));
         };
         for (int k = 0; k < range; ++k) {
             int j = childAt(k);
@@ -953,7 +965,7 @@ void gridRow(const LazyGridScope& grid, int from, int to, int columns, float spa
                     float cw = cell * float(span) + spacing * float(span - 1);
                     Size s = n.children[k]->measure(vertical ? Constraints{cw, cw, 0, kInfinity} : Constraints{0, kInfinity, cw, cw});
                     float at = float(column) * (cell + spacing);
-                    n.children[k]->place(vertical ? at : 0, vertical ? 0 : at);
+                    n.children[k]->place(vertical ? at : 0, vertical ? 0 : at, itemZIndex(*n.children[k]));
                     across = std::max(across, vertical ? s.height : s.width);
                     if (!detail::isProbeMeasure())  // for the state's layoutInfo
                         state->cells[from + int(k)] = {keys[k], column, at, cw, vertical ? s.height : s.width};
@@ -1223,8 +1235,9 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
         float total = (n ? *std::max_element(ends.begin(), ends.end()) - mainGap : mainPadStart) + mainPadEnd;
         for (size_t k = 0; k < node.children.size() && k < d->nodes.size(); ++k) {
             const Place& p = places[size_t(d->nodes[k])];
-            if (horizontal) node.children[k]->place(p.main, p.cross);
-            else node.children[k]->place(p.cross, p.main);
+            LayoutNode& child = *node.children[k];
+            if (horizontal) child.place(p.main, p.cross, itemZIndex(child));
+            else child.place(p.cross, p.main, itemZIndex(child));
         }
         if (!probe) {
             // The items in view must be composed; when they aren't, compose them and half a view
@@ -1297,6 +1310,7 @@ void staggeredGrid(bool horizontal, StaggeredGridCells lanesOf, const Modifier& 
             info.viewportSize = horizontal ? Size{view, across} : Size{across, view};
             info.beforeContentPadding = mainPadStart, info.afterContentPadding = mainPadEnd, info.mainAxisItemSpacing = mainGap;
             info.lanes = lanes;
+            info.orientation = horizontal ? Orientation::Horizontal : Orientation::Vertical;
             for (int i = visible.first; i < visible.second; ++i) {
                 const Place& p = places[size_t(i)];
                 if (!(p.main < top + view && p.main + p.length > top)) continue;

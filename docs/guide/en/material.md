@@ -160,6 +160,15 @@ OutlinedCard(modifier = Modifier.fillMaxWidth()) {
 }
 ```
 
+`Surface` is what they are made of: a shape in a color, its content's color and the content clipped to it. `tonalElevation` tints a surface-colored one with the scheme's `surfaceTint`, more the higher it is (and the Surfaces around it, added up: `LocalAbsoluteTonalElevation`; `MaterialTheme.colorScheme.surfaceColorAtElevation(…)` gives that color); `shadowElevation` casts a shadow; `border = BorderStroke(…)` outlines it. A Surface takes the touches on it from what is under it; `Surface(onClick = …)`, `Surface(selected = …, onClick = …)` and `Surface(checked = …, onCheckedChange = …)` are clicked, selected and toggled, with `enabled` and `interactionSource`:
+
+```kotlin body
+var on by remember { mutableStateOf(false) }
+Surface(checked = on, onCheckedChange = { on = it }, shape = RoundedCornerShape(12.dp), tonalElevation = 3.dp, shadowElevation = 2.dp) {
+    Text(if (on) "On" else "Off", modifier = Modifier.padding(16.dp))
+}
+```
+
 ## Selection controls
 
 `Checkbox`, `TriStateCheckbox`, `RadioButton`, `Switch`, `Slider` and `RangeSlider`. They are stateless: they show the value you pass and report changes through a callback.

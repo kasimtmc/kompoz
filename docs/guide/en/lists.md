@@ -99,6 +99,64 @@ LazyColumn(modifier = Modifier.fillMaxSize()) {
 }
 ```
 
+### Reordering by dragging
+
+Compose itself has no list the user reorders by dragging; Kompoz has the API of the library Compose apps use for it ([Reorderable](https://github.com/Calvin-LL/Reorderable)). `rememberReorderableLazyListState(listState) { from, to -> … }` is told each time the dragged item passes the middle of another one: move yours there. Each item's content goes in a `ReorderableItem(state, key = …)`, with the item's key, and `Modifier.draggableHandle()` in it starts the drag:
+
+```kotlin body
+val songs = remember { mutableStateListOf("Intro", "Verse", "Chorus", "Outro") }
+val listState = rememberLazyListState()
+val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+    songs.add(to.index, songs.removeAt(from.index))
+}
+LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+    items(songs, key = { it }) { song ->
+        ReorderableItem(reorderState, key = song) { isDragging ->
+            val elevation by animateDpAsState(if (isDragging) 8.dp else 0.dp)
+            Surface(shadowElevation = elevation) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(song, modifier = Modifier.weight(1f).padding(16.dp))
+                    Icon(Icons.Default.DragHandle, contentDescription = "Reorder", modifier = Modifier.draggableHandle())
+                }
+            }
+        }
+    }
+}
+```
+
+The dragged item follows the finger, drawn over the others, which glide out of its way (`Modifier.animateItem()`: give `animateItemModifier = …` for other animations, or `Modifier` for none); let go, it settles into its place. Dragged near an end of the list, within `scrollThreshold` (48 dp) of it, the list scrolls; `scrollThresholdPadding = …` keeps that area off what covers the list's ends (its `contentPadding` under the system bars). `isDragging` is true while the item is dragged, and `reorderState.isAnyItemDragging` while any is.
+
+| Handle | Starts dragging |
+|---|---|
+| `Modifier.draggableHandle()` | When pressed and moved: a handle icon. |
+| `Modifier.longPressDraggableHandle()` | After a long press, so that a finger still scrolls the list: the whole item, as a launcher's icons. |
+
+Both take `enabled`, `interactionSource` (it hears the drag), `onDragStarted = { startedPosition -> … }` and `onDragStopped = { … }`, a place for haptic feedback. `onMove` may be a `suspend` lambda (one that saves the new order): the next move waits for it. `ReorderableItem(…, enabled = false)` is never moved past.
+
+A short list that isn't lazy goes in a `ReorderableColumn` (or `ReorderableRow`): the order changes on the screen while dragging, `onMove` is called at each step, and `onSettle(fromIndex, toIndex)` gets the move once the item is let go. Each element's `ReorderableItem` goes in a `key` of its own:
+
+```kotlin body
+var cities by remember { mutableStateOf(listOf("Ankara", "Bursa", "Çorum")) }
+ReorderableColumn(list = cities, onSettle = { from, to -> val moved = cities.toMutableList(); moved.add(to, moved.removeAt(from)); cities = moved },
+                  verticalArrangement = Arrangement.spacedBy(8.dp)) { _, city, isDragging ->
+    key(city) {
+        ReorderableItem {
+            Card(modifier = Modifier.fillMaxWidth().draggableHandle()) { Text(city, modifier = Modifier.padding(16.dp)) }
+        }
+    }
+}
+```
+
+For accessibility services and the keyboard, give each item actions that move it (see [Accessibility](accessibility.md)):
+
+```kotlin body
+#! val songs = remember { mutableStateListOf("Intro", "Verse") }
+#! val index = 1
+Text(songs[index], modifier = Modifier.semantics {
+    customActions = listOf(CustomAccessibilityAction("Move up") { songs.add(index - 1, songs.removeAt(index)); true })
+})
+```
+
 ## Controlling the scroll position
 
 `rememberLazyListState()` gives a `LazyListState` to pass as `state`. Read where the list is with `firstVisibleItemIndex` (observable) and `layoutInfo`; move it with `scrollToItem` or, in a coroutine, `animateScrollToItem`:

@@ -99,6 +99,64 @@ LazyColumn(modifier = Modifier.fillMaxSize()) {
 }
 ```
 
+### Sürükleyerek sıralamak
+
+Compose'un kendisinde kullanıcının sürükleyerek sıraladığı bir liste yoktur; Kompoz'da Compose uygulamalarının bunun için kullandığı kütüphanenin ([Reorderable](https://github.com/Calvin-LL/Reorderable)) API'si vardır. `rememberReorderableLazyListState(listState) { from, to -> … }`, sürüklenen öğe bir başkasının ortasını her geçtiğinde çağrılır: kendi listenizdekini oraya taşıyın. Her öğenin içeriği, öğenin anahtarıyla bir `ReorderableItem(state, key = …)` içine girer; içindeki `Modifier.draggableHandle()` sürüklemeyi başlatır:
+
+```kotlin body
+val songs = remember { mutableStateListOf("Intro", "Verse", "Chorus", "Outro") }
+val listState = rememberLazyListState()
+val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+    songs.add(to.index, songs.removeAt(from.index))
+}
+LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+    items(songs, key = { it }) { song ->
+        ReorderableItem(reorderState, key = song) { isDragging ->
+            val elevation by animateDpAsState(if (isDragging) 8.dp else 0.dp)
+            Surface(shadowElevation = elevation) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(song, modifier = Modifier.weight(1f).padding(16.dp))
+                    Icon(Icons.Default.DragHandle, contentDescription = "Sırala", modifier = Modifier.draggableHandle())
+                }
+            }
+        }
+    }
+}
+```
+
+Sürüklenen öğe parmağı izler ve ötekilerin üstünde çizilir; ötekiler yolundan kayarak çekilir (`Modifier.animateItem()`: başka bir canlandırma için `animateItemModifier = …`, hiçbiri için `Modifier` verin). Bırakılınca yerine oturur. Listenin bir ucuna, ona `scrollThreshold` (48 dp) kadar yaklaşınca liste kayar; `scrollThresholdPadding = …` bu alanı listenin uçlarını örtenlerin (sistem çubuklarının altındaki `contentPadding`'inin) dışında tutar. `isDragging` öğe sürüklenirken, `reorderState.isAnyItemDragging` herhangi biri sürüklenirken doğrudur.
+
+| Tutamak | Sürüklemeyi başlatır |
+|---|---|
+| `Modifier.draggableHandle()` | Basılıp hareket ettirilince: bir tutamak simgesi. |
+| `Modifier.longPressDraggableHandle()` | Uzun basıştan sonra; böylece parmak listeyi yine kaydırır: bir başlatıcının simgeleri gibi öğenin tamamı. |
+
+İkisi de `enabled`, `interactionSource` (sürüklemeyi duyar), `onDragStarted = { startedPosition -> … }` ve `onDragStopped = { … }` alır; dokunsal geri bildirim için bir yer. `onMove` bir `suspend` lambda olabilir (yeni sırayı kaydeden): sonraki taşıma onu bekler. `ReorderableItem(…, enabled = false)` öğesinin üstünden hiç geçilmez.
+
+Tembel olmayan kısa bir liste `ReorderableColumn`'a (ya da `ReorderableRow`'a) girer: sürüklerken sıra ekranda değişir, her adımda `onMove` çağrılır ve öğe bırakılınca taşıma `onSettle(fromIndex, toIndex)`'e gelir. Her elemanın `ReorderableItem`'ı kendi `key`'i içine girer:
+
+```kotlin body
+var cities by remember { mutableStateOf(listOf("Ankara", "Bursa", "Çorum")) }
+ReorderableColumn(list = cities, onSettle = { from, to -> val moved = cities.toMutableList(); moved.add(to, moved.removeAt(from)); cities = moved },
+                  verticalArrangement = Arrangement.spacedBy(8.dp)) { _, city, isDragging ->
+    key(city) {
+        ReorderableItem {
+            Card(modifier = Modifier.fillMaxWidth().draggableHandle()) { Text(city, modifier = Modifier.padding(16.dp)) }
+        }
+    }
+}
+```
+
+Erişilebilirlik hizmetleri ve klavye için her öğeye onu taşıyan eylemler verin (bkz. [Erişilebilirlik](accessibility.md)):
+
+```kotlin body
+#! val songs = remember { mutableStateListOf("Intro", "Verse") }
+#! val index = 1
+Text(songs[index], modifier = Modifier.semantics {
+    customActions = listOf(CustomAccessibilityAction("Yukarı taşı") { songs.add(index - 1, songs.removeAt(index)); true })
+})
+```
+
 ## Kaydırma konumunu yönetmek
 
 `rememberLazyListState()`, `state` olarak vereceğiniz bir `LazyListState` verir. Listenin nerede olduğunu `firstVisibleItemIndex` (gözlemlenebilir) ve `layoutInfo` ile okuyun; onu `scrollToItem` ile ya da bir coroutine içinde `animateScrollToItem` ile hareket ettirin:

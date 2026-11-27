@@ -2221,21 +2221,62 @@ void detail::OutlinedCard(std::function<void()> onClick, const Modifier& modifie
     card(CardKind::Outlined, std::move(onClick), modifier, style, content);
 }
 
-void detail::Surface(const Modifier& modifier, const Content& content, CallSite site) {
+Color ColorScheme::surfaceColorAtElevation(float elevation) const {
+    if (elevation == 0) return surface;
+    float alpha = (4.5f * std::log(elevation + 1) + 2) / 100;
+    return surfaceTint.copy(alpha).compositeOver(surface);
+}
+
+void detail::surface(SurfaceKind kind, bool value, std::function<void()> onClick, std::function<void(bool)> onCheckedChange,
+                     const Modifier& modifier, bool enabled, const SurfaceStyle& style, std::optional<MutableInteractionSource> interactionSource,
+                     const Content& content, CallSite site) {
+    KompozableScope scope(site);
     const ColorScheme& cs = colorScheme();
-    detail::Surface(modifier, cs.background, cs.onBackground, content, site);
+    Color color = style.color.value_or(cs.surface);
+    Color contentColor = style.contentColor ? *style.contentColor : kompoz::contentColorFor(color);
+    float elevation = LocalAbsoluteTonalElevation.current() + style.tonalElevation;
+    Color background = color == cs.surface && LocalTonalElevationEnabled.current() ? cs.surfaceColorAtElevation(elevation) : color;
+    MutableInteractionSource own = remember([] { return MutableInteractionSource(); });
+    Modifier m = kind == SurfaceKind::Plain ? modifier : modifier.minimumInteractiveComponentSize();
+    if (style.shadowElevation > 0) m = m.shadow(style.shadowElevation, style.shape, false);
+    if (style.border) m = m.border(*style.border, style.shape);
+    m = m.background(background, style.shape).clip(style.shape);
+    ClickableOptions options{.enabled = enabled, .interactionSource = interactionSource ? *interactionSource : own};
+    switch (kind) {
+    case SurfaceKind::Plain:  // (touches on it don't reach what is under it)
+        m = m.pointerInput(0, [](PointerInputScope&) -> Task { co_return; });
+        break;
+    case SurfaceKind::Clickable: m = m.clickable(std::move(onClick), options); break;
+    case SurfaceKind::Selectable: m = m.selectable(value, std::move(onClick), SemanticsRole::None, options); break;
+    case SurfaceKind::Toggleable: m = m.toggleable(value, std::move(onCheckedChange), SemanticsRole::None, options); break;
+    }
+    KompozitionLocalProvider({LocalContentColor.provides(contentColor), LocalAbsoluteTonalElevation.provides(elevation)}, [&] {
+        // Its content gets its minimum size too (Compose's Box(propagateMinConstraints = true)).
+        layoutNode(CallSite::current(), m,
+                   [](LayoutNode& node, const Constraints& c) {
+                       Size own{c.minWidth, c.minHeight};
+                       for (auto* child : node.children) {
+                           Size s = child->measure(c);
+                           child->place(0, 0);
+                           own = {std::max(own.width, s.width), std::max(own.height, s.height)};
+                       }
+                       return c.constrain(own);
+                   },
+                   content);
+    });
+}
+
+void detail::Surface(const Modifier& modifier, const Content& content, CallSite site) {
+    surface(SurfaceKind::Plain, false, {}, {}, modifier, true, {}, std::nullopt, content, site);
 }
 void detail::Surface(const Modifier& modifier, Color color, Color contentColor, const Content& content, CallSite site) {
-    KompozableScope scope(site);
-    KompozitionLocalProvider({LocalContentColor.provides(contentColor)},
-                             [&] { detail::Box(modifier.background(color), content); });
+    surface(SurfaceKind::Plain, false, {}, {}, modifier, true, {.color = color, .contentColor = contentColor}, std::nullopt, content, site);
 }
 
 void detail::Surface(const Modifier& modifier, Color color, Color contentColor, const Shape& shape, const Content& content,
                      CallSite site) {
-    KompozableScope scope(site);
-    KompozitionLocalProvider({LocalContentColor.provides(contentColor)},
-                             [&] { detail::Box(modifier.background(color, shape).clip(shape), content); });
+    surface(SurfaceKind::Plain, false, {}, {}, modifier, true, {.shape = shape, .color = color, .contentColor = contentColor}, std::nullopt,
+            content, site);
 }
 
 void detail::HorizontalDivider(const Modifier& modifier, float thickness, std::optional<Color> color, CallSite site) {

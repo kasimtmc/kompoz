@@ -2112,6 +2112,14 @@ public:
     Modifier draggable2D(const Draggable2DState& state) const;
     // Compose's paneExpansionDraggable(state, interactionSource): a pane scaffold's drag handle (adaptive.hpp).
     Modifier paneExpansionDraggable(const PaneExpansionState& state, std::optional<MutableInteractionSource> interactionSource = {}) const;
+    // A reorderable item's handle (reorderable.hpp): pressed and moved, it drags the
+    // ReorderableItem it is in (Reorderable's draggableHandle(enabled = …, interactionSource = …,
+    // onDragStarted = { startedPosition -> … }, onDragStopped = { … }, dragGestureDetector = …));
+    // longPressDraggableHandle after a long press, so that a finger still scrolls the list.
+    template <class... A>
+    Modifier draggableHandle(A&&... args) const;
+    template <class... A>
+    Modifier longPressDraggableHandle(A&&... args) const;
     // Scrolls the state in any direction (Compose's Modifier.scrollable2D): a drag past the
     // touch slop, a fling after it (the scrollables' decay, axis by axis until an end), the
     // mouse wheel (and its sideways one). The gesture is consumed; a press stops a fling.

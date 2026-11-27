@@ -3621,6 +3621,129 @@ TEST(navigation_as_compose_writes_it) {
     CHECK(rule.onNodeWithText("a 4").exists());
 }
 
+// A playlist the user reorders by dragging its handles, as Compose apps write it with the
+// Reorderable library; and a short list in a ReorderableColumn, its move given when let go.
+@Kompozable
+fun Playlist() {
+    val songs = remember { listOf("Bir", "İki", "Üç", "Dört").toMutableStateList() }
+    var log by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        songs.add(to.index, songs.removeAt(from.index))
+    }
+    Column {
+        Text("sıra: ${songs.joinToString(",")} $log")
+        LazyColumn(state = listState, modifier = Modifier.height(400.dp)) {
+            items(songs, key = { it }) { song ->
+                ReorderableItem(reorderState, key = song) { isDragging ->
+                    Row(modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                        Text(if (isDragging) "$song taşınıyor" else song, modifier = Modifier.weight(1f))
+                        Box(modifier = Modifier.size(50.dp).testTag("tutamak $song")
+                            .draggableHandle(onDragStarted = { log = "başladı" }, onDragStopped = { log = "bitti" }))
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST(reorderable_lazy_list_as_compose_apps_write_it) {
+    KompozTestRule rule([] { Playlist(); }, {400, 800});
+    Rect handle = rule.onNodeWithTag("tutamak Bir").bounds();
+    KompozHost& host = rule.host();
+    float x = handle.x + 25, y = handle.y + 25;
+    host.pointerDown({x, y});
+    for (int d = 0; d <= 70; d += 10) {  // past İki's middle
+        rule.advanceFrame();
+        host.pointerMove({x, y + float(d)});
+    }
+    rule.advanceFrame();
+    rule.advanceFrame();
+    CHECK(rule.onNodeWithText("sıra: İki,Bir,Üç,Dört başladı").exists());
+    CHECK(rule.onNodeWithText("Bir taşınıyor").exists());
+    host.pointerUp({x, y + 70});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("sıra: İki,Bir,Üç,Dört bitti").exists() && rule.onNodeWithText("Bir").exists());
+}
+
+@Kompozable
+fun CityOrder() {
+    var cities by remember { mutableStateOf(listOf("Ankara", "Bursa", "Çorum")) }
+    var steps by remember { mutableStateOf(0) }
+    Column {
+        Text("şehirler: ${cities.joinToString(",")} $steps")
+        ReorderableColumn(list = cities, onSettle = { from, to -> val moved = cities.toMutableList(); moved.add(to, moved.removeAt(from)); cities = moved },
+                          onMove = { steps++ }, verticalArrangement = Arrangement.spacedBy(10.dp)) { _, city, isDragging ->
+            key(city) {
+                ReorderableItem {
+                    Text(if (isDragging) "$city taşınıyor" else city, modifier = Modifier.height(40.dp).fillMaxWidth().draggableHandle())
+                }
+            }
+        }
+    }
+}
+
+TEST(reorderable_column_as_compose_apps_write_it) {
+    KompozTestRule rule([] { CityOrder(); }, {400, 800});
+    Rect ankara = rule.onNodeWithText("Ankara").bounds();
+    KompozHost& host = rule.host();
+    float x = ankara.x + 50, y = ankara.y + 20;
+    host.pointerDown({x, y});
+    for (int d = 0; d <= 40; d += 10) {  // past Bursa's middle
+        rule.advanceFrame();
+        host.pointerMove({x, y + float(d)});
+    }
+    rule.advanceFrame();
+    CHECK(rule.onNodeWithText("şehirler: Ankara,Bursa,Çorum 1").exists() && rule.onNodeWithText("Ankara taşınıyor").exists());
+    host.pointerUp({x, y + 40});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("şehirler: Bursa,Ankara,Çorum 1").exists());
+}
+
+// Compose's four Surfaces: one under a tap takes it from what is under it (not from what it is in); one clicked, selected or
+// toggled; a tonal elevation's tint, a shadow and a border; its content given its minimum size.
+@Kompozable
+fun Surfaces() {
+    var taps by remember { mutableStateOf(0) }
+    var under by remember { mutableStateOf(0) }
+    var picked by remember { mutableStateOf(false) }
+    var on by remember { mutableStateOf(false) }
+    Column {
+        Text("dokunuş $taps · alttaki $under · seçili $picked · açık $on")
+        Box(modifier = Modifier.size(100.dp)) {
+            Box(modifier = Modifier.matchParentSize().clickable { under++ })  // under it, not around it
+            Surface(modifier = Modifier.size(60.dp).testTag("düz")) { }
+        }
+        Surface(onClick = { taps++ }, modifier = Modifier.testTag("tıklanır"), shape = RoundedCornerShape(8.dp)) { Text("tıkla") }
+        Surface(selected = picked, onClick = { picked = !picked }) { Text("seç") }
+        Surface(checked = on, onCheckedChange = { on = it }) { Text("aç") }
+        Surface(tonalElevation = 6.dp, shadowElevation = 4.dp, border = BorderStroke(1.dp, Color.Red),
+                modifier = Modifier.size(80.dp, 40.dp).testTag("yükseltilmiş")) {
+            Box(modifier = Modifier.testTag("içi"))
+        }
+    }
+}
+
+TEST(surfaces_as_compose_writes_them) {
+    KompozTestRule rule([] { Surfaces(); }, {400, 800});
+    rule.onNodeWithTag("düz").performClick();
+    rule.onNodeWithText("tıkla").performClick();
+    rule.onNodeWithText("seç").performClick();
+    rule.onNodeWithText("aç").performClick();
+    CHECK(rule.onNodeWithText("dokunuş 1 · alttaki 0 · seçili true · açık true").exists());
+    CHECK(rule.onNodeWithTag("tıklanır").bounds().height >= 48);  // a touch target's least room
+    Rect inside = rule.onNodeWithTag("içi").bounds();
+    CHECK(inside.width == 80 && inside.height == 40);  // its minimum size, the Surface's
+    testing::RecordingCanvas canvas;
+    rule.host().draw(canvas);
+    CHECK(!canvas.elevationShadows.empty());
+    CHECK(std::find(canvas.strokeColors.begin(), canvas.strokeColors.end(), Color::Red) != canvas.strokeColors.end());
+    ColorScheme cs = lightColorScheme();  // (the default)
+    Color tinted = cs.surfaceColorAtElevation(6);
+    CHECK(tinted != cs.surface);
+    CHECK(std::find(canvas.rectColors.begin(), canvas.rectColors.end(), tinted) != canvas.rectColors.end());
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

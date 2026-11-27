@@ -111,8 +111,11 @@ public:
     void set(size_t index, T item) const {
         state_.update([&](auto& v) { v.at(index) = std::move(item); });
     }
-    void removeAt(size_t index) const {
+    // The item taken out (Kotlin's removeAt).
+    T removeAt(size_t index) const {
+        T removed = items().at(index);
         state_.update([&](auto& v) { v.erase(v.begin() + std::ptrdiff_t(index)); });
+        return removed;
     }
     template <class Pred>
     void removeIf(Pred pred) const {

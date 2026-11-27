@@ -84,9 +84,70 @@ fun StaggeredTile(index: Int) {
     }
 }
 
+// Lists the user reorders by dragging (rememberReorderableLazyListState, ReorderableItem):
+// a task by its handle, or anywhere on it after a long press; near an end the list scrolls.
+// Above them a ReorderableRow, sorted when a chip is let go.
+@Kompozable
+fun ReorderScreen(modifier: Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val haptics = LocalHapticFeedback.current
+    val tasks = remember { List(40) { it }.toMutableStateList() }
+    var times by remember { mutableStateOf(listOf("Sabah", "Öğle", "Akşam", "Gece")) }
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        tasks.add(to.index - 1, tasks.removeAt(from.index - 1))  // (item 0 is the header)
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+    }
+    LazyColumn(modifier = modifier, state = listState, contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 88.dp),
+               verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        item(key = "başlık") {
+            Column(modifier = Modifier.padding(0.dp, 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Çipler (ReorderableRow): bırakınca sıralanır · ${times.joinToString(" → ")}",
+                     color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                ReorderableRow(list = times, onSettle = { from, to -> val moved = times.toMutableList(); moved.add(to, moved.removeAt(from)); times = moved },
+                               onMove = { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) },
+                               horizontalArrangement = Arrangement.spacedBy(8.dp)) { _, time, isDragging ->
+                    key(time) {
+                        ReorderableItem {
+                            Box(modifier = Modifier.draggableHandle()
+                                    .background(if (isDragging) cs.primary else cs.secondaryContainer, RoundedCornerShape(16.dp))
+                                    .padding(14.dp, 8.dp)) {
+                                Text(time, color = if (isDragging) cs.onPrimary else cs.onSecondaryContainer,
+                                     style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                }
+                Text("Görevler: tutamaktan sürükleyin ya da göreve uzun basın; uçlara yaklaşınca liste kayar",
+                     color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        items(tasks, key = { it }) { task ->
+            ReorderableItem(reorderState, key = task) { isDragging ->
+                val elevation by animateDpAsState(if (isDragging) 8.dp else 0.dp)
+                Surface(shape = RoundedCornerShape(12.dp), color = if (isDragging) cs.surfaceContainerHighest else cs.surfaceContainer,
+                        shadowElevation = elevation,
+                        modifier = Modifier.fillMaxWidth().longPressDraggableHandle(
+                            onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) })) {
+                    Row(modifier = Modifier.padding(12.dp, 8.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(modifier = Modifier.size(32.dp).background(hueColor(task), CircleShape), contentAlignment = Alignment.Center) {
+                            Text("${task + 1}", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        }
+                        Text("Görev ${task + 1}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                        Icon(Icons.Default.DragHandle, contentDescription = "Sırala", tint = cs.onSurfaceVariant,
+                             modifier = Modifier.size(48.dp).padding(12.dp).draggableHandle(
+                                 onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }))
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Kompozable
 fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, likes: LikesViewModel) {
-    var mode by remember { mutableStateOf(0) }  // list, grid, staggered grid
+    var mode by remember { mutableStateOf(0) }  // list, grid, staggered grid, reorderable list
     val gridState = rememberLazyGridState()
     val staggeredScroll = rememberLazyStaggeredGridState()
     // Pull down at the top to refresh (a pretend reload of a second and a half).
@@ -113,9 +174,9 @@ fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, lik
             }
         }
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(16.dp, 4.dp)) {
-            val labels = listOf("Liste", "Izgara", "Kademeli")
-            for (i in 0 until 3) {
-                SegmentedButton(selected = mode == i, onClick = { mode = i }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(labels[i]) }
+            val labels = listOf("Liste", "Izgara", "Kademeli", "Sırala")
+            for (i in 0 until 4) {
+                SegmentedButton(selected = mode == i, onClick = { mode = i }, shape = SegmentedButtonDefaults.itemShape(i, 4)) { Text(labels[i]) }
             }
         }
         Text(if (refreshes > 0) "Aşağı çekip yenileyin · $refreshes kez yenilendi" else "Aşağı çekip yenileyin (PullToRefreshBox)",
@@ -164,6 +225,8 @@ fun ListScreen(modifier: Modifier, state: LazyListState, nav: NavController, lik
                     items(rows, key = { it }) { GridTile(it) }
                 }
             }
+        } else if (mode == 3) {
+            ReorderScreen(Modifier.fillMaxWidth().weight(1f))
         } else {
             // LazyStaggeredGridState: the cards in view and scrolls to one (item 0 is the title).
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp, 0.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -31,6 +31,7 @@
 #include "pager.hpp"
 #include "platform.hpp"
 #include "preview.hpp"
+#include "reorderable.hpp"
 #include "runtime.hpp"
 #include "saved_value.hpp"
 #include "shared_transition.hpp"
