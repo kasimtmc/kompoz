@@ -1217,6 +1217,12 @@
   (`scrollThreshold`, `scrollThresholdPadding`); bırakılınca yerine oturur. `onMove` bir suspend lambda olabilir.
   Tembel olmayan kısa bir liste için `ReorderableColumn` ve `ReorderableRow`: her adımda `onMove`, bırakılınca
   `onSettle(fromIndex, toIndex)`. `Icons.Default.DragHandle` ve `DragIndicator`.
+- **Veri tabloları** (Compose'da yok), compose-data-table'ın API'siyle ve büyük tabloların gerektirdikleriyle:
+  `DataTable(columns, sortColumnIndex, sortAscending, frozenColumns, state, headerHeight, rowHeight, horizontalPadding,
+  backgroundColor, headerBackgroundColor) { items(list, key) { row(selected, onClick) { cell { … } } } }`, `DataColumn(alignment, width, onSort,
+  resizable) { başlık }`, `TableColumnWidth.Fixed`, `Fraction`, `Wrap`, `Flex`. Satırlar yerinde kalan bir başlığın altında
+  göründükçe kompoze edilir; geri kalanı yana kayarken sabit sütunlar; başlıktan sıralama; sütunlar başlıklarının sonu
+  sürüklenerek genişler (`rememberDataTableState`: genişlikler ve iki kaydırma konumu, kaydedilir).
 - **Ağaçlar** (Compose'da yok), JetBrains Jewel'ın LazyTree API'siyle: `buildTree { addNode(data) { … }; addLeaf(data) }`
   (bir düğümün bloğu ilk açıldığında çalışır), `LazyTree(tree, treeState, selectionMode, onElementClick,
   onElementDoubleClick, onSelectionChange, indentSize) { element -> … }`, `rememberTreeState` (açık düğümler ve seçim

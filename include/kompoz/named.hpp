@@ -617,6 +617,17 @@ struct Exit {};
 struct TargetState {};
 struct TransitionSpec {};
 struct ContentKey {};
+// Data tables (datatable.hpp).
+struct BackgroundColor {};
+struct OnSort {};
+struct Resizable {};
+struct SortColumnIndex {};
+struct SortAscending {};
+struct FrozenColumns {};
+struct HeaderHeight {};
+struct RowHeight {};
+struct HorizontalPadding {};
+struct HeaderBackgroundColor {};
 // Trees (tree.hpp).
 struct Tree {};
 struct TreeState {};
@@ -1101,6 +1112,17 @@ inline constexpr Param<detail::names::DragGestureDetector> dragGestureDetector;
 inline constexpr Param<detail::names::LazyListState> lazyListState;
 inline constexpr Param<detail::names::LazyGridState> lazyGridState;
 inline constexpr Param<detail::names::LazyStaggeredGridState> lazyStaggeredGridState;
+// Data tables (datatable.hpp).
+inline constexpr Param<detail::names::BackgroundColor> backgroundColor;
+inline constexpr Param<detail::names::OnSort> onSort;
+inline constexpr Param<detail::names::Resizable> resizable;
+inline constexpr Param<detail::names::SortColumnIndex> sortColumnIndex;
+inline constexpr Param<detail::names::SortAscending> sortAscending;
+inline constexpr Param<detail::names::FrozenColumns> frozenColumns;
+inline constexpr Param<detail::names::HeaderHeight> headerHeight;
+inline constexpr Param<detail::names::RowHeight> rowHeight;
+inline constexpr Param<detail::names::HorizontalPadding> horizontalPadding;
+inline constexpr Param<detail::names::HeaderBackgroundColor> headerBackgroundColor;
 // Trees (tree.hpp).
 inline constexpr Param<detail::names::TreeState> treeState;
 inline constexpr Param<detail::names::SelectionMode> selectionMode;

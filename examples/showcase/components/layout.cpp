@@ -132,6 +132,57 @@ fun TreeSection() {
     }
 }
 
+// A table of 500 orders (DataTable, after compose-data-table): rows composed as they come into
+// view under a header that stays, the first column frozen as the rest scrolls sideways, sorted
+// from the header, columns widened by dragging their header's edge, rows selected by a click.
+data class Order(val no: Int, val customer: String, val city: String, val items: Int, val total: Int)
+
+@Kompozable
+fun DataTableSection() {
+    val cs = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
+    val cities = listOf("İstanbul", "Ankara", "İzmir", "Bursa", "Antalya", "Trabzon")
+    val names = listOf("Ayşe Yılmaz", "Ali Demir", "Zeynep Kaya", "Mehmet Çelik", "Elif Şahin", "Can Öztürk", "Deniz Arslan")
+    val orders = remember { List(500) { i -> Order(i + 1, names[(i * 3) % names.size], cities[(i * 5) % cities.size], 1 + (i * 13) % 9, 150 + (i * 7919) % 9850) } }
+    var sortColumn by remember { mutableStateOf(0) }
+    var ascending by remember { mutableStateOf(true) }
+    val chosen = remember { mutableStateListOf<Int>() }
+    val sorted = when (sortColumn) {
+        1 -> if (ascending) orders.sortedBy { it.customer } else orders.sortedByDescending { it.customer }
+        2 -> if (ascending) orders.sortedBy { it.city } else orders.sortedByDescending { it.city }
+        3 -> if (ascending) orders.sortedBy { it.items } else orders.sortedByDescending { it.items }
+        4 -> if (ascending) orders.sortedBy { it.total } else orders.sortedByDescending { it.total }
+        else -> if (ascending) orders else orders.reversed()
+    }
+    val sort = { column: Int, up: Boolean -> sortColumn = column; ascending = up }
+    Section("DataTable · DataColumn · TableColumnWidth") {
+        Text("500 sipariş: başlığa dokunup sıralayın, satırlara dokunup seçin, yana kaydırın (No sabit kalır), " +
+                 "başlıkların kenarını sürükleyip genişletin. Seçili: ${chosen.size}",
+             color = cs.onSurfaceVariant, style = typography.bodySmall)
+        DataTable(
+            columns = listOf(
+                DataColumn(width = TableColumnWidth.Fixed(72.dp), onSort = sort) { Text("No") },
+                DataColumn(width = TableColumnWidth.Fixed(160.dp), onSort = sort) { Text("Müşteri") },
+                DataColumn(width = TableColumnWidth.Wrap, onSort = sort) { Text("Şehir") },
+                DataColumn(alignment = Alignment.End, width = TableColumnWidth.Wrap, onSort = sort) { Text("Adet") },
+                DataColumn(alignment = Alignment.End, width = TableColumnWidth.Flex(1f), onSort = sort) { Text("Tutar") },
+            ),
+            sortColumnIndex = sortColumn, sortAscending = ascending, frozenColumns = 1, backgroundColor = cs.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth().height(320.dp).clip(RoundedCornerShape(12.dp)),
+        ) {
+            items(sorted, key = { it.no }) { order ->
+                row(selected = order.no in chosen, onClick = { if (order.no in chosen) chosen.remove(order.no) else chosen.add(order.no) }) {
+                    cell { Text("${order.no}", style = typography.bodyMedium) }
+                    cell { Text(order.customer, style = typography.bodyMedium, maxLines = 1) }
+                    cell { Text(order.city, style = typography.bodyMedium) }
+                    cell { Text("${order.items}", style = typography.bodyMedium) }
+                    cell { Text("${order.total} ₺", style = typography.bodyMedium) }
+                }
+            }
+        }
+    }
+}
+
 // A main pane with a supporting one: side by side on a wide window, slid in on a narrow one.
 @Kompozable
 fun SupportingPaneSection() {

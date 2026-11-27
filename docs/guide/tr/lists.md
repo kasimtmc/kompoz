@@ -285,6 +285,40 @@ Ağaç klavye odağını tek parça olarak alır: Yukarı ve Aşağı seçimi ta
 
 Bir öğenin kimliği, verilmedikçe verisidir (`addNode(data, id = …)`); `treeState.toggleNode(id)`, `openNodes(listOf(…))`, `closeNode(id)`, `selectOnly(id)` ve `clearSelection()` ağacı koddan değiştirir, `isNodeOpen(id)` ve `isSelected(id)` okur. `rememberTreeState()` uygulamanın durumuyla birlikte kaydedilir. Bir öğenin `data`, `depth`, `parent`, `isNode()`, `isLeaf()` ve `children()`'ı vardır; metin olmayan veri için `buildTree<Item> { }`.
 
+## Veri tabloları
+
+Sütun başlıkları altında satırlardan oluşan bir tablo bir `DataTable`'dır: Compose'da yoktur; Kompoz'da compose-data-table'ın (Compose Multiplatform'un, Flutter'ın DataTable'ından gelen) API'si vardır, üstüne büyük tabloların gerektirdikleriyle. Bloğu satırları bir `LazyColumn`'un öğeleri gibi ekler: `row { }` bir satır, `items(list, key = …) { row { … } }` her eleman için bir satır; yalnızca görünenler kompoze edilir. Bir satırda `cell { }` her sütun için sırayla bir hücre ekler:
+
+```kotlin body
+#! data class Order(val id: Int, val customer: String, val total: Int)
+#! val orders = listOf(Order(1, "Ada", 120))
+var sortColumn by remember { mutableStateOf(-1) }
+var ascending by remember { mutableStateOf(true) }
+val shown = if (sortColumn == 2) (if (ascending) orders.sortedBy { it.total } else orders.sortedByDescending { it.total }) else orders
+DataTable(
+    columns = listOf(
+        DataColumn(width = TableColumnWidth.Fixed(64.dp)) { Text("No") },
+        DataColumn { Text("Müşteri") },
+        DataColumn(alignment = Alignment.End, width = TableColumnWidth.Wrap,
+                   onSort = { index, up -> sortColumn = index; ascending = up }) { Text("Tutar") },
+    ),
+    sortColumnIndex = sortColumn, sortAscending = ascending, frozenColumns = 1,
+    modifier = Modifier.fillMaxSize(),
+) {
+    items(shown, key = { it.id }) { order ->
+        row(onClick = { }) {
+            cell { Text("${order.id}") }
+            cell { Text(order.customer) }
+            cell { Text("${order.total}") }
+        }
+    }
+}
+```
+
+Bir `DataColumn`'un başlığı (bloğu), bir `width`'i (`TableColumnWidth.Fixed(dp)`, tablonun `Fraction(f)`'i, `Wrap`: şimdiye dek gördüğü en geniş hücresi, ya da `Flex(weight)`: ötekilerin bıraktığından bir pay, şimdiye dek gördüğü en geniş hücresinden dar değil, varsayılan), hücrelerinin içeriği için bir `alignment`'ı ve `onSort = { index, ascending -> … }`'u vardır: başlığına tıklama onu çağırır (önce artan, sonra öteki yön); `sortColumnIndex` ve `sortAscending` oku gösterir. Bir sütunun başlığının sonu sürüklenerek genişletilir (`resizable = false` olduğu gibi bırakır); verilen genişlikler `DataTableState`'te kalır (`rememberDataTableState()`, satırların ve yana kaydırmanın konumlarıyla birlikte kaydedilir; `resetColumnWidths()`).
+
+Satırlar kayarken başlık yerinde kalır; tablodan geniş sütunlar birlikte yana kayar, baştaki `frozenColumns` tanesi görünür kalır. `row(selected = …, onClick = …)` seçili bir satırı gösterir ve tıklanır; `headerHeight`, `rowHeight` (en az: daha uzun bir hücre satırını uzatır), `horizontalPadding`, `backgroundColor` (sabit sütunların altlarından kayanları örttükleri renk; şemanın surface'i) ve `headerBackgroundColor` görünüşünü değiştirir. Satırlar seçili olup olmadıklarını, sıralı başlıklar hangi yönde olduklarını erişilebilirlik hizmetlerine söyler.
+
 ## Pager'lar
 
 `HorizontalPager` ve `VerticalPager`, Compose'un pager'ları gibi bir seferde bir sayfa gösterir ve kullanıcı kaydırdıkça sayfalara yakalanır:

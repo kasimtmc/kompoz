@@ -9,6 +9,7 @@
 #include "carousel.hpp"
 #include "channel.hpp"
 #include "coroutines.hpp"
+#include "datatable.hpp"
 #include "disk_cache.hpp"
 #include "display_list.hpp"
 #include "draw.hpp"

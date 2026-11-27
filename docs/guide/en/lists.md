@@ -285,6 +285,40 @@ The tree takes the keyboard focus as one: Up and Down move the selection (Shift 
 
 An element's id is its data unless given (`addNode(data, id = …)`); `treeState.toggleNode(id)`, `openNodes(listOf(…))`, `closeNode(id)`, `selectOnly(id)` and `clearSelection()` change the tree from code, `isNodeOpen(id)` and `isSelected(id)` read it. `rememberTreeState()` is saved with the app's state. An element has `data`, `depth`, `parent`, `isNode()`, `isLeaf()` and `children()`; `buildTree<Item> { }` for data other than text.
 
+## Data tables
+
+A table of rows under a header of columns is a `DataTable`: Compose has none; Kompoz has the API of compose-data-table (Compose Multiplatform's, after Flutter's DataTable), with what big tables need on top. Its block adds rows as a `LazyColumn`'s adds items: `row { }` one, `items(list, key = …) { row { … } }` one for each element, only those in view composed; in a row, `cell { }` a cell for each column, in order:
+
+```kotlin body
+#! data class Order(val id: Int, val customer: String, val total: Int)
+#! val orders = listOf(Order(1, "Ada", 120))
+var sortColumn by remember { mutableStateOf(-1) }
+var ascending by remember { mutableStateOf(true) }
+val shown = if (sortColumn == 2) (if (ascending) orders.sortedBy { it.total } else orders.sortedByDescending { it.total }) else orders
+DataTable(
+    columns = listOf(
+        DataColumn(width = TableColumnWidth.Fixed(64.dp)) { Text("No") },
+        DataColumn { Text("Customer") },
+        DataColumn(alignment = Alignment.End, width = TableColumnWidth.Wrap,
+                   onSort = { index, up -> sortColumn = index; ascending = up }) { Text("Total") },
+    ),
+    sortColumnIndex = sortColumn, sortAscending = ascending, frozenColumns = 1,
+    modifier = Modifier.fillMaxSize(),
+) {
+    items(shown, key = { it.id }) { order ->
+        row(onClick = { }) {
+            cell { Text("${order.id}") }
+            cell { Text(order.customer) }
+            cell { Text("${order.total}") }
+        }
+    }
+}
+```
+
+A `DataColumn` has its header (its block), a `width` (`TableColumnWidth.Fixed(dp)`, `Fraction(f)` of the table, `Wrap`: its widest cell yet, or `Flex(weight)`: a share of what the others leave, no narrower than its widest cell yet, the default), an `alignment` for its cells' content, and `onSort = { index, ascending -> … }`: a click on its header calls it (ascending first, then the other way), and `sortColumnIndex` and `sortAscending` show the arrow. A column's header end is dragged to widen it (`resizable = false` keeps it as it is); the widths given stay in the `DataTableState` (`rememberDataTableState()`, saved, with the rows' and the sideways scroll positions; `resetColumnWidths()`).
+
+The header stays as the rows scroll; columns wider than the table scroll sideways together, `frozenColumns` of them at the start staying in view. `row(selected = …, onClick = …)` shows a selected row and is clicked; `headerHeight`, `rowHeight` (the least: a taller cell makes its row taller), `horizontalPadding`, `backgroundColor` (what frozen columns cover the scrolled ones with; the scheme's surface) and `headerBackgroundColor` change its look. Rows say whether they are selected, sorted headers which way, to accessibility services.
+
 ## Pagers
 
 `HorizontalPager` and `VerticalPager` show one page at a time and snap to pages as the user swipes, like Compose's pagers:

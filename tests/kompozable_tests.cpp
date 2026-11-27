@@ -3852,6 +3852,37 @@ TEST(lazy_tree_as_jewel_writes_it) {
     CHECK(rule.onNodeWithText("açılan: README.md").exists());
 }
 
+// A table as compose-data-table writes it, its rows from a list, sorted from the header.
+data class Person(val id: Int, val name: String, val age: Int)
+
+@Kompozable
+fun People() {
+    var ascending by remember { mutableStateOf(true) }
+    val people = listOf(Person(1, "Ayşe", 34), Person(2, "Ali", 28), Person(3, "Cem", 41))
+    val shown = if (ascending) people.sortedBy { it.age } else people.sortedByDescending { it.age }
+    DataTable(
+        columns = listOf(
+            DataColumn { Text("Ad") },
+            DataColumn(alignment = Alignment.End, width = TableColumnWidth.Fixed(100.dp), onSort = { _, up -> ascending = up }) { Text("Yaş") },
+        ),
+        sortColumnIndex = 1, sortAscending = ascending, modifier = Modifier.size(300.dp, 300.dp),
+    ) {
+        items(shown, key = { it.id }) { person ->
+            row {
+                cell { Text(person.name) }
+                cell { Text("${person.age}") }
+            }
+        }
+    }
+}
+
+TEST(data_table_as_compose_data_table_writes_it) {
+    KompozTestRule rule([] { People(); }, {400, 800});
+    CHECK(rule.onNodeWithText("Ali").bounds().y < rule.onNodeWithText("Ayşe").bounds().y);  // youngest first
+    rule.onNodeWithText("Yaş").performClick();
+    CHECK(rule.onNodeWithText("Cem").bounds().y < rule.onNodeWithText("Ayşe").bounds().y);  // oldest first
+}
+
 int main(int argc, char** argv) {
     for (auto& [name, fn] : registry()) {
         if (argc > 1 && std::string_view(name).find(argv[1]) == std::string_view::npos) continue;

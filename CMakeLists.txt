@@ -68,6 +68,7 @@ add_library(kompoz_core STATIC
     src/components.cpp
     src/curves.cpp
     src/coroutines.cpp
+    src/datatable.cpp
     src/date_picker.cpp
     src/disk_cache.cpp
     src/display_list.cpp

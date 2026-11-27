@@ -32822,6 +32822,104 @@ TEST(lazy_tree_arrow_opens_and_the_name_beside_it_selects) {
     CHECK(state.isNodeOpen("src") && state.isSelected("src"));
 }
 
+// ---- Data tables (datatable.hpp) ----
+
+namespace {
+struct Order {
+    int no;
+    std::string who;
+    int total;
+};
+std::vector<Order> orders(int n) {
+    std::vector<Order> out;
+    for (int i = 1; i <= n; ++i) out.push_back({i, "müşteri " + std::to_string(i), i * 1000});
+    return out;
+}
+} // namespace
+
+TEST(data_table_columns_rows_header_sorting_and_resizing) {
+    auto rows = orders(40);
+    auto sortIndex = mutableStateOf(-1);
+    auto ascending = mutableStateOf(true);
+    std::vector<int> clicked;
+    DataTableState state;
+    KompozTestRule rule([&] {
+        std::vector<DataColumnSpec> columns{
+            DataColumn(kompoz::arg::width = TableColumnWidth::Fixed(60), [] { Text("No"); }),
+            DataColumn(kompoz::onSort = std::function<void(int, bool)>([=](int i, bool up) { sortIndex.set(i), ascending.set(up); }), [] { Text("Müşteri"); }),
+            DataColumn(kompoz::alignment = Alignment::End, kompoz::arg::width = TableColumnWidth::Wrap, [] { Text("Tutar"); }),
+        };
+        DataTable(columns, Modifier().size(400, 300), kompoz::state = state, kompoz::sortColumnIndex = sortIndex.get(), kompoz::sortAscending = ascending.get(),
+                  [&] {
+                      kompoz::items(rows, [](const Order& o) { return o.no; }, [&](const Order& o) {
+                          row(kompoz::onClick = std::function<void()>([&clicked, no = o.no] { clicked.push_back(no); }), [=] {
+                              cell([=] { Text(std::to_string(o.no)); });
+                              cell([=] { Text(o.who); });
+                              cell([=] { Text(std::to_string(o.total)); });
+                          });
+                      });
+                  });
+    }, {400, 800});
+    // The header above the rows (56 dp), the rows 52 dp; the cells 16 dp in from their columns' starts.
+    CHECK(near(rule.onNodeWithText("No").bounds().x, 16) && rule.onNodeWithText("No").bounds().y < 56);
+    CHECK(near(rule.onNodeWithText("müşteri 1").bounds().x, 60 + 16));
+    float tutar = rule.onNodeWithText("40000").exists() ? 0.f : 1.f;  // (not composed: far down)
+    CHECK(tutar == 1);
+    // Tutar: a Wrap column at the end, its cells right-aligned (to 16 dp short of the table's end).
+    Rect total = rule.onNodeWithText("1000").bounds();
+    CHECK(near(total.x + total.width, 400 - 16, 1));
+    CHECK(rule.onNodeWithText("müşteri 1").bounds().y > 56 && rule.onNodeWithText("müşteri 1").bounds().y < 56 + 52);
+    // Only the rows in view (and a few more) are composed; scrolled, the header stays.
+    CHECK(!rule.onNodeWithText("müşteri 30").exists());
+    rule.swipe({200, 280}, {200, 80});
+    rule.waitForIdle();
+    CHECK(rule.onNodeWithText("No").bounds().y < 56 && !rule.onNodeWithText("müşteri 1").exists());
+    state.listState().scrollToItem(0);
+    rule.waitForIdle();
+    // A click on a sortable header sorts by it, ascending; again, descending; a row's click.
+    rule.onNodeWithText("Müşteri").performClick();
+    CHECK(sortIndex.get() == 1 && ascending.get());
+    rule.onNodeWithText("Müşteri").performClick();
+    CHECK(sortIndex.get() == 1 && !ascending.get());
+    rule.onNodeWithText("müşteri 2").performClick();
+    CHECK((clicked == std::vector<int>{2}));
+    // The first column's end dragged 40 dp right (less the touch slop): wider, the flexible one gives way.
+    rule.host().pointerDown({60, 28}, -1, 0, KompozHost::PointerType::Mouse);
+    for (int k = 1; k <= 10; ++k) {
+        rule.advanceFrame();
+        rule.host().pointerMove({60.f + 4 * float(k), 28});
+    }
+    rule.host().pointerUp({100, 28});
+    rule.waitForIdle();
+    float widened = state.columnWidth(0).value_or(0);
+    CHECK(widened > 85 && widened <= 100);
+    CHECK(near(rule.onNodeWithText("müşteri 1").bounds().x, widened + 16, 1));
+    auto saved = Saver<DataTableState>::restore(Saver<DataTableState>::save(state));
+    CHECK(saved && saved->columnWidth(0) && near(*saved->columnWidth(0), *state.columnWidth(0)));
+}
+
+TEST(data_table_frozen_columns_stay_as_it_scrolls_sideways) {
+    KompozTestRule rule([] {
+        std::vector<DataColumnSpec> columns;
+        for (int c = 0; c < 6; ++c)
+            columns.push_back(DataColumn(kompoz::arg::width = TableColumnWidth::Fixed(150), [c] { Text("başlık " + std::to_string(c)); }));
+        DataTable(columns, Modifier().size(400, 300), kompoz::frozenColumns = 1, [] {
+            for (int r = 0; r < 3; ++r)
+                row(kompoz::selected = r == 1, [r] {
+                    for (int c = 0; c < 6; ++c) cell([r, c] { Text(std::to_string(r) + "/" + std::to_string(c)); });
+                });
+        });
+    }, {400, 800});
+    CHECK(near(rule.onNodeWithText("1/1").bounds().x, 150 + 16));
+    rule.swipe({350, 150}, {150, 150});  // sideways by 200 (less the touch slop)
+    rule.waitForIdle();
+    float moved = 150 + 16 - rule.onNodeWithText("1/1").bounds().x;
+    CHECK(moved > 150);
+    CHECK(near(rule.onNodeWithText("1/0").bounds().x, 16) && near(rule.onNodeWithText("başlık 0").bounds().x, 16));  // frozen
+    auto semantics = detail::semanticsOf(rule.onNodeWithText("1/0").node()->parent->parent->modifier);
+    CHECK(semantics && semantics->checked == true);  // the selected row, said so
+}
+
 int main(int argc, char** argv) {
     detail::setLayoutCheck(true);
     detail::setKeepCheck(true);

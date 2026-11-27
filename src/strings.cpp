@@ -32,6 +32,8 @@ Strings Strings::turkish() {
             .collapsed = "Kapalı",
             .expand = "Aç",
             .collapse = "Kapat",
+            .sortedAscending = "Artan sırada",
+            .sortedDescending = "Azalan sırada",
             .datePicker = DatePickerStrings::turkish(),
             .am = "ÖÖ",
             .pm = "ÖS",

@@ -58,6 +58,8 @@ struct Strings {
     std::string minimize = "Minimize", maximize = "Maximize", restore = "Restore";
     // A tree's rows (LazyTree): a node's state and the actions that open and close it.
     std::string expanded = "Expanded", collapsed = "Collapsed", expand = "Expand", collapse = "Collapse";
+    // A data table's sorted column (DataTable).
+    std::string sortedAscending = "Sorted ascending", sortedDescending = "Sorted descending";
     // Pickers.
     DatePickerStrings datePicker = DatePickerStrings::english();
     std::string am = "AM", pm = "PM", hour = "Hour", minute = "Minute";  // TimePicker, TimeInput

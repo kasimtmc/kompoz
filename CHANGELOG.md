@@ -1178,6 +1178,12 @@
   settles into its place. `onMove` may be a suspend lambda. `ReorderableColumn` and `ReorderableRow` for a short list
   that isn't lazy: `onMove` at each step, `onSettle(fromIndex, toIndex)` when let go. `Icons.Default.DragHandle` and
   `DragIndicator`.
+- **Data tables** (Compose has none), with compose-data-table's API and what big tables need: `DataTable(columns,
+  sortColumnIndex, sortAscending, frozenColumns, state, headerHeight, rowHeight, horizontalPadding, backgroundColor,
+  headerBackgroundColor) { items(list, key) { row(selected, onClick) { cell { … } } } }`, `DataColumn(alignment, width, onSort, resizable) { header }`,
+  `TableColumnWidth.Fixed`, `Fraction`, `Wrap`, `Flex`. Rows composed as they come into view under a header that stays;
+  frozen columns as the rest scrolls sideways; sorting from the header; columns widened by dragging their header's end
+  (`rememberDataTableState`: the widths and both scroll positions, saved).
 - **Trees** (Compose has none), with JetBrains Jewel's LazyTree API: `buildTree { addNode(data) { … }; addLeaf(data) }`
   (a node's block runs when it is first opened), `LazyTree(tree, treeState, selectionMode, onElementClick,
   onElementDoubleClick, onSelectionChange, indentSize) { element -> … }`, `rememberTreeState` (open nodes and selection by
